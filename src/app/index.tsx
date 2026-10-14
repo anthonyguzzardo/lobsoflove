@@ -6,18 +6,20 @@ import { StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { HOME_HTML } from '@/generated/home-html';
+import { dueList, useCloset } from '@/lib/gear';
 import { computeSeason, scoreLine, useMatches, winnerOf } from '@/lib/matches';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 
-type Msg = { type: 'ready' } | { type: 'press' } | { type: 'line' } | { type: 'slid' } | { type: 'hop' } | { type: 'land' } | { type: 'go'; to: 'play' | 'courts' | 'standings' | 'fighter' } | { type: 'error'; message: string; at?: string };
+type Msg = { type: 'ready' } | { type: 'press' } | { type: 'line' } | { type: 'slid' } | { type: 'hop' } | { type: 'land' } | { type: 'go'; to: keyof typeof ROUTES } | { type: 'error'; message: string; at?: string };
 
-const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter', Href> = { play: '/case', courts: '/courts', standings: '/standings', fighter: '/fighter' };
+const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter' | 'write' | 'gear', Href> = { play: '/case', courts: '/courts', standings: '/standings', fighter: '/fighter', write: '/ink', gear: '/gear' };
 
 /** Home: a diorama drawn by three.js in a WebView (web/home.js). Your fighter hops between tiles; each tile is a place in the app. */
 export default function Home() {
   const params = useLocalSearchParams<{ demo?: string }>();
   const roster = useRoster();
+  const closet = useCloset();
   const matches = useMatches();
   const web = useRef<WebView>(null);
   const ready = useRef(false);
@@ -34,6 +36,7 @@ export default function Home() {
     color: you.color,
     record: played ? `you: ${row?.wins}–${row?.losses}, ${row?.points} points` : '',
     place: played ? rows.findIndex((r) => r.id === you.id) + 1 : 0,
+    gear: (() => { const due = dueList(closet, matches); return due.length ? `${due.length} due: ${due[0]}${due.length > 1 ? ', ...' : ''}` : ''; })(),
     last: last && lastWinner ? `${name(lastWinner)} beat ${name(lastWinner === last.p1 ? last.p2 : last.p1)} ${scoreLine(last.sets)}` : null,
   });
 

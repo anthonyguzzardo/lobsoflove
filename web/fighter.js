@@ -20,6 +20,7 @@
 // - Hold: breathes 2.5% on a 2.2 s sine, blinks 110 ms every 3.1 s, and each play style has its own tic (see TICS).
 // - Camera: 30 degree lens, follows the body at 1.3 Hz ratio 1, orbits 2 degrees on a 9 s sine. Never parked.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { TessellateModifier } from 'three/addons/modifiers/TessellateModifier.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -291,6 +292,12 @@ function setBody(cast, keepNodes) {
   B.colorFrom = colors.slice();
   B.flood = null;
   B.restV = pos.array.slice();
+  // Chest targets for the Wall's drill: front-facing points below the face and above the floor.
+  {
+    const nr = geo.attributes.normal.array;
+    B.chest = [];
+    for (let i = 0; i < n; i += 1) if (nr[i * 3 + 2] > 0.85 && pos.array[i * 3 + 1] < faceRest.y - 0.16 && pos.array[i * 3 + 1] > 0.18) B.chest.push(i);
+  }
   if (B.geo) B.geo.dispose();
   B.geo = geo; B.count = n; B.W = W; B.cast = cast; B.feel = FEEL[cast];
   bodyMesh.geometry = geo;
@@ -481,7 +488,7 @@ function step() {
     if (B.v[m] > 16) B.v[m] = 16; else if (B.v[m] < -16) B.v[m] = -16;
     B.x[m] = B.p[m];
   }
-  if (floorHit > 3.2 && clock - lastThud > 0.25) { lastThud = clock; post({ type: 'thud', v: Math.min(1, floorHit / 10) }); }
+  if (floorHit > 5 && clock - lastThud > 0.4) { lastThud = clock; post({ type: 'thud', v: Math.min(1, floorHit / 10) }); }
 }
 let lastThud = 0;
 
@@ -599,17 +606,181 @@ function spin(wy, wz = 0) {
 
 // Each play style's tic while it waits: the way it would fidget at the net.
 let shoutAt = -10;
+// Shout bubble over the head, face overrides, and a short camera shake.
+const fx = { shoutUntil: -1, happyUntil: -1, winceUntil: -1, shakeUntil: -1 };
+function showShout(text, dur) { $('shout').textContent = text; fx.shoutUntil = clock + dur; }
+const flex = new THREE.Vector3(1, 1, 1);
 const TICS = {
-  wall: { every: 3.4, go() { const c = com(); poke(new THREE.Vector3(c.x, c.y + 1, c.z), new THREE.Vector3(0, -1, 0), 1.6, 0.7); } },
+  wall: { every: 4.2, go() { startDrill(1, 0); } },
   moon: { every: 3.0, go() { kick(0, 6.4, 0); spin(0, (Math.random() - 0.5) * 2); post({ type: 'boing' }); } },
   bot: { every: 2.4, go() { spin(Math.random() < 0.5 ? 4.5 : -4.5); post({ type: 'beep' }); } },
   goblin: { every: 2.8, go() { const s = com().x > 0 ? -1 : 1; kick(2.4 * s, 3.2, 0); } },
-  grunter: { every: 2.6, go() { [0, 60, 120, 180].forEach((ms, i) => setTimeout(() => kick(i % 2 ? -1.8 : 1.8, 0.6, 0), ms)); shoutAt = clock; post({ type: 'grunt' }); } },
+  grunter: { every: 2.6, go() { [0, 60, 120, 180].forEach((ms, i) => setTimeout(() => kick(i % 2 ? -1.8 : 1.8, 0.6, 0), ms)); shoutAt = clock; showShout('HNNGH!', 0.7); post({ type: 'grunt' }); } },
   junk: { every: 2.2, go() { const m = Math.floor(Math.random() * NN); const p = new THREE.Vector3(B.x[m * 3], B.x[m * 3 + 1], B.x[m * 3 + 2]); poke(p, new THREE.Vector3(Math.random() - 0.5, -0.4, Math.random() - 0.5).normalize(), 2.6, 0.5); } },
   comet: { every: 3.0, go() { kick(0, 2.4, 4.2); post({ type: 'swish' }); } },
   ghost: { every: 3.2, go() { spin(3.2); } },
 };
 let nextTic = 2.2;
+
+
+// The Wall's drill. A ball machine where you stand fires 10 balls at its chest, 90 ms apart, on a flat 0.28 s line.
+// Each one dents the jelly where it lands (4 inward) and stays there, half sunk into the surface, riding every wobble.
+// 380 ms after the last one lands the Wall braces (squashes 1.8 from the top), then fires them all back at you,
+// 50 ms apart at 11 units/s straight at the camera, each push swelling the jelly outward. Everything comes back.
+const ballTex = (() => {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 128;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 128);
+  gr.addColorStop(0, '#e8f74a'); gr.addColorStop(1, '#c4dc00');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 128);
+  g.strokeStyle = '#fffdf0'; g.lineWidth = 7;
+  g.beginPath();
+  for (let x = 0; x <= 256; x += 4) { const y = 64 + 36 * Math.sin((x / 256) * Math.PI * 4); x ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const BALL_R = 0.17;
+const ballGeo = new THREE.SphereGeometry(BALL_R, 24, 16);
+const ballMat = new THREE.MeshStandardMaterial({ map: ballTex, roughness: 0.9 });
+const balls = [];
+const drill = { on: false, queue: [], total: 0, landed: 0, braceAt: -1, returnAt: -1, flexAt: -1, burst: false, cheer: 0 };
+function startDrill(n, delay) {
+  if (drill.on || B.cast !== 'wall') return;
+  Object.assign(drill, { on: true, queue: [], total: n, landed: 0, braceAt: -1, returnAt: -1, flexAt: -1, burst: false, cheer: 0 });
+  // A full drill is a burst of fire, 90 ms apart; a single ball is just a rally ball.
+  for (let i = 0; i < n; i += 1) drill.queue.push(clock + delay + i * 0.09);
+}
+function fireBall() {
+  // Aim at an open spot on the chest: of 16 random chest points, the one farthest from every ball already stuck or on its way.
+  const rv = B.restV; const arr = B.geo.attributes.position.array;
+  let best = B.chest[0]; let bestD = -1;
+  for (let k = 0; k < 16 && B.chest.length; k += 1) {
+    const vi = B.chest[Math.floor(Math.random() * B.chest.length)];
+    let d = Infinity;
+    for (const b of balls) if (b.aim >= 0) d = Math.min(d, Math.hypot(rv[vi * 3] - rv[b.aim * 3], rv[vi * 3 + 1] - rv[b.aim * 3 + 1]));
+    if (d > bestD) { bestD = d; best = vi; }
+  }
+  const target = new THREE.Vector3(arr[best * 3], arr[best * 3 + 1], arr[best * 3 + 2]);
+  const start = new THREE.Vector3((Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.7), 0.5 + Math.random() * 0.6, 6.5);
+  const T = 0.28; // flat and fast: about 22 units/s
+  const v = target.clone().sub(start).divideScalar(T);
+  v.y += 0.5 * 9.8 * T;
+  const m = new THREE.Mesh(ballGeo, ballMat);
+  m.position.copy(start);
+  scene.add(m);
+  balls.push({ m, v, state: 'fly', vi: -1, outAt: 0, aim: best });
+  post({ type: 'serve' });
+}
+function dropBalls() {
+  // The body is about to be replaced: anything stuck in it just falls out.
+  for (const b of balls) if (b.state === 'stuck') { b.state = 'out'; b.v.set((Math.random() - 0.5) * 2, 1.5, 1); }
+  drill.on = false; drill.queue = []; drill.flexAt = -1; flex.set(1, 1, 1);
+}
+const nrm = new THREE.Vector3();
+function ballsStep(dt) {
+  while (drill.queue.length && clock >= drill.queue[0]) { drill.queue.shift(); fireBall(); }
+  const pos = B.geo ? B.geo.attributes.position.array : null;
+  const nor = B.geo ? B.geo.attributes.normal.array : null;
+  for (let i = balls.length - 1; i >= 0; i -= 1) {
+    const b = balls[i];
+    if (b.state === 'fly') {
+      b.v.y -= 9.8 * dt;
+      const len = b.v.length() * dt;
+      raycaster.set(b.m.position, b.v.clone().normalize());
+      raycaster.far = len + BALL_R;
+      const hit = raycaster.intersectObject(bodyMesh, false)[0];
+      if (hit) {
+        b.state = 'stuck'; b.vi = hit.face.a;
+        // Each hit punches a deep dent, knocks the whole body back a step, and makes it wince for 140 ms.
+        poke(hit.point, b.v.clone().normalize(), 5.5, 0.45);
+        kick(0, 0, -0.9);
+        fx.winceUntil = clock + 0.14;
+        drill.landed += 1;
+        post({ type: 'pock' });
+      } else if (b.m.position.z < -2 || b.m.position.y < -1) {
+        scene.remove(b.m); balls.splice(i, 1); drill.landed += 1; continue;
+      } else b.m.position.addScaledVector(b.v, dt);
+      b.m.rotation.x += dt * 14;
+    } else if (b.state === 'stuck') {
+      nrm.set(nor[b.vi * 3], nor[b.vi * 3 + 1], nor[b.vi * 3 + 2]);
+      b.m.position.set(pos[b.vi * 3], pos[b.vi * 3 + 1], pos[b.vi * 3 + 2]).addScaledVector(nrm, BALL_R * 0.2); // embedded like pellets
+      if (b.outAt && clock >= b.outAt) {
+        b.state = 'out'; b.drive = true;
+        const dir = camera.position.clone().sub(b.m.position).normalize();
+        dir.x += (Math.random() - 0.5) * 0.08; dir.y += (Math.random() - 0.5) * 0.08;
+        b.v.copy(dir.normalize().multiplyScalar(11));
+        poke(b.m.position, nrm, 1.5, 0.45);
+        post({ type: 'return' });
+      }
+    } else {
+      // Returns are flat drives at the camera (no gravity), so they hold their spot on screen and swell toward you.
+      if (!b.drive) b.v.y -= 9.8 * dt;
+      b.m.position.addScaledVector(b.v, dt);
+      b.m.rotation.y += dt * 18;
+      if (b.m.position.distanceTo(camera.position) < 1.2 || b.m.position.y < -2) { scene.remove(b.m); balls.splice(i, 1); }
+    }
+  }
+  const allIn = drill.on && !drill.queue.length && drill.landed >= drill.total;
+  if (allIn && drill.total >= 3 && drill.flexAt < 0) drill.flexAt = clock + 0.32; // a beat to show off the pellets
+  else if (allIn && drill.total < 3 && drill.braceAt < 0) { drill.braceAt = clock + 0.24; drill.returnAt = clock + 0.38; }
+  if (drill.flexAt > 0) flexStep();
+  if (drill.braceAt > 0 && clock >= drill.braceAt) {
+    drill.braceAt = 0;
+    const c = com();
+    poke(new THREE.Vector3(c.x, c.y + 1, c.z), new THREE.Vector3(0, -1, 0), 1.8, 0.7);
+  }
+  if (drill.returnAt > 0 && clock >= drill.returnAt) {
+    drill.returnAt = 0;
+    let k = 0;
+    for (const b of balls) if (b.state === 'stuck') { b.outAt = clock + 0.05 * k; k += 1; }
+    drill.on = false;
+  }
+}
+
+// The flex, after a full drill (t from the flex start, s):
+// 0-0.22 crouch and suck in (1.08 wide, 0.86 tall, 0.88 deep, ease in-out). 0.22-0.34 the gut flexes out on the pop curve
+// (1.16 wide, 1.04 tall, 1.75 deep). 0.27 every pellet blows off at 13 along the surface, 6 toward you, 4.5 to 7.5 up, fanned out from the middle, 180 ms camera shake.
+// 0.34-0.8 settles on the pop curve. 0.8 cheer: a 6.5 hop with a twirl, grin and "UNBREAKABLE!". 1.22 a second, smaller hop.
+const inOut = (k) => (k < 0.5 ? 2 * k * k : 1 - ((-2 * k + 2) ** 2) / 2);
+function flexStep() {
+  const t = clock - drill.flexAt;
+  if (t < 0) return;
+  const lerp3 = (a, b, k) => flex.set(a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k);
+  const IN = [1.08, 0.86, 0.88]; const OUT = [1.16, 1.04, 1.75]; const REST = [1, 1, 1];
+  if (t < 0.22) { lerp3(REST, IN, inOut(t / 0.22)); if (!drill.cheer) { drill.cheer = 1; post({ type: 'flex' }); } }
+  else if (t < 0.34) lerp3(IN, OUT, POP((t - 0.22) / 0.12));
+  else if (t < 0.8) lerp3(OUT, REST, POP((t - 0.34) / 0.46));
+  else flex.set(1, 1, 1);
+  if (t >= 0.27 && !drill.burst) {
+    drill.burst = true;
+    const toCam = new THREE.Vector3();
+    for (const b of balls) {
+      if (b.state !== 'stuck') continue;
+      const n = new THREE.Vector3(B.geo.attributes.normal.array[b.vi * 3], B.geo.attributes.normal.array[b.vi * 3 + 1], B.geo.attributes.normal.array[b.vi * 3 + 2]);
+      toCam.copy(camera.position).sub(b.m.position).normalize();
+      b.state = 'out'; b.drive = false; b.aim = -1;
+      b.v.copy(n.multiplyScalar(13)).addScaledVector(toCam, 6).add(new THREE.Vector3((b.m.position.x - com().x) * 6 + (Math.random() - 0.5) * 3, 4.5 + Math.random() * 3, 0));
+    }
+    const c = com();
+    poke(new THREE.Vector3(c.x, c.y, c.z + 0.5), new THREE.Vector3(0, 0, 1), 4, 0.8);
+    fx.shakeUntil = clock + 0.18;
+    post({ type: 'burst' });
+  }
+  if (t >= 0.8 && drill.cheer === 1) {
+    drill.cheer = 2;
+    kick(0, 6.5, 0); spin(7);
+    fx.happyUntil = clock + 1.5;
+    showShout('UNBREAKABLE!', 1.2);
+    post({ type: 'cheer' });
+  }
+  if (t >= 1.22 && drill.cheer === 2) {
+    drill.cheer = 3;
+    kick(0, 4.2, 0);
+    drill.flexAt = -1; drill.on = false;
+  }
+}
 
 // Style swap.
 const swap = { phase: 'idle', t: 0, next: null };
@@ -622,18 +793,20 @@ function changeStyle(cast) {
 function swapStep(dt) {
   const breath = 1 + 0.025 * Math.sin((clock * Math.PI * 2) / 2.2);
   const base = { x: 1 - 0.012 * Math.sin((clock * Math.PI * 2) / 2.2), y: breath, z: 1 };
-  if (swap.phase === 'idle') { B.S.set(base.x, base.y, base.z); return; }
+  if (swap.phase === 'idle') { B.S.set(base.x * flex.x, base.y * flex.y, base.z * flex.z); return; }
   swap.t += dt;
   const PUD = { x: 1.35, y: 0.18, z: 1.25 };
   if (swap.phase === 'out') {
     const k = EXIT(clamp(swap.t / 0.24, 0, 1));
     B.S.set(THREE.MathUtils.lerp(base.x, PUD.x, k), THREE.MathUtils.lerp(base.y, PUD.y, k), THREE.MathUtils.lerp(base.z, PUD.z, k));
     if (swap.t >= 0.24) {
+      dropBalls();
       setBody(swap.next, true);
       setLabel(swap.next);
       swap.phase = 'in'; swap.t = 0;
       kick(0, 2.6, 0);
       post({ type: 'bloop', cast: swap.next });
+      if (swap.next === 'wall') { nextTic = clock + 4; startDrill(10, 0.55); }
     }
   } else {
     const k = POP(clamp(swap.t / 0.42, 0, 1));
@@ -649,12 +822,17 @@ shelfScene.environmentIntensity = 0.8;
 shelfScene.add(new THREE.HemisphereLight(0xffffff, 0xe6dfd2, 1.2));
 { const k2 = new THREE.DirectionalLight(0xfff4e8, 2.2); k2.position.set(-3, 6, 8); shelfScene.add(k2); }
 const shelfCam = new THREE.OrthographicCamera(0, 1, 0, -1, -100, 100);
+const padGeo = new RoundedBoxGeometry(46, 7, 14, 2, 2.5);
 const minis = CASTS.map((cast, i) => {
   const g = bodyGeometry(cast, false);
   g.translate(0, -g.boundingBox.max.y / 2, 0);
+  g.computeBoundingBox();
   const mat = new THREE.MeshPhysicalMaterial({ color: COLORS[0], roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08, sheen: 0.4 });
   const m = new THREE.Mesh(g, mat);
-  m.userData = { cast, i, hop: { x: 0, v: 0 }, show: { x: 1, v: 0 }, gone: false, launch: -1, paintAt: -1, paint: null };
+  // Each candy stands on its own little platform, drawn in the same 3D pass so the candy sits on it, never behind it.
+  const pad = new THREE.Mesh(padGeo, new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.8 }));
+  shelfScene.add(pad);
+  m.userData = { cast, i, h: g.boundingBox.max.y - g.boundingBox.min.y, pad, hop: { x: 0, v: 0 }, show: { x: 0, v: 0 }, paintAt: -1, paint: null };
   shelfScene.add(m);
   return m;
 });
@@ -663,38 +841,36 @@ function paintMinis(hex) {
   minis.forEach((m, i) => { m.userData.paintAt = clock + 0.05 * i; m.userData.paint = hex; });
 }
 function shelfLaunch(cast) {
-  for (const m of minis) {
-    const u = m.userData;
-    if (u.cast === cast) { u.launch = 0; u.hop.v = -6; }
-    else if (u.gone) { u.gone = false; u.launch = -1; u.show.x = 0; u.show.v = 0; }
-  }
+  // The candy you picked hops on its platform; it stays on the shelf, lifted, so you can always see which one you are.
+  for (const m of minis) if (m.userData.cast === cast) m.userData.hop.v = 7;
 }
+// Candies draw 16 px above the shelf box so a lifted one never clips.
+const SHELF_PAD = 16;
 function shelfRect() { return $('shelf').getBoundingClientRect(); }
 function shelfStep(dt) {
   const r = shelfRect();
-  shelfCam.left = 0; shelfCam.right = r.width; shelfCam.top = 0; shelfCam.bottom = -r.height;
+  shelfCam.left = 0; shelfCam.right = r.width; shelfCam.top = SHELF_PAD; shelfCam.bottom = -r.height;
   shelfCam.updateProjectionMatrix();
   const cols = 4; const cw = r.width / cols; const rh = r.height / 2;
   for (const m of minis) {
     const u = m.userData;
     const col = u.i % cols; const row = Math.floor(u.i / cols);
     springTo(u.hop, 0, dt, 5, 0.4);
-    springTo(u.show, u.gone ? 0 : 1, dt, 4.2, 0.45);
-    let s = 34 * u.show.x;
-    let y = -(row * rh + rh * 0.46) + 4 * Math.sin(clock * 1.7 + u.i);
-    if (u.launch >= 0) {
-      u.launch += dt;
-      const k = EXIT(clamp(u.launch / 0.2, 0, 1));
-      s *= 1 - k; y += 60 * k;
-      if (u.launch >= 0.2) { u.gone = true; u.launch = -1; u.show.x = 0; }
-    } else if (u.gone) s = 0;
+    const on = u.cast === (swap.next || B.cast);
+    // Lift: the picked candy rises 4 px and grows 14% on a 0.45 spring; the rest sit a touch smaller.
+    springTo(u.show, on ? 1 : 0, dt, 4.2, 0.45);
+    const s = 30 * (0.94 + 0.14 * u.show.x);
+    const base = -(row * rh + rh * 0.5) + 3 * Math.sin(clock * 1.7 + u.i);
+    const y = base + 4 * u.show.x;
     m.position.set(col * cw + cw / 2, y + u.hop.x * 10, 0);
-    m.scale.setScalar(Math.max(0.0001, s));
-    m.rotation.set(-0.18, 0.45 * Math.sin(clock * 0.9 + u.i * 0.8), 0.04 * Math.sin(clock * 1.3 + u.i));
-    if (u.paint && clock >= u.paintAt) { m.material.color.set(u.paint); u.paint = null; u.hop.v = -3.5; }
+    m.scale.setScalar(s);
+    // Platform under the candy's feet (at rest size), tipped 0.35 rad so its top face shows. Yours is clay.
+    u.pad.position.set(col * cw + cw / 2, base - (u.h * 30 * 0.94) / 2 - 7, -14);
+    u.pad.rotation.x = 0.35;
+    u.pad.material.color.set(on ? 0xe2562f : 0xf4f1ea);
+    m.rotation.set(-0.18, on ? 0.6 * Math.sin(clock * 1.6) : 0.3 * Math.sin(clock * 0.9 + u.i * 0.8), 0.04 * Math.sin(clock * 1.3 + u.i));
+    if (u.paint && clock >= u.paintAt) { m.material.color.set(u.paint); u.paint = null; u.hop.v = 3.5; }
   }
-  // The empty cell where your current style sits is lit in the accent.
-  document.querySelectorAll('#shelf i').forEach((el, i) => el.classList.toggle('on', CASTS[i] === (swap.next || B.cast)));
 }
 function springTo(s, target, dt, hz, ratio) {
   const w = hz * Math.PI * 2;
@@ -781,14 +957,24 @@ $('drops').addEventListener('click', (e) => {
 const markDrop = () => document.querySelectorAll('.drop').forEach((d) => d.classList.toggle('on', d.dataset.c === current.color));
 $('shelf').innerHTML = CASTS.map(() => '<i></i>').join('');
 document.querySelectorAll('[data-edit]').forEach((el) => el.addEventListener('click', () => post({ type: 'edit', field: el.dataset.edit })));
+// Stat icons, drawn on a 24 px grid in ink.
+const ICONS = {
+  bio: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H11l-5 4v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/></svg>',
+  pro: '<svg viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4.5a3 3 0 0 0 3 4M17 6h2.5a3 3 0 0 1-3 4M12 13v4M8 20h8"/></svg>',
+  court: '<svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M5 12h14M12 7v10M8 7h8M8 17h8M8 3v18M16 3v18"/></svg>',
+  racket: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="9" rx="6" ry="7"/><path d="M9 4.5v9M12 2.5v13M15 4.5v9M6.5 7h11M6 10h12M7 13h10M12 16v6"/></svg>',
+};
 function fillText() {
-  const nm = (current.name || 'YOU').toUpperCase();
+  const raw = (current.name || '').trim().toUpperCase();
+  const named = raw && raw !== 'YOU';
+  const nm = named ? raw : 'TAP TO NAME';
   if ($('name').dataset.v !== nm) { $('name').dataset.v = nm; letters($('name'), nm); }
-  $('bio').textContent = current.bio ? `"${current.bio}"` : 'tap to add one line of trash talk';
-  $('bio').classList.toggle('empty', !current.bio);
-  for (const [id, k, empty] of [['pro', 'favoritePro', 'FAVORITE PRO'], ['court', 'homeCourt', 'HOME COURT'], ['racket', 'racket', 'RACKET']]) {
-    $(id).innerHTML = current[k] ? `<b>${empty}</b> ${current[k].replace(/</g, '&lt;')}` : `<b>+</b> ${empty}`;
-    $(id).classList.toggle('empty', !current[k]);
+  $('name').classList.toggle('empty', !named);
+  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  for (const [id, k, label] of [['bio', 'bio', 'TRASH TALK'], ['pro', 'favoritePro', 'FAVORITE PRO'], ['court', 'homeCourt', 'HOME COURT'], ['racket', 'racket', 'RACKET']]) {
+    const val = current[k];
+    $(id).innerHTML = `<i>${ICONS[id]}</i><span><b>${label}</b><em>${val ? esc(k === 'bio' ? `"${val}"` : val) : 'TAP TO ADD'}</em></span>`;
+    $(id).classList.toggle('empty', !val);
   }
 }
 window.setFighter = (f) => {
@@ -801,9 +987,9 @@ window.setFighter = (f) => {
     setBody(current.cast, false);
     setLabel(current.cast);
     minis.forEach((m) => m.material.color.set(current.color));
-    for (const m of minis) if (m.userData.cast === current.cast) { m.userData.gone = true; m.userData.show.x = 0; }
-    // Dropped in from above.
+    // Dropped in from above. The Wall gets drilled as soon as it has its feet.
     for (let m = 0; m < NN; m += 1) B.x[m * 3 + 1] += 2.6;
+    if (current.cast === 'wall') { nextTic = clock + 5; startDrill(10, 1.0); }
   }
 };
 
@@ -918,15 +1104,18 @@ function poseFace(dt) {
   const ly = grab.on ? clamp((grab.T.y - tmpA.y) * 0.4, -0.03, 0.03) : 0.01 * Math.sin(clock * 0.5);
   for (const e of eyes) {
     e.position.set(e.userData.sx * sp / 2, 0.03, 0.02);
-    e.scale.set(1, blink * (1 - 0.7 * g) * (1 + 0.25 * surprise), 1);
+    const happy = clock < fx.happyUntil; const wince = clock < fx.winceUntil;
+    e.scale.set(1, happy ? 0.16 : wince ? 0.28 : blink * (1 - 0.7 * g) * (1 + 0.25 * surprise), 1);
     e.userData.pupil.position.set(lx, ly, 0.04);
   }
   for (const b of brows) b.position.set(b.userData.sx * 0.11, 0.17, 0.03);
   smile.position.set(0, -0.15, 0.03);
   smile.visible = !['bot', 'grunter'].includes(B.cast) && g < 0.5;
-  mouthO.visible = B.cast === 'grunter' || g >= 0.5 || surprise > 0;
+  const grin = clock < fx.happyUntil;
+  if (grin) smile.visible = false;
+  mouthO.visible = B.cast === 'grunter' || g >= 0.5 || surprise > 0 || grin;
   mouthO.position.set(0, -0.2, 0.03);
-  const open = B.cast === 'grunter' ? 0.9 + 0.5 * surprise : 0.6 + 0.4 * g;
+  const open = grin ? 1.3 : B.cast === 'grunter' ? 0.9 + 0.5 * surprise : 0.6 + 0.4 * g;
   mouthO.scale.set(open, open * 0.95, 0.3);
   mouthBar.position.set(0, -0.17, 0.03);
   mouthBar.visible = B.cast === 'bot' && g < 0.5;
@@ -935,7 +1124,7 @@ function poseFace(dt) {
 // Loop.
 let clock = 0;
 let acc = 0;
-const cam = { x: { x: 0, v: 0 }, y: { x: 0.8, v: 0 } };
+const cam = { x: { x: 0, v: 0 }, y: { x: 0.8, v: 0 }, d: { x: 11, v: 0 } };
 function advance(dt) {
   clock += dt;
   acc += dt;
@@ -945,6 +1134,7 @@ function advance(dt) {
     if (swap.phase === 'idle' && !grab.on && clock > nextTic) { TICS[B.cast].go(); nextTic = clock + TICS[B.cast].every + Math.random() * 0.6; }
   }
   dropsStep(dt);
+  ballsStep(dt);
   slideStep(dt);
   shelfStep(dt);
 }
@@ -966,34 +1156,53 @@ function frame(now) {
     shadow.scale.set(2.3 + lift * 0.6, 1.3 + lift * 0.4, 1);
     shadow.material.opacity = 1 / (1 + lift * 1.6);
     springTo(cam.x, c.x * 0.45, dt, 1.3, 1);
-    springTo(cam.y, 0.85 + Math.max(0, c.y - 0.85) * 0.3, dt, 1.3, 1);
+    // Frame the rest shape to the stage: its height fills 56% of the stage, its width 66% of the screen. The camera aims at the
+    // middle of the body (plus the ghost's hover) and only drifts 30% after hops, so a jump reads as a jump.
+    const rb = B.geo.boundingBox; const bh = rb.max.y - rb.min.y; const bw = rb.max.x - rb.min.x;
+    const stH = Math.max(120, $('stage').getBoundingClientRect().height);
+    const tan = 2 * Math.tan(THREE.MathUtils.degToRad(15));
+    const fitH = (bh / 0.5) * (window.innerHeight / stH) / tan;
+    const sr = $('stage').getBoundingClientRect(); const sc = $('stats').getBoundingClientRect();
+    const availW = Math.max(120, sc.left - sr.left - 8);
+    const fitW = (bw / 0.6) * (window.innerWidth / availW) / (tan * camera.aspect);
+    springTo(cam.d, Math.max(fitH, fitW), dt, 1.3, 1);
+    const mid = bh / 2 + (B.feel.float || 0);
+    springTo(cam.y, mid + Math.max(0, c.y - mid) * 0.3, dt, 1.3, 1);
   }
   // The grunt, written over its head.
   const sh = $('shout');
-  if (clock - shoutAt < 0.7 && B.cast === 'grunter') {
-    const p = com().add(new THREE.Vector3(0.5, 1.0, 0)).project(camera);
-    sh.style.transform = `translate(${(p.x * 0.5 + 0.5) * window.innerWidth}px,${(-p.y * 0.5 + 0.5) * window.innerHeight}px)`;
+  if (clock < fx.shoutUntil) {
+    const p = com().add(new THREE.Vector3(0, 1.25, 0)).project(camera);
+    // Kept inside the stage: never up under the back button, never off the edges.
+    const st0 = $('stage').getBoundingClientRect(); const half = sh.offsetWidth / 2 + 12;
+    const sx = clamp((p.x * 0.5 + 0.5) * window.innerWidth, half, window.innerWidth - half);
+    const sy = Math.max(st0.top + 30, (-p.y * 0.5 + 0.5) * window.innerHeight);
+    sh.style.transform = `translate(${sx}px,${sy}px)`;
     sh.classList.add('on');
   } else sh.classList.remove('on');
   // Camera: 30 degree lens, 2 degree orbit on a 9 s sine, and shifted so the body sits between the header and the shelf.
   const orbit = THREE.MathUtils.degToRad(2) * Math.sin((clock * Math.PI * 2) / 9);
-  const D = 11;
   const look = new THREE.Vector3(cam.x.x, cam.y.x, 0);
+  const D = cam.d.x;
   camera.position.set(look.x + D * Math.sin(orbit), look.y + D * 0.2, D * Math.cos(orbit));
+  if (clock < fx.shakeUntil) {
+    const k = (fx.shakeUntil - clock) / 0.18;
+    camera.position.x += (Math.random() - 0.5) * 0.16 * k; camera.position.y += (Math.random() - 0.5) * 0.16 * k;
+  }
   camera.lookAt(look);
   const w = window.innerWidth; const h = window.innerHeight;
-  const top = $('head').getBoundingClientRect().bottom;
-  const bottom = shelfRect().top;
-  const mid = (top + bottom) / 2;
-  camera.setViewOffset(w, h, 0, h / 2 - mid + 30, w, h);
+  const st = $('stage').getBoundingClientRect();
+  // Fighter centered in the stage left of the stats column.
+  const cx = (st.left + $('stats').getBoundingClientRect().left) / 2;
+  camera.setViewOffset(w, h, w / 2 - cx, h / 2 - (st.top + st.height * 0.5), w, h);
   slideRender(clock);
   renderer.setViewport(0, 0, w, h);
   renderer.setScissorTest(false);
   renderer.clear();
   renderer.render(scene, camera);
   const r = shelfRect();
-  renderer.setViewport(r.left, h - r.bottom, r.width, r.height);
-  renderer.setScissor(r.left, h - r.bottom, r.width, r.height);
+  renderer.setViewport(r.left, h - r.bottom, r.width, r.height + SHELF_PAD);
+  renderer.setScissor(r.left, h - r.bottom, r.width, r.height + SHELF_PAD);
   renderer.setScissorTest(true);
   renderer.clearDepth();
   renderer.render(shelfScene, shelfCam);
@@ -1026,4 +1235,6 @@ window.demoFighter = () => {
   at(10.6, () => changeStyle('grunter'));
   at(13.4, () => { current.color = COLORS[2]; markDrop(); dropPaint(COLORS[2]); });
 };
+/** Test hook: switch style as if its candy were tapped. */
+window.demoStyle = (cast) => changeStyle(cast);
 post({ type: 'ready' });

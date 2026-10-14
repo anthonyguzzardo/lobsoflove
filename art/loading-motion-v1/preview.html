@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lobs of Love — loading motion study</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#171d30;color:#f4ead9;font:16px system-ui,sans-serif;min-height:100svh;display:grid;place-items:center}main{width:min(94vw,620px);padding:24px 0}h1{font-size:21px;font-weight:550;margin:0 0 6px}p{color:#b8c0d3;font-size:14px;line-height:1.5;margin:0 0 16px}.stage{width:100%;aspect-ratio:1;background-image:url(frames.png);background-size:300% 200%;background-repeat:no-repeat;border-radius:16px}nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0}button,select{font:inherit;color:#f4ead9;background:#29324b;border:1px solid #53617c;border-radius:8px;padding:12px;min-height:44px;cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #eab26b;outline-offset:3px}#play{background:#eab26b;color:#171d30;border-color:#eab26b}input{width:100%;accent-color:#eab26b;min-height:32px}output{display:block;margin-top:8px;font-size:15px}a{color:#eab26b}
+</style>
+<main><h1>A court comes to life.</h1><p>Six-frame motion study from the existing loading artwork.</p>
+<div class="stage" id="stage" role="img" aria-label="Dormant tennis console"></div>
+<output id="caption" for="frame">1 / 6 — Dormant</output>
+<input id="frame" type="range" min="0" max="5" step="1" value="0" aria-label="Animation frame">
+<nav><button id="play">Play</button><button id="restart">Restart</button><label>Speed <select id="speed"><option value="1">Normal</option><option value="0.5">Slow</option><option value="2">Fast</option></select></label></nav>
+<p>Button press → grass grows → lines appear → net rises → ball emerges. This is a stepped timing sketch; intermediate motion is still to be drawn.</p><a href="frames.png">View all six frames</a></main>
+<script>
+const names=['Dormant','Button pressed; grass sprouts','Grass fills the court','Court lines appear','Net rises','Ball emerges'];
+const durations=[650,450,650,650,650,1400];
+const stage=document.getElementById('stage'),caption=document.getElementById('caption'),slider=document.getElementById('frame'),play=document.getElementById('play'),speed=document.getElementById('speed');
+let frame=0,playing=false,timer;
+function show(){stage.style.backgroundPosition=((frame%3)*50)+'% '+(Math.floor(frame/3)*100)+'%';slider.value=frame;caption.textContent=(frame+1)+' / 6 — '+names[frame];stage.setAttribute('aria-label',names[frame]);}
+function schedule(){clearTimeout(timer);if(playing)timer=setTimeout(()=>{frame=(frame+1)%6;show();schedule()},durations[frame]/Number(speed.value))}
+function setPlaying(value){playing=value;play.textContent=playing?'Pause':'Play';schedule()}
+play.onclick=()=>setPlaying(!playing);
+document.getElementById('restart').onclick=()=>{frame=0;show();setPlaying(true)};
+slider.oninput=()=>{setPlaying(false);frame=Number(slider.value);show()};
+speed.onchange=schedule;
+document.addEventListener('visibilitychange',()=>{if(document.hidden)setPlaying(false)});
+const asset=new Image();asset.onload=()=>{show();if(!matchMedia('(prefers-reduced-motion: reduce)').matches)setPlaying(true)};asset.onerror=()=>{caption.textContent='Could not load frames.png';setPlaying(false)};asset.src='frames.png';
+</script></html>

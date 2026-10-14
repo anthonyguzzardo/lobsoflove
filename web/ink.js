@@ -6,9 +6,9 @@
 //   scratch (fast zigzag)         erase the last character (or throw away the read card)
 //   fast flick to the right       space
 //   pause ~1.7 s                  read it: the app draws back what it understood
-//   ✓ on the card                 save           circle an option   answer the card's question
+//   check mark on the card        save           circle an option   answer the card's question
 //   two-finger tap                read now (on a card: save)
-//   swipe in from the left edge   leave (two-finger swipe down works too)
+//   three fast circles            leave (so do a swipe in from the left edge and a two-finger swipe down)
 
 const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
 window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
@@ -86,6 +86,19 @@ function isFlick(pts) {
   const dy = pts[pts.length - 1][1] - pts[0][1];
   return dur(pts) < 200 && dx > W * 0.55 && Math.abs(dy) < dx * 0.3;
 }
+/** Net turning of a stroke, in full turns. Loops in the same direction add up; an 8 cancels itself out. */
+function turns(pts) {
+  let total = 0, prev = null, ax = pts[0][0], ay = pts[0][1];
+  for (const [x, y] of pts) {
+    if (Math.hypot(x - ax, y - ay) < 6) continue;
+    const a = Math.atan2(y - ay, x - ax);
+    if (prev !== null) { let d = a - prev; if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; total += d; }
+    prev = a; ax = x; ay = y;
+  }
+  return Math.abs(total) / (2 * Math.PI);
+}
+/** Three fast circles in one stroke: leave. */
+const isLoops = (pts) => dur(pts) < 3000 && turns(pts) >= 2.7;
 /** Starts at the left edge and drags right: the iOS "back" motion, done with one finger. */
 function isEdgeSwipe(pts) {
   const dx = pts[pts.length - 1][0] - pts[0][0];
@@ -130,7 +143,7 @@ function fadeOut(strokes) { S.fading.push({ strokes, born: now() }); }
 function endStroke(st) {
   const pts = st.pts;
   if (pts.length < 2) pts.push([pts[0][0] + 0.5, pts[0][1] + 0.5, pts[0][2] + 1]); // a dot is still a mark (period, i-dot)
-  if (isEdgeSwipe(pts)) { fadeOut([st]); post({ type: 'exit' }); return; }
+  if (isEdgeSwipe(pts) || isLoops(pts)) { fadeOut([st]); post({ type: 'exit' }); return; }
 
   if (S.mode === 'card') {
     if (S.hits.length && isCircle(pts)) {
@@ -192,6 +205,7 @@ cv.addEventListener('pointermove', (e) => {
   if (!S.live || S.live.id !== e.pointerId) return;
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   for (const c of evs.length ? evs : [e]) S.live.pts.push([c.clientX, c.clientY, now()]);
+  if (S.live.pts.length % 6 === 0 && isLoops(S.live.pts)) { fadeOut([S.live]); S.live = null; post({ type: 'exit' }); }
 });
 
 function up(e) {
@@ -241,13 +255,104 @@ function strokePath(pts) {
   const l = pts[pts.length - 1];
   g.lineTo(l[0], l[1]);
 }
-function drawInk(strokes, alpha = 1, width = 11) {
+// The brush, after the drawing in docs/mo-design/vids/pretty-fire-fuckign-art.mov: fat rounded tubes, each stroke its own
+// color and pattern, picked in turn. Patterns are laid out by distance along the stroke, so they stay put as it grows.
+const BRUSHES = [
+  { color: '#e8432a', pattern: 'dots', mark: '#fff6ec' },
+  { color: '#2a63d8', to: '#35c4f0', pattern: 'stripes', mark: '#122a6b' },
+  { color: '#f39a2b', pattern: 'speckle', mark: '#1b1408' },
+  { color: '#9a4fd6', to: '#d64fb8', pattern: 'dash', mark: '#f3d9ff' },
+  { color: '#2f9e5a', pattern: 'plain' },
+  { color: '#1f6fe8', pattern: 'plain' },
+];
+let brushTurn = 0;
+const WIDTH = 21;
+
+/** Points every `step` px along the smoothed stroke, with the direction there. */
+function along(pts, step) {
+  const out = [];
+  let carry = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
+    const d = Math.hypot(bx - ax, by - ay);
+    if (!d) continue;
+    const ux = (bx - ax) / d, uy = (by - ay) / d;
+    let t = step - carry;
+    while (t <= d) { out.push([ax + ux * t, ay + uy * t, ux, uy]); t += step; }
+    carry = d - (t - step);
+  }
+  return out;
+}
+const mix = (a, b, k) => {
+  const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * k)).join(',')})`;
+};
+/** Fixed jitter per mark, so speckles do not shimmer from frame to frame. */
+const jit = (i, salt) => { const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453; return x - Math.floor(x); };
+
+function drawInk(strokes, alpha = 1, width = WIDTH) {
   g.save();
   g.globalAlpha = alpha;
-  g.strokeStyle = INK; g.lineWidth = width; g.lineCap = 'round'; g.lineJoin = 'round';
-  for (const s of strokes) { strokePath(s.pts); g.stroke(); }
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const s of strokes) {
+    if (!s.brush) s.brush = BRUSHES[brushTurn++ % BRUSHES.length];
+    const b = s.brush;
+    const pts = s.pts;
+    // A soft contact shadow, down and right, so the tube sits on the paper.
+    g.strokeStyle = 'rgba(60,45,30,0.13)'; g.lineWidth = width;
+    g.save(); g.translate(1.5, 2.5); strokePath(pts); g.stroke(); g.restore();
+    // The body: one color, or a run from one color to the next along its length.
+    g.lineWidth = width;
+    if (b.to && pts.length > 2) {
+      const n = pts.length - 1;
+      for (let i = 1; i <= n; i++) {
+        g.strokeStyle = mix(b.color, b.to, i / n);
+        g.beginPath(); g.moveTo(pts[i - 1][0], pts[i - 1][1]); g.lineTo(pts[i][0], pts[i][1]); g.stroke();
+      }
+    } else { g.strokeStyle = b.color; strokePath(pts); g.stroke(); }
+    const r = width / 2;
+    if (b.pattern === 'dots') {
+      g.fillStyle = b.mark;
+      for (const [x, y] of along(pts, width * 1.15)) { g.beginPath(); g.arc(x, y, r * 0.3, 0, Math.PI * 2); g.fill(); }
+    } else if (b.pattern === 'stripes') {
+      g.strokeStyle = b.mark; g.lineWidth = Math.max(1.4, width * 0.16); g.lineCap = 'butt';
+      for (const [x, y, ux, uy] of along(pts, width * 0.5)) { g.beginPath(); g.moveTo(x - uy * r * 0.92, y + ux * r * 0.92); g.lineTo(x + uy * r * 0.92, y - ux * r * 0.92); g.stroke(); }
+      g.lineCap = 'round';
+    } else if (b.pattern === 'speckle') {
+      g.fillStyle = b.mark;
+      along(pts, width * 0.28).forEach(([x, y, ux, uy], i) => {
+        const o = (jit(i, 1) - 0.5) * r * 1.3;
+        g.beginPath(); g.arc(x - uy * o, y + ux * o, r * (0.1 + 0.07 * jit(i, 2)), 0, Math.PI * 2); g.fill();
+      });
+    } else if (b.pattern === 'dash') {
+      g.strokeStyle = b.mark; g.lineWidth = Math.max(1.6, width * 0.2); g.globalAlpha = alpha * 0.85;
+      along(pts, width * 0.55).forEach(([x, y, ux, uy], i) => {
+        if (i % 2) return;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + ux * width * 0.4, y + uy * width * 0.4); g.stroke();
+      });
+      g.globalAlpha = alpha;
+    }
+    // A thin highlight along the top edge makes it read as round.
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = Math.max(1, width * 0.14);
+    g.save(); g.translate(-r * 0.32, -r * 0.42); strokePath(pts); g.stroke(); g.restore();
+  }
   g.restore();
 }
+
+// Paper grain: one noise tile, laid over the whole page at low strength.
+const grain = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 160;
+  const x = c.getContext('2d');
+  const img = x.createImageData(160, 160);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = 120 + Math.random() * 100;
+    img.data[i] = v; img.data[i + 1] = v * 0.97; img.data[i + 2] = v * 0.92; img.data[i + 3] = 22;
+  }
+  x.putImageData(img, 0, 0);
+  return g.createPattern(c, 'repeat');
+})();
 
 const LINE_Y = () => Math.max(TOP, 20) + 54;
 const LINE_FONT = `700 32px ${HAND}`;
@@ -303,8 +408,8 @@ function drawHints(t) {
 function drawLegend() {
   if (S.mode === 'card') return;
   const rows = S.line || S.pending
-    ? ['SCRATCH = ERASE    FLICK → = SPACE', 'PAUSE = READ IT    SWIPE FROM LEFT EDGE = LEAVE']
-    : ['ONE LETTER ON TOP OF THE LAST', 'SCRATCH = ERASE    FLICK → = SPACE', 'PAUSE = READ IT    SWIPE FROM LEFT EDGE = LEAVE'];
+    ? ['SCRATCH = ERASE    FLICK RIGHT = SPACE', 'PAUSE = READ IT    3 FAST CIRCLES = LEAVE']
+    : ['ONE LETTER ON TOP OF THE LAST', 'SCRATCH = ERASE    FLICK RIGHT = SPACE', 'PAUSE = READ IT    3 FAST CIRCLES = LEAVE'];
   g.save();
   g.font = `700 12px ${MONO}`;
   g.textAlign = 'center';
@@ -373,11 +478,11 @@ function drawCard(t) {
   }
 
   y = Math.max(y + 40, H - 120);
-  const foot = c.canSave ? 'draw ✓ to save' : c.questions.length ? 'circle one' : c.warn ? 'scratch it out and rewrite' : 'keep writing';
+  const foot = c.canSave ? 'draw a check to save' : c.questions.length ? 'circle one' : c.warn ? 'scratch it out and rewrite' : 'keep writing';
   revealText(foot, cx, y, `700 26px ${HAND}`, c.canSave ? CLAY : INK, born + 600, t);
   g.font = `700 12px ${MONO}`; g.textAlign = 'center'; g.fillStyle = INK; g.globalAlpha = alpha * 0.75;
   g.fillText('SCRATCH = TOSS    KEEP WRITING = ADD MORE', cx, y + 34);
-  g.fillText('SWIPE FROM LEFT EDGE = LEAVE', cx, y + 54);
+  g.fillText('3 FAST CIRCLES = LEAVE', cx, y + 54);
   g.restore();
 }
 
@@ -414,7 +519,7 @@ function drawFading(t) {
       g.translate(b.cx + (f.to[0] - b.cx) * e, b.cy + (f.to[1] - b.cy) * e);
       g.scale(s, s);
       g.translate(-b.cx, -b.cy);
-      drawInk(f.strokes, 1 - 0.8 * e, 11);
+      drawInk(f.strokes, 1 - 0.8 * e);
       g.restore();
     } else drawInk(f.strokes, 0.5 * (1 - k));
     return true;
@@ -426,6 +531,8 @@ function frame() {
   const t = now();
   if (TOP === 0 && frames++ % 15 === 0) readTop();
   g.fillStyle = PAPER;
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = grain;
   g.fillRect(0, 0, W, H);
   drawLine(t);
   drawHints(t);
@@ -483,6 +590,14 @@ window.demoInk = async (text = 'w 6-4 6-2') => {
   }
   const x = W * 0.36, y = H * 0.62;
   await demoPath([[x, y], [x + 30, y + 46], [x + 46, y + 70], [x + 80, y + 10], [x + 120, y - 50]]);
+};
+/** Three fast loops in the middle of the screen: the way out. */
+window.demoLoops = async () => {
+  await sleep(1500);
+  const cx = W / 2, cy = H * 0.45;
+  const pts = Array.from({ length: 90 }, (_, k) => { const a = (k / 89) * Math.PI * 2 * 3.1; return [cx + Math.cos(a) * 70 + k * 0.6, cy + Math.sin(a) * 60]; });
+  S.live = { id: -1, pts: [] };
+  for (const [px, py] of pts) { if (!S.live) return; S.live.pts.push([px, py, now()]); if (S.live.pts.length % 6 === 0 && isLoops(S.live.pts)) { fadeOut([S.live]); S.live = null; post({ type: 'exit' }); return; } await sleep(12); }
 };
 async function demoPath(pts) {
   S.live = { id: -1, pts: [] };

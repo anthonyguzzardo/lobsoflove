@@ -14,7 +14,7 @@ import { sfx } from '@/lib/sfx';
 
 type Field = 'name' | 'bio' | 'favoritePro' | 'homeCourt' | 'racket';
 type Msg =
-  | { type: 'ready' | 'press' | 'line' | 'slid' | 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' }
+  | { type: 'ready' | 'press' | 'line' | 'slid' | 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' | 'serve' | 'pock' | 'return' | 'flex' | 'burst' | 'cheer' }
   | { type: 'bloop'; cast: CastId }
   | { type: 'thud'; v: number }
   | { type: 'cast'; cast: CastId }
@@ -76,21 +76,28 @@ export default function MakeYourFighter() {
               ready.current = true;
               run(`window.setFighter(${JSON.stringify(draftRef.current)})`);
               if (params.demo === '1') run('window.demoFighter()');
+              if (params.demo === 'wall') run("setTimeout(() => window.demoStyle('wall'), 900)");
               break;
             case 'cast': setDraft((d) => ({ ...d, cast: msg.cast })); break;
             case 'color': setDraft((d) => ({ ...d, color: msg.color })); void Haptics.selectionAsync(); break;
             case 'edit': setText(draftRef.current[msg.field] === 'YOU' && msg.field === 'name' ? '' : draftRef.current[msg.field]); setEditing(msg.field); break;
-            case 'poke': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('boing', 0.6); break;
-            case 'boing': sfx('boing', 0.35); break;
-            case 'grab': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('squish', 0.5); break;
+            case 'poke': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('pock', 0.8); break;
+            case 'boing': sfx('pock', 0.45); break;
+            case 'grab': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('squeak', 0.45); break;
             case 'fling': sfx('swish', 0.5); break;
-            case 'thud': void Haptics.impactAsync(msg.v > 0.5 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light); sfx('squish', 0.25 + 0.5 * msg.v); break;
-            case 'squish': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('squish', 0.7); break;
+            case 'thud': void Haptics.impactAsync(msg.v > 0.5 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light); sfx('bounce', 0.3 + 0.5 * msg.v); break;
+            case 'squish': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('can', 0.6); break;
             case 'bloop': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('bloop', 0.8); break;
             case 'splat': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('drip', 0.8); break;
             case 'beep': sfx('tick', 0.5); break;
-            case 'grunt': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('slam', 0.4); break;
+            case 'grunt': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('grunt', 0.7); break;
             case 'swish': sfx('swish', 0.4); break;
+            case 'flex': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('grunt', 0.55); break;
+            case 'burst': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('pock', 1); sfx('swish', 0.8); break;
+            case 'cheer': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('select', 0.8); break;
+            case 'serve': sfx('bounce', 0.3); break;
+            case 'pock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('pock', 0.7); break;
+            case 'return': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('pock', 0.9); break;
             case 'press': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('tick', 0.7); break;
             case 'line': void Haptics.selectionAsync(); break;
             case 'slid': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('win', 0.7); break;

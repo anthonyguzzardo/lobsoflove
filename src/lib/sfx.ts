@@ -9,9 +9,14 @@ const SOURCES = {
   swish: require('../../assets/sfx/swish.wav'),
   win: require('../../assets/sfx/win.wav'),
   bloop: require('../../assets/sfx/bloop.wav'),
-  squish: require('../../assets/sfx/squish.wav'),
   drip: require('../../assets/sfx/drip.wav'),
-  boing: require('../../assets/sfx/boing.wav'),
+  grunt: require('../../assets/sfx/grunt.wav'),
+  pock: require('../../assets/sfx/pock.wav'),
+  bounce: require('../../assets/sfx/bounce.wav'),
+  can: require('../../assets/sfx/can.wav'),
+  squeak: require('../../assets/sfx/squeak.wav'),
+  clack: require('../../assets/sfx/clack.wav'),
+  ping: require('../../assets/sfx/ping.wav'),
 } as const;
 
 export type Sfx = keyof typeof SOURCES;

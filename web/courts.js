@@ -522,6 +522,7 @@ function build(data) {
     const song = v.song ? `${v.song.title.toUpperCase()}  ·  ${v.song.artist.toUpperCase()}      ` : `${v.short}      `;
     const led = board(song, v.accent);
     const boards = [];
+    const boardMeshes = [];
     let backWalls = 0;
     const toWorld = (x, z) => new THREE.Vector3(x * Math.cos(rot) + z * Math.sin(rot), 0, -x * Math.sin(rot) + z * Math.cos(rot));
     for (const [nx, nz, len, px, pz, ry] of [[1, 0, APW, -PL / 2, 0, Math.PI / 2], [-1, 0, APW, PL / 2, 0, -Math.PI / 2], [0, 1, PL, 0, -APW / 2, 0], [0, -1, PL, 0, APW / 2, Math.PI]]) {
@@ -544,6 +545,8 @@ function build(data) {
         const p = new THREE.Mesh(new THREE.PlaneGeometry(len - 0.06, 0.2), new THREE.MeshBasicMaterial({ map: tex }));
         p.position.set(px + nx * 0.004, 0.22, pz + nz * 0.004);
         p.rotation.y = ry;
+        p.userData.songBoard = true; // tap the board to mute or unmute the song
+        boardMeshes.push(p);
         a.add(p);
         boards.push(tex);
         if (v.key === 'balboa') { // the stadium court: three rows of seating behind each back wall
@@ -583,7 +586,7 @@ function build(data) {
     const end = toWorld(L / 2 - 0.06, count > 1 ? (count - 1) / 2 * pitch : 0).multiplyScalar(scaleA);
     const spot = end.dot(CAM) > 0 ? end : end.multiplyScalar(-1);
     g.traverse((o) => { o.userData.island = i; });
-    g.userData = { anim, i, base, period: 3.6 + (i % 3) * 0.6, phase: i * 1.7, dip: sp(), sink: sp(), glow: 0, pad, labelMat, faces, boards, spot: spot.setY(0.04), shadow: blob(SIDE * 1.9, 0.5), stand: new THREE.Vector3(SIDE / 2 - 0.3, 0, SIDE / 2 - 0.3) };
+    g.userData = { anim, boardMeshes, i, base, period: 3.6 + (i % 3) * 0.6, phase: i * 1.7, dip: sp(), sink: sp(), glow: 0, pad, labelMat, faces, boards, spot: spot.setY(0.04), shadow: blob(SIDE * 1.9, 0.5), stand: new THREE.Vector3(SIDE / 2 - 0.3, 0, SIDE / 2 - 0.3) };
     scene.add(g, g.userData.shadow);
     islands.push(g);
   });
@@ -714,15 +717,14 @@ function paint() {
   $('pct').textContent = `${String(st.target + 1).padStart(2, '0')} / ${String(n).padStart(2, '0')}`;
   $('fill').style.width = `${((st.target + 1) / n) * 100}%`;
   $('fill').style.background = v.accent;
-  $('mute').classList.toggle('off', st.muted);
-  $('open').innerHTML = v.song ? `<b>${v.song.title}</b> · ${v.song.artist} ›` : '';
   document.documentElement.style.setProperty('--accent', v.accent);
   $('h1').textContent = `${v.name}.`;
   $('h2').textContent = v.tagline;
-  $('lights').textContent = v.lights ? '● LIGHTS' : '○ NO LIGHTS';
-  $('lights').classList.toggle('on', !!v.lights);
-  $('count').textContent = `${v.courts.length} COURTS HERE`;
-  $('blurb').textContent = [`${v.played || 0} played`, `king: ${v.king || 'vacant'}`, `you ${v.rec || '0–0'}`].join(' · ');
+  $('lights').querySelector('b').textContent = v.lights ? 'LIGHTS' : 'NO LIGHTS';
+  $('lights').classList.toggle('off', !v.lights);
+  $('count').querySelector('b').textContent = String(v.courts.length);
+  // Stats only once there is something to say; an empty record is noise.
+  $('blurb').textContent = v.played ? [`${v.played} played here`, v.king ? `king: ${v.king}` : null, `you ${v.rec}`].filter(Boolean).join(' · ') : '';
   setKey(String(st.target + 1), 'JUMP IN', 'SLIDE TO PLAY HERE');
   $('sub').textContent = 'your five. the song is on the wall.';
 }
@@ -730,7 +732,7 @@ function paint() {
 // The dock: one floating platform per venue in its own color. A real ball hops to the one you pick, with your fighter.
 const dock = $('dock');
 const DOCK_LABEL = { ucsd: 'UCSD', lindavista: 'L. VISTA', balboa: 'BALBOA', roosevelt: 'ROOSEVELT', northpark: 'N. PARK' };
-const dk = { x: 0, y: 0, vy: 0, from: 0, to: 0, t: 0, dur: 0, flying: false, squash: 0, at: 0 };
+const dk = { x: 0, y: 0, vx: 0, vy: 0, to: 0, flying: false, squash: 0, rot: 0, at: 0 };
 const G = 2600;
 function initDock() {
   dock.insertAdjacentHTML('beforeend', venues.map((v, k) => `<button class="slot" data-i="${k}" style="--pc:${v.accent}"><span class="pf"></span><span class="lbl">${DOCK_LABEL[v.key] || v.short}</span></button>`).join(''));
@@ -739,31 +741,49 @@ function initDock() {
 }
 const slotX = (i) => { const r = dock.getBoundingClientRect(); const b = dock.children[2 + i].getBoundingClientRect(); return b.left + b.width / 2 - r.left; };
 const restY = () => dock.clientHeight - 49;
+const DOCK_READY = () => venues.length > 0;
+// The dock ball moves like a ball that got hit, not one that wants to go somewhere: the platform it sits on kicks it,
+// it flies a true ballistic arc at a fixed 60 degree launch (so a longer gap needs a harder hit, and it gets one),
+// horizontal speed constant in the air, spin from its speed, and it lands dead on the target and bounces out its energy.
 function dockHop(i) {
-  dk.from = dk.x || slotX(dk.at); dk.to = slotX(i); dk.at = i;
-  dk.vy = -(420 + Math.min(260, Math.abs(dk.to - dk.from) * 0.9));
-  dk.dur = (2 * -dk.vy) / G; dk.t = 0; dk.flying = true;
+  const from = dk.x || slotX(dk.at);
+  const fromSlot = dock.querySelector(`.slot[data-i="${dk.at}"]`);
+  dk.to = slotX(i); dk.at = i;
+  const R = dk.to - from;
+  const T60 = Math.tan(Math.PI / 3);
+  const vy = Math.max(300, Math.sqrt(Math.abs(R) * G * T60 / 2));
+  dk.vy = -vy;
+  dk.vx = R / ((2 * vy) / G); // lands exactly on the target platform
+  dk.x = from;
+  dk.flying = true;
+  if (fromSlot) { fromSlot.classList.remove('kick'); void fromSlot.offsetWidth; fromSlot.classList.add('kick'); }
+  post({ type: 'press' }); // the pock of the hit
 }
 function dockStep(dt) {
-  if (!venues.length) return;
+  if (DOCK_READY && !DOCK_READY()) return;
   if (!dk.x) { dk.x = slotX(dk.at); dk.y = restY(); }
   const floor = restY();
-  if (dk.flying) {
-    dk.t += dt;
-    const k = Math.min(1, dk.t / dk.dur);
-    dk.x = dk.from + (dk.to - dk.from) * (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
-    if (k >= 1) dk.flying = false;
-  }
-  dk.vy += G * dt; dk.y += dk.vy * dt;
-  if (dk.y >= floor) {
-    const hit = dk.vy; dk.y = floor; dk.vy = Math.abs(hit) > 140 ? -hit * 0.42 : 0;
-    if (hit > 140) { dk.squash = Math.min(0.35, hit / 2200); const s = dock.querySelector(`.slot[data-i="${dk.at}"]`); if (s && !dk.flying) { s.classList.add('land'); setTimeout(() => s.classList.remove('land'), 110); } }
+  if (dk.flying) dk.x += dk.vx * dt;
+  dk.rot += (dk.vx * dt) / 12; // rolls through the air at its own speed (radius 12 px)
+  dk.vy += G * dt;
+  dk.y += dk.vy * dt;
+  if (dk.y >= floor && dk.vy > 0) {
+    const hit = dk.vy;
+    dk.y = floor;
+    if (dk.flying) { dk.flying = false; dk.x = dk.to; dk.vx = 0; }
+    dk.vy = hit > 140 ? -hit * 0.42 : 0;
+    if (hit > 140) {
+      dk.squash = Math.min(0.35, hit / 2200);
+      const s = dock.querySelector(`.slot[data-i="${dk.at}"]`);
+      if (s) { s.classList.add('land'); setTimeout(() => s.classList.remove('land'), 110); }
+    }
   }
   dk.squash *= Math.exp(-dt * 14);
 }
 function dockRender() {
   if (!venues.length) return;
   $('dball').style.transform = `translate3d(${dk.x}px,${dk.y}px,0) scale(${1 + dk.squash},${1 - dk.squash})`;
+  $('dball').firstElementChild.style.transform = `rotate(${dk.rot}rad)`;
   const lift = Math.min(1, (restY() - dk.y) / 90);
   $('dshadow').style.transform = `translateX(${dk.x}px) scale(${1 - 0.5 * lift})`;
   $('dshadow').style.opacity = String(1 - 0.6 * lift);
@@ -802,12 +822,39 @@ function undive() {
 }
 window.undive = undive;
 // Back is always one step: out of the court if you are in one, otherwise off this screen.
-// The backhand: swing on touch-down, act once the follow-through lands.
-$('home').addEventListener('pointerdown', () => { $('home').classList.add('swing'); post({ type: 'press' }); });
-$('home').addEventListener('click', () => setTimeout(() => { $('home').classList.remove('swing'); if (st.diving) undive(); else post({ type: 'back' }); }, 150));
-$('home').addEventListener('pointercancel', () => $('home').classList.remove('swing'));
-$('mute').addEventListener('click', () => { st.muted = !st.muted; post({ type: 'mute' }); paint(); });
-$('open').addEventListener('click', () => post({ type: 'link', anthem: venues[st.target].anthem }));
+// Wind up on touch; only a completed click sends the ball back.
+let backPending = false;
+// The record beside the lights opens this court's song in Apple Music.
+// Sound: the record beside the lights is the mute button (tapping the wall board does the same). It spins while the song plays.
+function setMuted(m) {
+  st.muted = m;
+  post({ type: 'mute' });
+  for (const g of islands) for (const b of g.userData.boardMeshes || []) b.material.color.setScalar(m ? 0.35 : 1);
+  $('listen').classList.toggle('muted', m);
+  $('lstxt').textContent = m ? 'MUTED' : 'SOUND';
+  $('listen').setAttribute('aria-label', m ? 'Muted. Tap for sound.' : 'Sound on. Tap to mute.');
+}
+$('listen').addEventListener('click', () => setMuted(!st.muted));
+const backControl = $('home');
+const releaseBack = () => backControl.classList.remove('held');
+backControl.addEventListener('pointerdown', () => {
+  if (!backPending) backControl.classList.add('held');
+});
+backControl.addEventListener('pointerup', releaseBack);
+backControl.addEventListener('pointerleave', releaseBack);
+backControl.addEventListener('pointercancel', releaseBack);
+backControl.addEventListener('click', () => {
+  if (backPending) return;
+  backPending = true;
+  releaseBack();
+  backControl.classList.add('swing');
+  post({ type: 'press' });
+  setTimeout(() => {
+    backControl.classList.remove('swing');
+    backPending = false;
+    if (st.diving) undive(); else post({ type: 'back' });
+  }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220);
+});
 
 const ray = new THREE.Raycaster();
 let down = null;
@@ -821,6 +868,10 @@ canvas.addEventListener('pointerup', (e) => {
   if (Math.hypot(dx, dy) < 10 && quick) {
     ray.setFromCamera(new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1), camera);
     const hit = ray.intersectObjects(islands, true)[0];
+    if (hit && hit.object.userData.songBoard) {
+      setMuted(!st.muted);
+      return;
+    }
     if (hit && hit.object.userData.island != null) { const i = hit.object.userData.island; if (i === st.target) enter(); else go(i); }
   } else if (Math.abs(dy) > 44 && Math.abs(dy) > Math.abs(dx)) go(st.target + (dy < 0 ? 1 : -1));
 });

@@ -27,6 +27,8 @@ export default function RootLayout() {
         <Stack.Screen name="case" options={{ contentStyle: { backgroundColor: '#f6f5f2' } }} />
         <Stack.Screen name="ink" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
         <Stack.Screen name="fighter" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
+        <Stack.Screen name="gear" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
+        <Stack.Screen name="season" options={{ contentStyle: { backgroundColor: '#ebe8e2' } }} />
         <Stack.Screen name="match" options={{ presentation: 'modal' }} />
       </Stack>
       </View>

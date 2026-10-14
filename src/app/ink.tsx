@@ -93,7 +93,8 @@ export default function Ink() {
     switch (msg.type) {
       case 'ready':
         pushLine();
-        if (params.demo) run(`window.demoInk(${params.demo === '1' ? '' : JSON.stringify(params.demo)})`);
+        if (params.demo === 'loops') run('window.demoLoops()');
+        else if (params.demo) run(`window.demoInk(${params.demo === '1' ? '' : JSON.stringify(params.demo)})`);
         break;
       case 'char': {
         const entry: Entry = { cands: null };

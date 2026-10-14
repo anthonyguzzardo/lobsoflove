@@ -30,6 +30,13 @@ function render(seconds, fn) {
 let seed = 7;
 const noise = () => { seed = (seed * 16807) % 2147483647; return (seed / 2147483647) * 2 - 1; };
 const env = (t, a, d) => (t < a ? t / a : Math.exp(-(t - a) / d));
+/** Two-pole resonant band-pass (RBJ cookbook), stateful per instance. */
+function bandpass(f, q) {
+  const w = (TAU * f) / SR; const al = Math.sin(w) / (2 * q); const a0 = 1 + al;
+  const b0 = al / a0; const b2 = -al / a0; const a1 = (-2 * Math.cos(w)) / a0; const a2 = (1 - al) / a0;
+  let x1 = 0; let x2 = 0; let y1 = 0; let y2 = 0;
+  return (x) => { const y = b0 * x + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = y; return y; };
+}
 
 const sounds = {
   // Cursor move: a short felt tick, like a ball off strings.
@@ -61,12 +68,36 @@ const sounds = {
   win: render(0.7, (t) => [523.25, 659.25, 783.99, 1046.5].reduce((s, f, k) => { const u = t - k * 0.085; return u > 0 ? s + (Math.sin(TAU * f * u) + 0.25 * Math.sin(TAU * f * 2 * u)) * env(u, 0.003, 0.16) : s; }, 0)),
   // Jelly: a wet pop, pitch rising 220 to 620 Hz in 70 ms, for a body pouring back up.
   bloop: render(0.2, (t) => { const ph = TAU * (620 * t - 400 * 0.025 * (1 - Math.exp(-t / 0.025))); return (Math.sin(ph) + 0.2 * Math.sin(2 * ph)) * env(t, 0.002, 0.06); }),
-  // Jelly slumping: a low sliding wobble with a little wet noise.
-  squish: render(0.24, (t) => (Math.sin(TAU * (160 * t - 220 * t * t)) * (1 + 0.35 * Math.sin(TAU * 14 * t)) + noise() * 0.18) * env(t, 0.008, 0.07)),
+  // The Grunter, pro style: a short pushed "hu" on contact, then the long open "AAH" on the follow-through, through two vowel formants.
+  grunt: (() => {
+    const f1 = bandpass(620, 4); const f2 = bandpass(1180, 5); const f3 = bandpass(2600, 6); let ph = 0;
+    return render(0.62, (t) => {
+      const second = t > 0.11;
+      const u = second ? t - 0.11 : t;
+      const hz = second ? 150 - 55 * u : 125;
+      ph += hz / SR;
+      const src = 2 * (ph % 1) - 1 + noise() * (second ? 0.18 : 0.5);
+      const amp = second ? env(u, 0.03, 0.16) : env(u, 0.01, 0.035) * 0.7;
+      return (f1(src) + 0.55 * f2(src) + 0.2 * f3(src)) * amp;
+    });
+  })(),
+  // Tennis ball off the strings: a hollow "pock" (a 1.4 kHz felt crack over a short 420 Hz body).
+  pock: (() => { const bp = bandpass(1400, 3); return render(0.12, (t) => bp(noise()) * 3 * env(t, 0.0005, 0.008) + Math.sin(TAU * 420 * t) * env(t, 0.0005, 0.022) * 0.8); })(),
+  // Ball bouncing on hard court: lower, duller, shorter ring.
+  bounce: (() => { const bp = bandpass(820, 2.2); return render(0.12, (t) => bp(noise()) * 2.4 * env(t, 0.0005, 0.011) + Math.sin(TAU * (190 + 60 * Math.exp(-t / 0.01)) * t) * env(t, 0.001, 0.03)); })(),
+  // A new can of balls: the seal cracks, then the pressure hisses out.
+  can: (() => {
+    const crack = bandpass(2400, 2); const hiss = bandpass(5200, 0.8);
+    return render(0.6, (t) => crack(noise()) * 2.5 * env(t, 0.0005, 0.006) + hiss(noise()) * 0.9 * env(t - 0.01 > 0 ? t - 0.01 : 0, 0.02, 0.17));
+  })(),
+  // Sneaker on hard court: a short rubber squeak, wobbling up from 2.4 kHz.
+  squeak: render(0.16, (t) => { const f = 2400 + 700 * (t / 0.16); return (Math.sin(TAU * f * t + 2.2 * Math.sin(TAU * 38 * t)) + 0.3 * Math.sin(TAU * 2 * f * t)) * env(t, 0.012, 0.05); }),
   // Paint drop landing: a falling plink.
   drip: render(0.13, (t) => { const ph = TAU * (600 * t + 900 * 0.03 * (1 - Math.exp(-t / 0.03))); return Math.sin(ph) * env(t, 0.001, 0.035); }),
-  // Poke: a short rubbery boing with a decaying 18 Hz wobble.
-  boing: render(0.32, (t) => Math.sin(TAU * 300 * t + 3 * Math.exp(-t / 0.12) * Math.sin(TAU * 18 * t)) * env(t, 0.002, 0.11)),
+  // Graphite frame knocking a pegboard: a hollow, woody tock with a short body ring.
+  clack: (() => { const bp = bandpass(2100, 4); return render(0.14, (t) => bp(noise()) * 2.2 * env(t, 0.0004, 0.007) + Math.sin(TAU * 610 * t) * env(t, 0.0006, 0.028) * 0.7 + Math.sin(TAU * 1330 * t) * env(t, 0.0004, 0.012) * 0.3); })(),
+  // A freshly strung bed plucked: a tight high ping with a slight shimmer.
+  ping: render(0.42, (t) => [1180, 2370, 3540].reduce((s, f, k) => s + Math.sin(TAU * f * t + 0.6 * Math.sin(TAU * 7 * t)) * env(t, 0.0008, 0.09 / (k + 1)) / (k + 1), 0)),
 };
 
 for (const [name, buf] of Object.entries(sounds)) writeFileSync(new URL(`../assets/sfx/${name}.wav`, import.meta.url), buf);

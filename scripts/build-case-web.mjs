@@ -36,15 +36,18 @@ h1{margin:0;font-size:17px;letter-spacing:.06em;font-weight:800}h1 b{color:var(-
 .meter{text-align:right;min-width:112px}.meter span{font-size:8.5px;letter-spacing:.14em;opacity:.55}
 .bar{height:5px;background:rgba(22,24,29,.14);margin:5px 0 3px;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--clay);transition:width .32s cubic-bezier(.16,1,.3,1)}
 #pct{font-size:19px;font-weight:800}
-/* The dock: four little floating platforms, one per place. A real ball hops between them; the one it sits on is the active one. */
+/* The dock: five little floating platforms, one per place. A real ball hops between them; the one it sits on is the active one. */
 #dock{position:relative;display:flex;justify-content:space-between;align-items:flex-end;height:86px;margin:2px 0 0;pointer-events:auto;padding:0 4px}
 #dock .slot{all:unset;position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
-#dock .pf{width:58px;height:14px;border-radius:3px;background:#f4f1ea;position:relative;box-shadow:0 6px 0 #d8d2c5,0 12px 14px rgba(40,34,26,.18);transition:background .2s,transform .32s cubic-bezier(.34,1.56,.64,1);animation:bob 3.6s ease-in-out infinite}
-#dock .slot:nth-child(2) .pf{animation-delay:-.9s}#dock .slot:nth-child(3) .pf{animation-delay:-1.8s}#dock .slot:nth-child(4) .pf{animation-delay:-2.7s}
+#dock .pf{width:50px;height:14px;border-radius:3px;background:#f4f1ea;position:relative;box-shadow:0 6px 0 #d8d2c5,0 12px 14px rgba(40,34,26,.18);transition:background .2s,transform .32s cubic-bezier(.34,1.56,.64,1);animation:bob 3.6s ease-in-out infinite}
+#dock .slot:nth-child(2) .pf{animation-delay:-.9s}#dock .slot:nth-child(3) .pf{animation-delay:-1.8s}#dock .slot:nth-child(4) .pf{animation-delay:-2.7s}#dock .slot:nth-child(5) .pf{animation-delay:-.45s}
 @keyframes bob{0%,100%{translate:0 0}50%{translate:0 -3px}}
 #dock .slot.on .pf{background:var(--pc,var(--clay));box-shadow:0 6px 0 color-mix(in srgb,var(--pc,#e2562f) 62%,#000),0 12px 14px rgba(40,34,26,.22)}
 #dock .slot.land .pf{transform:translateY(4px)}
-#dock .lbl{font:800 10px var(--mono);letter-spacing:.12em;margin-top:13px;opacity:.42;transition:opacity .2s}
+/* The hit: the launching platform dips and snaps up under the ball. */
+#dock .slot.kick .pf{animation:kick .24s cubic-bezier(.34,1.56,.64,1)}
+@keyframes kick{0%{transform:translateY(0)}30%{transform:translateY(5px)}65%{transform:translateY(-6px)}100%{transform:translateY(0)}}
+#dock .lbl{font:800 9.5px var(--mono);letter-spacing:.06em;margin-top:13px;opacity:.42;transition:opacity .2s}
 #dock .slot.on .lbl{opacity:1}
 #dball{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;pointer-events:none;will-change:transform}
 #dball i{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%,#f4ff7a 0,#d7f205 46%,#a9c400 100%);box-shadow:inset -3px -4px 5px rgba(60,80,0,.35)}
@@ -118,11 +121,25 @@ emit('home-html.ts', 'HOME_HTML', page({ css: homeCss, body: homeBody, js: bundl
 const courtsCss = homeCss + `
 #back{pointer-events:none;align-self:flex-start;font:800 11px var(--mono);letter-spacing:.1em;color:var(--ink);background:none;border:1.6px solid var(--ink);border-radius:3px;padding:7px 10px;margin-top:12px;opacity:0;transition:opacity .2s}
 #back.show{opacity:1;pointer-events:auto}
-#h2{color:var(--accent,#e2562f);font-size:17px;line-height:1.2;margin-top:3px}#h1{font-size:24px}
+#h2{color:var(--accent,#e2562f);font-size:13px;line-height:1.25;margin-top:4px;font-weight:700}#h1{font-size:23px}
 #h1{text-transform:uppercase}
 #home{pointer-events:auto;align-self:flex-start;font:800 11px var(--mono);letter-spacing:.12em;color:var(--ink);background:none;border:0;padding:8px 14px 8px 0;margin:-4px 0 2px}
-#facts{display:flex;gap:6px;margin-top:8px}#facts span{font:800 10.5px var(--mono);letter-spacing:.1em;padding:4px 7px;border-radius:2px;border:1.6px solid var(--ink)}
-#lights.on{background:#ffe98a;border-color:var(--ink)}#lights:not(.on){opacity:.6}
+/* One row of facts, read in a glance: a drawn court with the count, a drawn floodlight that is lit or not, and the song. */
+#facts{display:flex;align-items:center;gap:16px;margin-top:10px;pointer-events:auto}
+#facts .fact{display:flex;align-items:center;gap:6px;flex:none}
+#facts .fact svg{width:26px;height:26px}#facts #count svg{height:17px}
+#facts .fact b{font:800 23px var(--mono);line-height:1;color:#3b3e47}
+#facts .fact small{font:800 12.5px var(--mono);letter-spacing:.08em;color:#3b3e47}
+#lights{color:#3b3e47}#lights .head{fill:#f6e27a;stroke:var(--ink);stroke-width:1.4}#lights b{font:800 15px var(--mono)!important;letter-spacing:.06em;color:#3b3e47}
+/* The song's one link: a small record in the court's color, turning while the song plays, beside the lights. */
+/* Sound: same plain style as the court count and lights. A drawn speaker, waves when on, a cross when muted. */
+#listen{all:unset;display:flex;align-items:center;gap:6px;margin-left:auto;cursor:pointer;color:#3b3e47;pointer-events:auto}
+#listen svg{width:26px;height:26px}
+#listen b{font:800 15px var(--mono);letter-spacing:.06em}
+#listen .x{display:none}
+#listen.muted .waves{display:none}#listen.muted .x{display:inline}
+#lights.off .rays{display:none}#lights.off .head{fill:#d9d4ca}
+
 .tag{position:absolute;left:0;top:0;font:800 9.5px var(--mono);letter-spacing:.05em;background:var(--ink);color:var(--paper);padding:3px 6px;border-radius:2px;white-space:nowrap;max-width:132px;overflow:hidden;text-overflow:ellipsis}
 .tag.on{background:var(--accent,#e2562f);color:#16181d}
 /* Sound controls are two small chips under the meter; the song itself is written on the arena walls. */
@@ -139,18 +156,26 @@ const courtsCss = homeCss + `
 `;
 const courtsCssExtra = `
 /* Back: a tennis ball streaking left in an ink disc. */
-#home{all:unset;position:fixed;left:12px;top:calc(env(safe-area-inset-top) - 2px);width:42px;height:42px;border-radius:50%;background:var(--ink);box-shadow:0 4px 0 #000,0 8px 14px rgba(22,24,29,.25);pointer-events:auto;z-index:5;transition:transform .32s cubic-bezier(.34,1.56,.64,1),box-shadow .32s}
-#home{overflow:hidden}#home svg{width:42px;height:42px;display:block}
+#home{all:unset;position:fixed;left:12px;top:calc(env(safe-area-inset-top) - 2px);width:52px;height:52px;border-radius:50%;background:var(--ink);box-shadow:0 4px 0 #000,0 8px 14px rgba(22,24,29,.25);pointer-events:auto;z-index:5;transition:transform .32s cubic-bezier(.34,1.56,.64,1),box-shadow .32s}
+#home{overflow:hidden}#home svg{width:52px;height:52px;display:block}
 /* A ball streaking left: the speed lines say which way. Press and it shoots off the left edge, the lines stretching after it. */
 #home .trail path{stroke:#fffdf0;stroke-width:2.4;stroke-linecap:round;fill:none}
 #home .trail{transform-origin:40px 22px;transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s}
-#home .ball{transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s}
-#home.swing .ball{transform:translateX(-34px);opacity:0;transition:transform .14s cubic-bezier(.7,0,.84,0),opacity .14s}
-#home.swing .trail{transform:translateX(-12px) scaleX(1.6);opacity:0;transition-duration:.16s}
+#home{cursor:pointer;touch-action:manipulation}
+#home:focus-visible{outline:2px solid #d7f205;outline-offset:5px}
+#home .ball{animation:backIdle 2.5s ease-in-out infinite;transform-origin:17px 22px;transition:transform .22s cubic-bezier(.34,1.56,.64,1)}
+#home.held{transform:translateY(2px) scale(.95)}
+#home.held .ball{animation:none;transform:translateX(5px) scale(.86,1.1)}
+#home.held .trail{opacity:.5}
+#home.swing .ball{animation:backhand .22s ease-in forwards}
+#home.swing .trail{transform:translateX(-8px) scaleX(1.8);opacity:0;transition-duration:.22s}
+@keyframes backIdle{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
+@keyframes backhand{0%,16%{transform:translateX(5px) scale(.86,1.1)}55%{transform:translate(-9px,-7px) scale(1.2,.88);opacity:1}100%{transform:translateX(-34px);opacity:0}}
+@media(prefers-reduced-motion:reduce){#home,#home .ball,#home .trail{transition:none}#home .ball,#home.swing .ball{animation:none}#home.held,#home.held .ball{animation:none;transform:none}}
 /* Inside a court, the disc takes the court's color so you know this back steps out of the court, not off the screen. */
 #home.out{background:var(--accent,#e2562f)}#home.out .trail path{stroke:#16181d}
 /* The song for this court: one quiet line under the facts. The disc toggles sound, the title opens it in Apple Music. */
-#songline{display:flex;align-items:center;gap:8px;margin-top:9px;pointer-events:auto}
+#songline{display:flex;align-items:center;gap:7px;min-width:0;flex:1;pointer-events:auto}
 #songline #mute{all:unset;width:24px;height:24px;border-radius:50%;background:var(--accent,#e2562f);color:var(--ink);font:800 12px var(--mono);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 2px 0 rgba(22,24,29,.35)}
 #songline #mute.off{background:none;box-shadow:inset 0 0 0 1.6px var(--ink);text-decoration:line-through}
 #songline #open{all:unset;font:700 11px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -160,7 +185,7 @@ const courtsCssExtra = `
 const courtsBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
 <button id="home" aria-label="Back"><svg viewBox="0 0 44 44" aria-hidden="true"><g class="trail"><path d="M28 16.5H35" opacity=".55"/><path d="M28.5 22H38.5"/><path d="M28 27.5H34" opacity=".55"/></g><g class="ball"><circle cx="17" cy="22" r="7.6" fill="#d7f205"/><path d="M11.6 16.6c3.3 2.9 3.3 7.9 0 10.8M22.4 16.6c-3.3 2.9-3.3 7.9 0 10.8" fill="none" stroke="#fffdf0" stroke-width="1.5" stroke-linecap="round"/></g></svg></button><header hidden><h1></h1><p id="sub"></p><div class="meter"><div class="bar"><i id="fill"></i></div><div id="pct"></div></div></header>
 <div class="grow"></div>
-<div id="head"><div id="h1"></div><div id="h2"></div><div id="facts"><span id="count"></span><span id="lights"></span></div><div id="blurb"></div><div id="songline"><button id="mute" aria-label="Sound"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M9 17.5V5.5l10-2v12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><circle cx="6.6" cy="17.6" r="2.6" fill="currentColor"/><circle cx="16.6" cy="15.6" r="2.6" fill="currentColor"/></svg></button><button id="open"></button></div></div>
+<div id="head"><div id="h1"></div><div id="h2"></div><div id="facts"><span class="fact" id="count"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" rx="1.5" fill="var(--accent,#e2562f)"/><path d="M11 1v12M5.5 3.5v7M16.5 3.5v7M5.5 7h11" stroke="#fffdf0" stroke-width="1.1" fill="none"/></svg><b></b><small>COURTS</small></span><span class="fact" id="lights"><svg viewBox="0 0 22 22" aria-hidden="true"><g class="rays"><path d="M4 9 1 7.5M4 12H1M5 15l-2.5 2" stroke="#e9b535" stroke-width="1.6" stroke-linecap="round"/></g><path d="M12 8v13" stroke="currentColor" stroke-width="1.8"/><rect class="head" x="5" y="3" width="11" height="6" rx="1.5"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b></b></span><button class="fact" id="listen" aria-label="Sound on. Tap to mute."><svg viewBox="0 0 22 22" aria-hidden="true"><path d="M3 8.5h4l5-4v13l-5-4H3z" fill="currentColor"/><g class="waves" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M15 8.2a4 4 0 0 1 0 5.6"/><path d="M17.6 5.8a7.5 7.5 0 0 1 0 10.4"/></g><path class="x" d="M15.5 8.5l5 5M20.5 8.5l-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b id="lstxt">SOUND</b></button></div><div id="blurb"></div></div>
 <div id="enter" role="slider" aria-label="Slide the ball to go in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>
 <div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div>
 </div>`;
@@ -171,29 +196,33 @@ emit('ink-html.ts', 'INK_HTML', page({ css: 'body{background:#efece5}#safe{posit
 
 // Make your fighter: the jelly studio. Same paper, ink, mono type and slide strip as home; the fighter's own color is the only other hue.
 const fighterCss = homeCss + `
-#ui{padding-top:calc(env(safe-area-inset-top) + 52px)}
-#head{margin:0;pointer-events:none}
-#name{all:unset;display:block;font:800 30px var(--mono);letter-spacing:.03em;line-height:1.05;pointer-events:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#ui{padding-top:calc(env(safe-area-inset-top) + 48px)}
+/* The stage is empty space the camera fills: the fighter is framed to it, so nothing floats over text and nothing is left dead. */
+#stage{flex:1;min-height:180px}
+/* Nameplate, fighting-game style, sitting on the floor under the fighter: the play style on a clay tab, the name on ink. */
+#plate{display:flex;align-items:stretch;height:46px;border-radius:6px;overflow:hidden;background:var(--ink);box-shadow:0 5px 0 #000,0 10px 16px rgba(22,24,29,.22);pointer-events:auto}
+#style{flex:none;display:flex;align-items:center;padding:0 10px;background:var(--clay);color:var(--ink);font:800 12px var(--mono);letter-spacing:.06em;white-space:nowrap}
+#name{all:unset;flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;color:var(--paper);font:800 24px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden}
+#name.empty{font-size:15px;letter-spacing:.1em;color:rgba(239,236,229,.62)}
 #name span,#style span{display:inline-block;animation:pop .32s cubic-bezier(.34,1.56,.64,1) both}
 @keyframes pop{0%{transform:translateY(10px) scale(.6);opacity:0}100%{transform:none;opacity:1}}
-#name:after{content:"";display:inline-block;width:14px;height:2.5px;background:var(--clay);margin-left:8px;vertical-align:middle;animation:caret 1.1s steps(1) infinite}
-@keyframes caret{50%{opacity:0}}
-#style{font:800 15px var(--mono);letter-spacing:.08em;color:var(--clay);margin-top:6px;white-space:nowrap}
-#tag{font:700 12px var(--mono);letter-spacing:.02em;opacity:.7;margin-top:2px}
+#tag{font:700 12px var(--mono);letter-spacing:.02em;margin:10px 2px 0;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #tag.in{animation:tagin .36s cubic-bezier(.16,1,.3,1) both}
-@keyframes tagin{0%{opacity:0;transform:translateY(6px)}100%{opacity:.7;transform:none}}
-#bio{all:unset;display:block;font:700 13px var(--mono);margin-top:8px;pointer-events:auto;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#bio.empty{opacity:.55;border-bottom:1.6px dashed rgba(22,24,29,.35);padding-bottom:1px;display:inline-block}
-#chips{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;pointer-events:auto}
-#chips button{all:unset;font:800 10.5px var(--mono);letter-spacing:.08em;padding:5px 8px;border-radius:3px;background:var(--ink);color:var(--paper);max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 3px 0 #000;transition:transform .12s,box-shadow .12s}
-#chips button:active{transform:translateY(3px);box-shadow:0 0 0 #000}
-#chips button b{color:var(--clay)}
-#chips button.empty{background:none;color:var(--ink);box-shadow:inset 0 0 0 1.6px var(--ink)}
-#shelf{position:relative;height:118px;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:1fr 1fr;margin-bottom:6px}
-/* A little platform under each candy, like the home dock. The one whose candy is up on stage is lit. */
-#shelf i{position:relative}
-#shelf i:after{content:"";position:absolute;left:50%;bottom:7px;width:46px;height:9px;margin-left:-23px;border-radius:3px;background:#f4f1ea;box-shadow:0 4px 0 #d8d2c5,0 8px 10px rgba(40,34,26,.16);transition:background .2s,box-shadow .2s}
-#shelf i.on:after{background:var(--clay);box-shadow:0 4px 0 #9c3a1e,0 8px 10px rgba(40,34,26,.2)}
+@keyframes tagin{0%{opacity:0;transform:translateY(6px)}100%{opacity:.75;transform:none}}
+/* Stats: a column beside the fighter, like a select-screen sidebar. Label in clay over the value; empty ones are outlined. */
+#stage{position:relative}
+#stats{position:absolute;right:0;top:50%;transform:translateY(-50%);width:146px;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+/* Stat tiles: solid ink, a clay icon block, and a ledge you press down into. */
+#stats button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;height:48px;padding:0 8px 0 6px;border-radius:6px;background:var(--ink);color:var(--paper);box-shadow:0 4px 0 #000,0 8px 12px rgba(22,24,29,.18);transition:transform .1s,box-shadow .1s}
+#stats button:active{transform:translateY(4px);box-shadow:0 0 0 #000,0 3px 6px rgba(22,24,29,.18)}
+#stats i{flex:none;width:36px;height:36px;border-radius:4px;background:var(--clay);display:flex;align-items:center;justify-content:center}
+#stats svg{width:24px;height:24px;fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#stats span{min-width:0;display:flex;flex-direction:column}
+#stats b{font:800 10px var(--mono);letter-spacing:.08em;color:var(--clay);white-space:nowrap}
+#stats em{font:800 12.5px var(--mono);font-style:normal;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#stats button.empty em{opacity:.55;font-size:11px;letter-spacing:.06em}
+#tag{margin-bottom:12px}
+#shelf{position:relative;height:136px;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:1fr 1fr;margin-bottom:6px}
 #drops{display:flex;justify-content:space-between;padding:0 6px;margin:0 0 14px;pointer-events:auto}
 /* Paint drops: a teardrop of glossy color on a little ink saucer when picked. */
 .drop{all:unset;position:relative;width:34px;height:42px;display:flex;align-items:flex-end;justify-content:center}
@@ -204,18 +233,68 @@ const fighterCss = homeCss + `
 .drop.tap i{animation:squeeze .3s cubic-bezier(.34,1.56,.64,1)}
 @keyframes squeeze{0%{transform:rotate(45deg) scale(1)}30%{transform:rotate(45deg) scale(.7,1.25)}100%{transform:rotate(45deg) translate(-4px,-4px)}}
 #enter{margin-bottom:8px}
-#shout{position:fixed;left:0;top:0;font:400 30px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;color:var(--ink);background:#fffdf0;padding:2px 9px;border:2.5px solid var(--ink);border-radius:4px;pointer-events:none;opacity:0;margin:-20px 0 0 -10px;transition:opacity .12s}
+#shout{position:fixed;left:0;top:0;font:400 30px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;color:var(--ink);background:#fffdf0;padding:2px 9px;border:2.5px solid var(--ink);border-radius:4px;pointer-events:none;opacity:0;margin:-24px 0 0 0;translate:-50% 0;white-space:nowrap;transition:opacity .12s}
 #shout.on{opacity:1;animation:shout .3s cubic-bezier(.34,1.56,.64,1)}
 @keyframes shout{0%{scale:.4;rotate:-14deg}100%{scale:1;rotate:-6deg}}
-#hint{font:800 11px var(--mono);letter-spacing:.1em;text-align:center;opacity:.5;margin:0 0 6px}
 `;
 const fighterBody = `<canvas id="c"></canvas><div id="vig"></div><div id="grain"></div><div id="ui">
-<div id="head"><button id="name" data-edit="name" aria-label="Edit name"></button><div id="style"></div><div id="tag"></div><button id="bio" data-edit="bio"></button>
-<div id="chips"><button id="pro" data-edit="favoritePro"></button><button id="court" data-edit="homeCourt"></button><button id="racket" data-edit="racket"></button></div></div>
-<div class="grow"></div>
-<div id="hint">GRAB IT. POKE IT. FLING IT.</div>
+<div id="stage"><div id="stats"><button id="bio" data-edit="bio"></button><button id="pro" data-edit="favoritePro"></button><button id="court" data-edit="homeCourt"></button><button id="racket" data-edit="racket"></button></div></div>
+<div id="plate"><div id="style"></div><button id="name" data-edit="name" aria-label="Edit name"></button></div><div id="tag"></div>
 <div id="shelf" aria-label="Play styles"></div>
 <div id="drops" aria-label="Colors"></div>
 <div id="enter" role="slider" aria-label="Slide the ball to lock in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>
 </div><div id="shout">HNNGH!</div>`;
 emit('fighter-html.ts', 'FIGHTER_HTML', page({ css: fighterCss, body: fighterBody, js: bundle('web/fighter.js') }));
+
+// Gear closet: the locker. Same paper, ink, mono type and slide strip as home; clay marks what is due.
+const closetCss = homeCss + `
+#ui{padding-top:calc(env(safe-area-inset-top) + 56px)}
+#fade{background:linear-gradient(180deg,rgba(239,236,229,0) 0%,rgba(239,236,229,0) 74%,rgba(239,236,229,.92) 81%,rgba(239,236,229,.98) 100%)}
+#panel{pointer-events:auto!important}
+#panel #fo{display:none}#ui.focus #panel #ov{display:none}#ui.focus #panel #fo{display:block}
+#ov #h1{font-size:25px}#ov #h2{font-size:25px;color:var(--clay)}
+#due{list-style:none;margin:8px 0 0;padding:0}
+#due li{font:800 13px var(--mono);letter-spacing:.03em;padding:3px 0;display:flex;align-items:center;gap:8px}
+#due li:before{content:"";width:9px;height:9px;border-radius:2px;background:var(--clay);flex:none}
+#due li.ok:before{background:#3f8f5a}
+#hint{font:700 12px var(--mono);margin:8px 0 14px;opacity:.75}
+#plate{display:flex;align-items:stretch;height:44px;border-radius:6px;overflow:hidden;background:var(--ink);box-shadow:0 5px 0 #000,0 10px 16px rgba(22,24,29,.22);margin-bottom:12px}
+#kind{flex:none;display:flex;align-items:center;padding:0 10px;background:var(--clay);color:var(--ink);font:800 12px var(--mono);letter-spacing:.08em}
+#name{all:unset;flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;color:var(--paper);font:800 21px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rows{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:1fr auto;grid-template-areas:"w e" "t t" "b b";gap:3px 8px;padding:8px 10px 9px;border-radius:5px;background:#fffdf8;box-shadow:inset 0 0 0 1.6px rgba(22,24,29,.22)}
+.row.on{box-shadow:inset 0 0 0 2.4px var(--ink)}
+.row b{grid-area:w;font:800 12px var(--mono);letter-spacing:.1em}
+.row em{grid-area:e;font:800 11px var(--mono);font-style:normal;letter-spacing:.1em;color:#3f8f5a}
+.row.due em{color:var(--clay)}
+.row span{grid-area:t;font:700 12.5px var(--mono)}
+.row .bar{grid-area:b;height:6px;background:rgba(22,24,29,.12);margin:4px 0 0;position:relative;border-radius:3px;overflow:hidden}
+.row .bar u{position:absolute;left:0;top:0;bottom:0;background:#3f8f5a;transition:width .32s cubic-bezier(.16,1,.3,1)}
+.row.due .bar u{background:var(--clay)}
+.stock{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:5px;background:#fffdf8;box-shadow:inset 0 0 0 1.6px rgba(22,24,29,.22)}
+.stock b{font:800 26px var(--mono)}.stock span{flex:1;font:700 12.5px var(--mono)}
+.stock.due b{color:var(--clay)}
+#order{all:unset;font:800 11px var(--mono);letter-spacing:.1em;padding:8px 10px;border-radius:4px;background:var(--ink);color:var(--paper);box-shadow:0 3px 0 #000}
+#order:active{transform:translateY(3px);box-shadow:none}
+.how{font:700 12px var(--mono);margin:2px 0 0;opacity:.75}
+#enter{margin-bottom:6px}
+`;
+const enterStrip = homeBody.match(/<div id="enter"[\s\S]*?<\/svg><\/div><\/div><\/div>/)[0].replace('Slide the ball to go in', 'Slide the ball to log it');
+const closetBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
+<div class="grow"></div>
+<div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><ul id="due"></ul><div id="hint"></div></div>
+<div id="fo"><div id="plate"><div id="kind"></div><button id="name" aria-label="Rename"></button></div><div id="rows"></div></div>
+${enterStrip}</div>
+</div>`;
+emit('closet-html.ts', 'CLOSET_HTML', page({ css: closetCss, body: closetBody, js: bundle('web/closet.js') }));
+
+// Season lines: the courts as a hand-drawn transit map. Plain 2D canvas; the text sits in the corners like the reference's credits.
+const linesCss = `
+body{background:#ebe8e2;font-family:ui-monospace,"SF Mono",Menlo,monospace;color:#16181d}
+#c{position:fixed;inset:0}
+#head{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 62px);padding:0 16px;pointer-events:none}
+#head b{display:block;font:800 13px ui-monospace,Menlo,monospace;letter-spacing:.08em}
+#sub{font:700 11px ui-monospace,Menlo,monospace;letter-spacing:.06em;opacity:.6;margin-top:3px}
+#cap{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 22px);text-align:center;font:700 12px ui-monospace,Menlo,monospace;pointer-events:none}
+`;
+emit('lines-html.ts', 'LINES_HTML', page({ css: linesCss, body: '<canvas id="c"></canvas><div id="head"><b>LOBSOFLOVE SEASON 01</b><div id="sub"></div></div><div id="cap"></div>', pre: `window.VENUES=${readFileSync(`${root}src/data/venues.json`)};`, js: bundle('web/lines.js') }));

@@ -27,6 +27,8 @@ const PLACES = [
   { key: 'courts', label: 'COURTS', head: ['291 COURTS.', 'EVERY ONE A STAGE.'], blurb: 'san diego county, nearest first' },
   { key: 'standings', label: 'STANDINGS', head: ['THE TABLE.', 'WHO IS ON TOP.'], blurb: 'season points, streaks, every match' },
   { key: 'fighter', label: 'FIGHTER', head: ['YOUR FIGHTER.', 'NAME. STYLE. COLOR.'], blurb: 'change how you show up' },
+  { key: 'write', label: 'WRITE', head: ['JUST WRITE IT.', 'NO FORMS.'], blurb: 'a score, a time, a restring: write it with your finger' },
+  { key: 'gear', label: 'GEAR', head: ['YOUR GEAR.', 'WHAT IS WORN OUT.'], blurb: 'rackets, shoes, balls, overgrips' },
 ];
 
 const canvas = $('c');
@@ -46,7 +48,7 @@ scene.add(sun, sun.target);
 const FWD = new THREE.Vector3(-1, 0, -1).normalize();
 const RIGHT = new THREE.Vector3(1, 0, -1).normalize();
 const STEP = 1.95;
-const spots = [0, 1, 2, 3, 4].map((i) => FWD.clone().multiplyScalar(i * STEP).add(RIGHT.clone().multiplyScalar(i === 0 ? 0 : (i % 2 ? 0.8 : -0.8))).setY(i === 0 ? 0 : 0.12 + 0.16 * ((i * 7) % 3)));
+const spots = [0, 1, 2, 3, 4, 5, 6].map((i) => FWD.clone().multiplyScalar(i * STEP).add(RIGHT.clone().multiplyScalar(i === 0 ? 0 : (i % 2 ? 0.8 : -0.8))).setY(i === 0 ? 0 : 0.12 + 0.16 * ((i * 7) % 3)));
 
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...extra });
 const rbox = (w, h, d, r, material) => {
@@ -168,6 +170,61 @@ const mirrorDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 40)
   stand.rotation.set(rad(-14), rad(24), 0);
   t.add(stand);
   tile.userData.stand = stand;
+}
+{
+  const tile = tiles[6];
+  const t = propGroup(tile); // a little locker, doors open, a racket swinging on its hook
+  const steel = mat(0x262a31, { roughness: 0.55, metalness: 0.35 });
+  const box = new THREE.Group();
+  box.add(at(rbox(0.66, 0.9, 0.36, 0.02, steel), 0, 0.45, -0.02));
+  box.add(at(new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.8), mat(0xf1ebdf)), 0, 0.46, 0.161));
+  for (const s of [-1, 1]) {
+    const door = at(rbox(0.31, 0.88, 0.025, 0.01, steel), s * 0.43, 0.45, 0.25);
+    door.rotation.y = s * rad(62);
+    box.add(door);
+  }
+  const racket = new THREE.Group();
+  const frame = mat(0x2f6fd6, { roughness: 0.35 });
+  const head = at(new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.014, 8, 32), frame), 0, -0.13, 0);
+  head.scale.y = 1.3;
+  racket.add(head);
+  racket.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.3, 8), mat(0xf7f5ef)), 0, -0.42, 0));
+  racket.position.set(0, 0.8, 0.2);
+  box.add(racket);
+  box.rotation.y = rad(20);
+  t.add(box);
+  tile.userData.racket = racket;
+}
+{
+  const tile = tiles[5];
+  const t = propGroup(tile); // a scorepad with a pencil scribbling on it
+  const pad = new THREE.Group();
+  pad.add(at(rbox(0.62, 0.05, 0.8, 0.015, mat(0xfffdf4, { roughness: 0.95 })), 0, 0.025, 0));
+  pad.add(at(rbox(0.64, 0.06, 0.12, 0.02, mat(CLAY)), 0, 0.03, -0.38)); // the binding
+  const rule = mat(0x9bb6d8);
+  for (let k = 0; k < 5; k += 1) pad.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.004, 0.008), rule), 0, 0.052, -0.22 + k * 0.11));
+  // Ink already on the page: a score in two quick strokes.
+  const inkMat = mat(INK);
+  for (const [x, z, w, r] of [[-0.14, -0.17, 0.14, 0.4], [0.08, -0.17, 0.1, -0.5], [-0.12, -0.06, 0.18, 0.1]]) {
+    const m = at(new THREE.Mesh(new THREE.BoxGeometry(w, 0.004, 0.018), inkMat), x, 0.054, z);
+    m.rotation.y = r;
+    pad.add(m);
+  }
+  pad.rotation.y = rad(-18);
+  t.add(pad);
+  const pencil = new THREE.Group();
+  const body = at(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.62, 6), mat(0xf2c230, { roughness: 0.55 })), 0, 0.31, 0);
+  const tip = at(new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.1, 6), mat(0xe8cfa6)), 0, -0.05, 0);
+  tip.rotation.x = Math.PI;
+  const lead = at(new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.035, 6), mat(INK)), 0, -0.088, 0);
+  lead.rotation.x = Math.PI;
+  const eraser = at(new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.07, 12), mat(0xf08aa0)), 0, 0.655, 0);
+  pencil.add(body, tip, lead, eraser);
+  pencil.traverse((o) => { o.castShadow = true; });
+  pencil.rotation.set(rad(28), 0, rad(-24));
+  pencil.position.set(0.04, 0.17, 0.08);
+  t.add(pencil);
+  tile.userData.pencil = pencil;
 }
 
 // Studio dressing: a softbox, a desk lamp, loose slabs and loose balls.
@@ -396,7 +453,7 @@ const dock = $('dock');
 dock.insertAdjacentHTML('beforeend', PLACES.map((p, k) => `<button class="slot" data-i="${k + 1}"><span class="pf"></span><span class="lbl">${p.label}</span></button>`).join(''));
 dock.addEventListener('click', (e) => { const b = e.target.closest('.slot'); if (b) goTo(Number(b.dataset.i)); });
 // The dock ball is real physics: gravity, a launch sized to the gap, and bounces that lose 58% each time.
-const dk = { x: 0, y: 0, vy: 0, from: 0, to: 0, t: 0, dur: 0, flying: false, squash: 0, at: 0 };
+const dk = { x: 0, y: 0, vx: 0, vy: 0, to: 0, flying: false, squash: 0, rot: 0, at: 0 };
 const G = 2600;
 const slotX = (i) => {
   const r = dock.getBoundingClientRect();
@@ -406,38 +463,48 @@ const slotX = (i) => {
   return b.left + b.width / 2 - r.left;
 };
 const restY = () => dock.clientHeight - 49; // sitting on a platform top
+const DOCK_READY = null;
+// The dock ball moves like a ball that got hit, not one that wants to go somewhere: the platform it sits on kicks it,
+// it flies a true ballistic arc at a fixed 60 degree launch (so a longer gap needs a harder hit, and it gets one),
+// horizontal speed constant in the air, spin from its speed, and it lands dead on the target and bounces out its energy.
 function dockHop(i) {
-  dk.from = dk.x || slotX(dk.at); dk.to = slotX(i); dk.at = i;
-  const dist = Math.abs(dk.to - dk.from);
-  dk.vy = -(420 + Math.min(260, dist * 0.9)); // longer gaps get a higher arc
-  dk.dur = (2 * -dk.vy) / G;
-  dk.t = 0; dk.flying = true;
+  const from = dk.x || slotX(dk.at);
+  const fromSlot = dock.querySelector(`.slot[data-i="${dk.at}"]`);
+  dk.to = slotX(i); dk.at = i;
+  const R = dk.to - from;
+  const T60 = Math.tan(Math.PI / 3);
+  const vy = Math.max(300, Math.sqrt(Math.abs(R) * G * T60 / 2));
+  dk.vy = -vy;
+  dk.vx = R / ((2 * vy) / G); // lands exactly on the target platform
+  dk.x = from;
+  dk.flying = true;
+  if (fromSlot) { fromSlot.classList.remove('kick'); void fromSlot.offsetWidth; fromSlot.classList.add('kick'); }
+  post({ type: 'press' }); // the pock of the hit
 }
 function dockStep(dt) {
+  if (DOCK_READY && !DOCK_READY()) return;
   if (!dk.x) { dk.x = slotX(dk.at); dk.y = restY(); }
   const floor = restY();
-  if (dk.flying) {
-    dk.t += dt;
-    const k = Math.min(1, dk.t / dk.dur);
-    dk.x = dk.from + (dk.to - dk.from) * (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
-    if (k >= 1) dk.flying = false;
-  }
+  if (dk.flying) dk.x += dk.vx * dt;
+  dk.rot += (dk.vx * dt) / 12; // rolls through the air at its own speed (radius 12 px)
   dk.vy += G * dt;
   dk.y += dk.vy * dt;
-  if (dk.y >= floor) {
+  if (dk.y >= floor && dk.vy > 0) {
     const hit = dk.vy;
     dk.y = floor;
-    dk.vy = Math.abs(hit) > 140 ? -hit * 0.42 : 0;
+    if (dk.flying) { dk.flying = false; dk.x = dk.to; dk.vx = 0; }
+    dk.vy = hit > 140 ? -hit * 0.42 : 0;
     if (hit > 140) {
       dk.squash = Math.min(0.35, hit / 2200);
-      const slot = dock.querySelector(`.slot[data-i="${dk.at}"]`);
-      if (slot && !dk.flying) { slot.classList.add('land'); setTimeout(() => slot.classList.remove('land'), 110); }
+      const s = dock.querySelector(`.slot[data-i="${dk.at}"]`);
+      if (s) { s.classList.add('land'); setTimeout(() => s.classList.remove('land'), 110); }
     }
   }
   dk.squash *= Math.exp(-dt * 14);
 }
 function dockRender() {
   $('dball').style.transform = `translate3d(${dk.x}px,${dk.y}px,0) scale(${1 + dk.squash},${1 - dk.squash})`;
+  $('dball').firstElementChild.style.transform = `rotate(${dk.rot}rad)`;
   const lift = Math.min(1, (restY() - dk.y) / 90);
   $('dshadow').style.transform = `translateX(${dk.x}px) scale(${1 - 0.5 * lift})`;
   $('dshadow').style.opacity = String(1 - 0.6 * lift);
@@ -449,7 +516,7 @@ function paint() {
   const p = PLACES[i - 1];
   $('h1').textContent = p ? p.head[0] : 'WHERE TO?';
   $('h2').textContent = p ? p.head[1] : 'TAP A TILE.';
-  $('blurb').textContent = p ? (i === 3 && st.record ? st.record : p.blurb) : 'your fighter hops there. swipe up works too.';
+  $('blurb').textContent = p ? (i === 3 && st.record ? st.record : i === 6 && st.gear ? st.gear : p.blurb) : 'your fighter hops there. swipe up works too.';
   if (p) setKey(`0${i}`, p.label, 'SLIDE TO ENTER'); else setKey('', '', '');
   const pct = Math.round((i / PLACES.length) * 100);
   $('fill').style.width = `${pct}%`;
@@ -493,6 +560,7 @@ window.setHome = (d) => {
   skin.color.set(d.color);
   mirrorDisc.material.color.set(d.color);
   st.record = d.record; // shown on the standings key, where a record means something
+  st.gear = d.gear; // what is worn out, shown on the gear key
   paint();
 };
 paint();
@@ -580,6 +648,16 @@ function pose() {
   tiles[2].userData.pin.position.y = 0.05 * Math.sin(t * 2.2);
   tiles[3].userData.cup.rotation.y = t * 0.8;
   tiles[4].userData.stand.rotation.y = rad(24) + 0.35 * Math.sin(t * 0.7);
+  tiles[6].userData.racket.rotation.z = 0.28 * Math.sin(t * 2.6);
+  // The pencil writes: quick side-to-side strokes across the line, a lift, then the next character.
+  {
+    const p = tiles[5].userData.pencil;
+    const c = t % 1.6;
+    const writing = c < 1.1;
+    p.position.x = 0.04 + (writing ? 0.05 * Math.sin(c * 19) + 0.12 * (c / 1.1) - 0.06 : 0.06 - 0.12 * ((c - 1.1) / 0.5));
+    p.position.z = 0.08 + (writing ? 0.03 * Math.sin(c * 11) : 0);
+    p.position.y = 0.17 + (writing ? 0 : 0.08 * Math.sin(Math.PI * ((c - 1.1) / 0.5)));
+  }
   for (const s of loose) s.position.y = s.userData.y + 0.06 * Math.sin(t * 0.8 + s.userData.phase);
   for (const s of strays) s.position.y = s.userData.y + 0.09 * Math.sin(t * 1.1 + s.userData.phase);
   dustGeo.attributes.position.needsUpdate = true;
@@ -611,5 +689,5 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 window.demoHomeSlide = () => { setTimeout(() => goTo(2), 1200); setTimeout(() => window.demoSlide(0.55), 3800); setTimeout(() => window.demoSlide(0.95), 6600); };
-window.demoHome = () => { [1, 2, 3, 4, 2].forEach((i, k) => setTimeout(() => goTo(i), 1400 + k * 1900)); };
+window.demoHome = () => { [1, 2, 3, 4, 5].forEach((i, k) => setTimeout(() => goTo(i), 1400 + k * 1900)); };
 post({ type: 'ready' });
