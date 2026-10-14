@@ -18,16 +18,16 @@ export type Fighter = {
 };
 
 export const CAST: Record<CastId, { label: string; tagline: string }> = {
-  wall: { label: 'The Wall', tagline: 'Everything comes back.' },
-  moon: { label: 'Moonballer', tagline: 'Twelve feet over the net, every time.' },
-  bot: { label: 'Serve Bot', tagline: 'Ace or double fault. No third option.' },
-  goblin: { label: 'Dropshot Goblin', tagline: 'You will run. You will not get there.' },
-  grunter: { label: 'The Grunter', tagline: 'Heard from three courts away.' },
-  junk: { label: 'Junkballer', tagline: 'No pace, no spin, no rhythm, no mercy.' },
-  comet: { label: 'Net Rusher', tagline: 'Chip, charge, pray.' },
-  ghost: { label: 'The No-Show', tagline: '"Running five late."' },
+  wall: { label: 'The Wall', tagline: "Hit it harder. It's still coming back." },
+  moon: { label: 'Moonballer', tagline: "I'll put it twelve feet up. All day." },
+  bot: { label: 'Serve Bot', tagline: "Ace or double. I don't do rallies." },
+  goblin: { label: 'Dropshot Goblin', tagline: "I drop it short. Then shorter." },
+  grunter: { label: 'The Grunter', tagline: "You'll hear me three courts over." },
+  junk: { label: 'Junkballer', tagline: "No pace. No spin. I still win." },
+  comet: { label: 'Net Rusher', tagline: "I chip. I charge. I pray." },
+  ghost: { label: 'The No-Show', tagline: "Running five late. Start without me." },
   lobber: { label: 'Got You, Bitch', tagline: "Come to the net. I dare you." },
-  rabbit: { label: 'The Jackrabbit', tagline: 'Faster than a certain blue hedgehog.' },
+  rabbit: { label: 'The Jackrabbit', tagline: "I'm faster than a certain blue hedgehog." },
 };
 
 export const CAST_IDS = Object.keys(CAST) as CastId[];

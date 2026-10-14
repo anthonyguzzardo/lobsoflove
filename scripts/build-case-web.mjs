@@ -161,6 +161,8 @@ const courtsCssExtra = `
 #songline #open{all:unset;font:700 11px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 #songline #open b{font-weight:800}
 #ui{padding-top:calc(env(safe-area-inset-top) + 2px)!important}
+/* The top fade only backs the back button: the space above the arena shows the place around it. */
+#fade{background:linear-gradient(180deg,rgba(239,236,229,.8) 0%,rgba(239,236,229,0) 9%,rgba(239,236,229,0) 60%,rgba(239,236,229,.9) 74%,rgba(239,236,229,.97) 100%)}
 `;
 const courtsBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
 <div class="grow"></div>
@@ -176,37 +178,45 @@ const standingsCss = `
 body{background:#050507;color:var(--cream);font-family:-apple-system,"Helvetica Neue",Helvetica,sans-serif}
 #c{position:fixed;inset:0}
 #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(115% 85% at 50% 45%,rgba(5,5,7,0) 55%,rgba(5,5,7,.8) 100%)}
-#top{position:fixed;left:0;right:0;top:0;height:calc(env(safe-area-inset-top) + 170px);pointer-events:none;background:linear-gradient(180deg,rgba(5,5,7,.92) 0%,rgba(5,5,7,.75) 55%,rgba(5,5,7,0) 100%)}
-#head{position:fixed;left:18px;right:56px;top:calc(env(safe-area-inset-top) + 70px);pointer-events:none}
-#kick{font:700 10.5px var(--mono);letter-spacing:.55em;color:var(--amber)}
-#title{font-weight:200;font-size:29px;letter-spacing:.34em;margin-top:5px}
 #tags{position:fixed;inset:0;pointer-events:none;overflow:hidden}
-.tag{position:absolute;left:0;top:0;display:flex;align-items:center;gap:9px;white-space:nowrap;transform-origin:50% 0;will-change:transform,opacity;padding:7px 12px 9px;border-top:1px solid rgba(224,163,90,.4);background:linear-gradient(180deg,rgba(5,5,7,.6),rgba(5,5,7,0));opacity:0}
-.tag .rk{font-weight:200;font-size:27px;line-height:1;color:var(--dim)}
-.tag .nm{font-weight:800;font-style:italic;font-size:14px;letter-spacing:.06em}
-.tag .sub{font:600 10px var(--mono);letter-spacing:.14em;color:var(--dim);margin-top:2px}
-.tag .pt{font-weight:200;font-size:25px;line-height:1;margin-left:4px}
-.tag.lead{border-top-color:var(--amber)}.tag.lead .rk,.tag.lead .pt{color:var(--amber)}
-.tag.on{border-top-width:2px;border-top-color:var(--cream)}
-#rail{position:fixed;right:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:4px}
-#rail button{all:unset;font:700 10px var(--mono);color:var(--dim);width:28px;height:24px;line-height:24px;text-align:center;border-right:2px solid rgba(140,128,119,.3);transition:color .2s,border-color .2s}
-#rail button.on{color:var(--amber);border-right-color:var(--amber)}
-#bottom{position:fixed;left:0;right:0;bottom:0;padding-bottom:calc(env(safe-area-inset-bottom) + 10px);background:linear-gradient(180deg,rgba(5,5,7,0),rgba(5,5,7,.88) 38%);pointer-events:none}
-#mk{font:700 10px var(--mono);letter-spacing:.55em;color:var(--amber);padding:22px 18px 8px}
-#matches{display:flex;gap:8px;overflow-x:auto;padding:0 18px 4px;touch-action:pan-x;-webkit-overflow-scrolling:touch;scrollbar-width:none;pointer-events:auto}
-#matches::-webkit-scrollbar{display:none}
-.m{all:unset;flex:none;display:flex;gap:9px;align-items:stretch;padding:8px 12px 8px 0;max-width:230px;border:1px solid #3a2c24;border-top-color:rgba(239,227,207,.35);background:rgba(14,12,12,.82);border-radius:3px;transition:transform .12s cubic-bezier(.16,1,.3,1)}
-.m:active{transform:translateX(5px) scale(.96)}
-.m i{width:4px;flex:none;border-radius:1px}
-.m .mn{font-weight:800;font-style:italic;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.m .ms{font:600 10px var(--mono);letter-spacing:.06em;color:var(--dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.m .w{color:var(--amber)}
-#empty{display:none;font-size:13px;color:var(--dim);padding:0 18px 6px}
+/* A fighter's plate: sticker-loud like the back button. Thick ink outlines, hard offset shadows, the fighter's own color. */
+.tag{position:absolute;left:0;top:0;display:flex;align-items:center;white-space:nowrap;transform-origin:50% 0;will-change:transform,opacity;opacity:0;padding-top:6px;--ink:#16181d}
+.tag .rk{position:relative;z-index:2;width:36px;height:36px;flex:none;border-radius:50%;background:#fffdf0;border:2.5px solid var(--ink);box-shadow:2px 3px 0 var(--ink);display:flex;align-items:center;justify-content:center;transform:rotate(-8deg)}
+.tag .rk span{font:900 italic 19px -apple-system,Helvetica,sans-serif;color:var(--ink);margin-left:-2px}
+.tag.lead .rk{width:42px;height:42px;background:radial-gradient(circle at 34% 28%,#f4ff7a 0,#d7f205 46%,#a9c400 100%);overflow:hidden}
+.tag.lead .rk:before{content:"";position:absolute;inset:4px;border-radius:50%;border:2.5px solid #fffdf0;border-top-color:transparent;border-bottom-color:transparent;transform:rotate(25deg)}
+.tag.lead .rk span{position:relative;font-size:22px}
+.tag .plate{position:relative;z-index:1;margin-left:-13px;padding:5px 14px 6px 20px;background:var(--pc);border:2.5px solid var(--ink);border-radius:10px;box-shadow:3px 4px 0 var(--ink)}
+.tag .nm{font:900 italic 16px/1.05 -apple-system,Helvetica,sans-serif;letter-spacing:.01em;color:var(--ink);text-transform:uppercase;max-width:210px;overflow:hidden;text-overflow:ellipsis}
+.tag .chips{display:flex;gap:4px;margin-top:4px}
+.tag .chips b{font:800 10px var(--mono);letter-spacing:.06em;color:#fffdf0;background:var(--ink);border-radius:4px;padding:2px 6px}
+.tag .chips b.hot{background:#ff3d7f;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.tag .chips b.cold{background:#35d6ff;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.tag .pt{position:relative;z-index:2;margin-left:-8px;padding:3px 9px 4px;background:#fffdf0;border:2.5px solid var(--ink);border-radius:8px;box-shadow:3px 4px 0 var(--ink);transform:rotate(5deg);text-align:center;line-height:1}
+.tag .pt b{display:block;font:900 italic 22px -apple-system,Helvetica,sans-serif;color:var(--ink)}
+.tag .pt small{display:block;font:800 8px var(--mono);letter-spacing:.14em;color:var(--ink);margin-top:1px}
+.tag.lead .pt{background:#e0a35a}
+.tag.on .plate{box-shadow:3px 4px 0 var(--ink),0 0 0 3px #fffdf0,0 0 22px color-mix(in srgb,var(--pc) 60%,transparent)}
+.tag.pop .plate,.tag.pop .rk,.tag.pop .pt{animation:jiggle .42s cubic-bezier(.34,1.56,.64,1)}
+.tag.pop .rk{animation-delay:.03s}.tag.pop .pt{animation-delay:.06s}
+@keyframes jiggle{0%{scale:1}25%{scale:1.18 .86}55%{scale:.92 1.08}100%{scale:1}}
+/* The dock, after home's: little floating platforms, one per rank, in each fighter's color. A real ball hops between them. */
+#dockwrap{position:fixed;left:0;right:0;bottom:0;padding:26px 14px calc(env(safe-area-inset-bottom) + 10px);background:linear-gradient(180deg,rgba(5,5,7,0),rgba(5,5,7,.7) 45%);pointer-events:none}
+#dock{position:relative;display:flex;justify-content:space-between;align-items:flex-end;height:70px;pointer-events:auto;touch-action:none}
+#dock .slot{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer;animation:bob 3.6s ease-in-out infinite}
+#dock .pf{width:min(40px,78%);height:11px;border-radius:2px;background:#2a211c;border-top:2px solid var(--pc);box-shadow:0 5px 0 #120d0b,0 10px 14px rgba(0,0,0,.55);transition:transform .32s cubic-bezier(.34,1.56,.64,1),background .2s,box-shadow .2s}
+#dock .slot.on .pf{background:var(--pc);box-shadow:0 5px 0 color-mix(in srgb,var(--pc) 55%,#000),0 0 18px color-mix(in srgb,var(--pc) 45%,transparent)}
+#dock .slot.land .pf{transform:translateY(4px);transition:transform .12s cubic-bezier(.7,0,.84,0)}
+#dock .lbl{font:700 10px var(--mono);letter-spacing:.06em;margin-top:11px;color:var(--dim);transition:color .2s}
+#dock .slot.on .lbl{color:var(--cream)}
+@keyframes bob{0%,100%{translate:0 0}50%{translate:0 -3px}}
+#dball{position:absolute;left:0;top:0;width:20px;height:20px;margin:-10px 0 0 -10px;pointer-events:none;will-change:transform;opacity:0;z-index:2}
+#dball i{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%,#f4ff7a 0,#d7f205 46%,#a9c400 100%);box-shadow:inset -3px -4px 5px rgba(60,80,0,.35),0 0 10px rgba(215,242,5,.35)}
+#dball i:after{content:"";position:absolute;inset:3px;border-radius:50%;border:2px solid #fffdf0;border-top-color:transparent;border-bottom-color:transparent}
+@media(prefers-reduced-motion:reduce){#dock .slot{animation:none}}
 `;
-const standingsBody = `<canvas id="c"></canvas><div id="vig"></div><div id="top"></div><div id="tags"></div>
-<div id="head"><div id="kick">SEASON 1</div><div id="title">STANDINGS</div></div>
-<div id="rail"></div>
-<div id="bottom"><div id="mk">MATCHES</div><div id="empty">Love–love. Nobody has played yet.</div><div id="matches"></div></div>`;
+const standingsBody = `<canvas id="c"></canvas><div id="vig"></div><div id="tags"></div>
+<div id="dockwrap"><div id="dock"><div id="dball"><i></i></div></div></div>`;
 emit('standings-html.ts', 'STANDINGS_HTML', page({ css: standingsCss, body: standingsBody, js: bundle('web/standings.js') }));
 
 // Ink: the write-anything canvas. Plain 2D canvas, no three.js. #safe only exists so the page can read the notch inset.

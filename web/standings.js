@@ -10,11 +10,15 @@
 //   +-17 deg roll on a 9 s sine, +-11 deg pitch on 7 s, +-23 deg yaw on 11 s, each with its own phase, and bobs 0.08 on 5 s.
 // - Camera: rides depth on a spring at 1.4 Hz, damping ratio 1 (no bounce on a camera). Drag to fly through the ranks,
 //   with a fling that decays at 4/s. Tap a fighter to fly to it.
+// - Dock: one floating platform per rank along the bottom, in the fighter's color. A ball hops to whichever rank the camera
+//   is at: 360 ms, arc 22 px plus 5 px per platform crossed, squash 0.8 on takeoff and landing; the platform dips 4 px.
+//   Tap or drag along the dock to fly there.
 // - Tap: pokes the jelly where your finger hit (power 7, sigma 0.5), spins it, and kicks the carrier's tumble 1.4 rad/s,
 //   decaying at 0.7/s, so it rolls away and drifts back.
 import * as THREE from 'three';
 
 import { FEEL, SoftBody } from './jelly-core.js';
+import { Debris } from './standings-debris.js';
 
 const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
 window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
@@ -128,8 +132,10 @@ const CAM_BACK = 4.8; // camera distance in front of the fighter it is looking a
 const FLOAT = 0.45;
 let floaters = [];
 const tagsEl = $('tags');
-const railEl = $('rail');
-const st = { camZ: CAM_BACK, camV: 0, target: CAM_BACK, fling: 0, sel: 0, frame: 0 };
+const dockEl = $('dock');
+const ballEl = $('dball');
+const st = { camZ: CAM_BACK, camV: 0, target: CAM_BACK, fling: 0, sel: 0, frame: 0, at: -1, hop: null, ball: null };
+const debris = new Debris(scene, { halfW: CW, halfH: CH, rng: rng(23) });
 
 function slotFor(i) {
   if (i === 0) return new THREE.Vector3(0, 0.1, 0);
@@ -147,7 +153,9 @@ function clear() {
   }
   floaters = [];
   tagsEl.textContent = '';
-  railEl.textContent = '';
+  for (const s of dockEl.querySelectorAll('.slot')) s.remove();
+  st.at = -1;
+  st.ball = null;
 }
 
 function el(tag, cls, text) {
@@ -171,17 +179,29 @@ function build(fighters) {
     scene.add(carrier);
     const r = rng(i * 97 + 3);
     const ph = [r() * TAU, r() * TAU, r() * TAU, r() * TAU];
+    // Its plate: a rank badge, a sticker in its own color with its record, and a points block, all ink-outlined.
     const tag = el('div', `tag${i === 0 && f.points > 0 ? ' lead' : ''}`);
-    tag.append(el('b', 'rk', String(i + 1)));
-    const mid = el('div');
-    mid.append(el('div', 'nm', f.name), el('div', 'sub', `${f.wins}–${f.losses}${f.streak > 1 ? `  W${f.streak}` : f.streak < -1 ? `  L${-f.streak}` : ''}`));
-    tag.append(mid, el('div', 'pt', String(f.points)));
+    tag.style.setProperty('--pc', f.color);
+    const rk = el('div', 'rk');
+    rk.append(el('span', '', String(i + 1)));
+    const plate = el('div', 'plate');
+    const chips = el('div', 'chips');
+    chips.append(el('b', '', `${f.wins}–${f.losses}`));
+    if (f.streak > 1) chips.append(el('b', 'hot', `W${f.streak}`));
+    else if (f.streak < -1) chips.append(el('b', 'cold', `L${-f.streak}`));
+    plate.append(el('div', 'nm', f.name), chips);
+    const pt = el('div', 'pt');
+    pt.append(el('b', '', String(f.points)), el('small', '', 'PTS'));
+    tag.append(rk, plate, pt);
     tagsEl.append(tag);
-    const stop = el('button', '', String(i + 1));
+    const stop = el('div', 'slot');
+    stop.style.setProperty('--pc', f.color);
+    stop.style.animationDelay = `${-(i * 0.9) % 3.6}s`;
+    stop.setAttribute('role', 'button');
     stop.setAttribute('aria-label', `Fly to number ${i + 1}, ${f.name}`);
-    stop.addEventListener('click', () => select(i, false));
-    railEl.append(stop);
-    floaters.push({ f, body, carrier, home, ph, tag, stop, spin: 0, roll: 0 });
+    stop.append(el('div', 'pf'), el('div', 'lbl', String(i + 1)));
+    dockEl.append(stop);
+    floaters.push({ f, body, carrier, home, ph, tag, stop, spin: 0, roll: 0, tilt: 0 });
   });
   select(Math.min(st.sel, floaters.length - 1), true);
   st.camZ = st.target;
@@ -192,34 +212,83 @@ function select(i, quiet) {
   st.sel = Math.max(0, Math.min(floaters.length - 1, i));
   st.target = floaters[st.sel].home.z + CAM_BACK;
   st.fling = 0;
-  floaters.forEach((g, k) => { g.tag.classList.toggle('on', k === st.sel); g.stop.classList.toggle('on', k === st.sel); });
+  floaters.forEach((g, k) => { g.tag.classList.toggle('on', k === st.sel); });
   if (!quiet) post({ type: 'line' });
 }
 
-// Matches along the bottom: each one pushes in under the finger and opens its card.
-function matchStrip(matches) {
-  const box = $('matches');
-  box.textContent = '';
-  $('empty').style.display = matches.length ? 'none' : 'block';
-  for (const m of matches) {
-    const b = el('button', 'm');
-    const spine = el('i');
-    spine.style.background = m.color;
-    const txt = el('div');
-    const names = el('div', 'mn');
-    const a = el('span', m.winner === 'a' ? 'w' : '', m.a);
-    const z = el('span', m.winner === 'b' ? 'w' : '', m.b);
-    names.append(a, document.createTextNode('  vs  '), z);
-    txt.append(names, el('div', 'ms', `${m.score}  ·  ${m.court}`));
-    b.append(spine, txt);
-    b.addEventListener('click', () => post({ type: 'match', id: m.id }));
-    box.append(b);
+// The dock: tap a platform, or drag along it, to fly to that rank.
+function slotAt(clientX) {
+  let best = 0; let bd = Infinity;
+  floaters.forEach((g, i) => {
+    const r = g.stop.getBoundingClientRect();
+    const d = Math.abs(clientX - (r.left + r.width / 2));
+    if (d < bd) { bd = d; best = i; }
+  });
+  return best;
+}
+let scrubbing = false;
+dockEl.addEventListener('pointerdown', (e) => {
+  if (!floaters.length) return;
+  scrubbing = true;
+  dockEl.setPointerCapture(e.pointerId);
+  const i = slotAt(e.clientX);
+  if (i !== st.sel || Math.abs(st.target - (floaters[i].home.z + CAM_BACK)) > 0.01) select(i, true);
+});
+dockEl.addEventListener('pointermove', (e) => {
+  if (!scrubbing) return;
+  const i = slotAt(e.clientX);
+  if (i !== st.sel) select(i, true);
+});
+const endScrub = () => { scrubbing = false; };
+dockEl.addEventListener('pointerup', endScrub);
+dockEl.addEventListener('pointercancel', endScrub);
+
+/** Where the ball sits on platform i, in dock coordinates. */
+function perch(i) {
+  const d = dockEl.getBoundingClientRect();
+  const r = floaters[i].stop.querySelector('.pf').getBoundingClientRect();
+  return { x: r.left + r.width / 2 - d.left, y: r.top - d.top - 10 };
+}
+function hopTo(i) {
+  if (i === st.at || !floaters[i]) return;
+  const to = perch(i);
+  if (st.at < 0 || !st.ball) {
+    st.ball = { ...to };
+  } else {
+    st.hop = { from: { ...st.ball }, to, t0: performance.now(), dur: 360, h: 22 + 5 * Math.abs(i - st.at), i };
+    const from = floaters[st.at].stop; // the platform it leaves dips under the push-off
+    from.classList.add('land');
+    setTimeout(() => from.classList.remove('land'), 120);
+    post({ type: 'line' });
   }
+  floaters.forEach((g, k) => g.stop.classList.toggle('on', k === i));
+  st.at = i;
+}
+function drawBall(now) {
+  if (!st.ball) { ballEl.style.opacity = '0'; return; }
+  ballEl.style.opacity = '1';
+  let { x, y } = st.ball; let sx = 1; let sy = 1;
+  if (st.hop) {
+    const u = Math.min(1, (now - st.hop.t0) / st.hop.dur);
+    x = st.hop.from.x + (st.hop.to.x - st.hop.from.x) * u;
+    y = st.hop.from.y + (st.hop.to.y - st.hop.from.y) * u - st.hop.h * 4 * u * (1 - u);
+    const squash = u < 0.12 ? 1 - u / 0.12 : u > 0.88 ? (u - 0.88) / 0.12 : 0;
+    sx = 1 + 0.2 * squash; sy = 1 - 0.2 * squash;
+    if (u >= 1) {
+      st.ball = { ...st.hop.to };
+      const g = floaters[st.hop.i];
+      if (g) { g.stop.classList.add('land'); setTimeout(() => g.stop.classList.remove('land'), 140); }
+      st.hop = null;
+    }
+  } else {
+    // Resting: it rocks on its platform like it is about to be served.
+    y += -2 * Math.max(0, Math.sin(now / 380));
+  }
+  ballEl.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) scale(${sx.toFixed(3)},${sy.toFixed(3)})`;
 }
 
 window.setStandings = (d) => {
   build(d.fighters);
-  matchStrip(d.matches);
 };
 
 // Touch: drag flies through the ranks, a tap pokes whoever it lands on.
@@ -262,7 +331,10 @@ function tap(x, y) {
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(floaters.map((g) => g.body.mesh), false);
-  if (!hits.length) return;
+  if (!hits.length) {
+    if (debris.knock(ray)) post({ type: 'poke' });
+    return;
+  }
   const hit = hits[0];
   const i = floaters.findIndex((g) => g.body.mesh === hit.object);
   const g = floaters[i];
@@ -275,6 +347,9 @@ function tap(x, y) {
   g.spin += hit.point.x > g.carrier.position.x ? -1.4 : 1.4;
   g.roll += 0.8;
   g.body.mood.happy = 0.9;
+  g.tag.classList.remove('pop');
+  void g.tag.offsetWidth; // restart the jiggle
+  g.tag.classList.add('pop');
   post({ type: 'poke' });
   select(i, true); // the poke already buzzed
 }
@@ -316,7 +391,9 @@ function frame(now) {
   const lookX = floaters[near] ? floaters[near].home.x * 0.35 : 0;
   camera.position.set(lookX + 0.06 * Math.sin((t * TAU) / 9), 0.25 + 0.04 * Math.sin((t * TAU) / 7), st.camZ);
   camera.lookAt(lookX * 0.6, 0, st.camZ - 6);
-  floaters.forEach((g, k) => { g.stop.classList.toggle('on', k === near); });
+  if (floaters.length) hopTo(near);
+  drawBall(now);
+  debris.update(dt, st.camZ, REDUCED);
 
   const amp = REDUCED ? 0.3 : 1;
   floaters.forEach((g, i) => {
@@ -335,18 +412,19 @@ function frame(now) {
     if (dist > -0.5 && dist < 26 && (dist < 7 || (st.frame + i) % 2 === 0)) g.body.render(t + i * 0.7);
     g.body.group.visible = dist > -0.5 && dist < 26;
 
-    // Its line hangs just under it, sized and faded by distance.
+    // Its plate hangs just under it, sized and faded by distance, and swings after the fighter's roll on a lag.
     v3.copy(g.carrier.position);
     v3.y -= SCALE * 0.95;
     v3.project(camera);
     const show = dist > 0.8 && dist < 11 && v3.z < 1;
-    const fade = show ? Math.max(0, Math.min(1, 1 - (dist - 5.5) / 4.5)) : 0;
-    const s = Math.max(0.55, Math.min(1.15, 4.2 / dist));
+    const fade = show ? Math.max(0, Math.min(1, 1 - (dist - 7.5) / 3.5)) : 0;
+    g.tilt += (g.carrier.rotation.z * 0.5 - g.tilt) * (1 - Math.exp(-5 * dt));
+    const s = Math.max(0.6, Math.min(1.2, 5.2 / dist));
     const x = (v3.x * 0.5 + 0.5) * window.innerWidth;
     const y = (-v3.y * 0.5 + 0.5) * window.innerHeight;
     g.tag.style.opacity = fade.toFixed(3);
     g.tag.style.zIndex = String(100 - i);
-    g.tag.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translateX(-50%) scale(${s.toFixed(3)})`;
+    g.tag.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translateX(-50%) rotate(${(g.tilt * 57.3).toFixed(2)}deg) scale(${s.toFixed(3)})`;
   });
 
   renderer.render(scene, camera);

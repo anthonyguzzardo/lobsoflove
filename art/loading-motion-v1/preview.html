@@ -4,14 +4,20 @@
 *{box-sizing:border-box}body{margin:0;background:#171d30;color:#f4ead9;font:16px system-ui,sans-serif;min-height:100svh;display:grid;place-items:center}main{width:min(94vw,620px);padding:24px 0}h1{font-size:21px;font-weight:550;margin:0 0 6px}p{color:#b8c0d3;font-size:14px;line-height:1.5;margin:0 0 16px}.stage{width:100%;aspect-ratio:1;background-image:url(frames-cutout.png);background-size:300% 200%;background-repeat:no-repeat;border-radius:16px}nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0}button,select{font:inherit;color:#f4ead9;background:#29324b;border:1px solid #53617c;border-radius:8px;padding:12px;min-height:44px;cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #eab26b;outline-offset:3px}#play{background:#eab26b;color:#171d30;border-color:#eab26b}input{width:100%;accent-color:#eab26b;min-height:32px}output{display:block;margin-top:8px;font-size:15px}a{color:#eab26b}
 
 .scene{position:relative;isolation:isolate;width:100%;aspect-ratio:1}
-.chalk{position:absolute;inset:0;background:url(chalk-halo.png) center/contain no-repeat;opacity:.42;transform:rotate(-7deg) scale(.98);animation:chalk-breathe 9s ease-in-out infinite alternate;pointer-events:none}
+.chalk{position:absolute;inset:0;background:url(chalk-halo.png) center/contain no-repeat;opacity:.42;filter:url(#chalk-boil);pointer-events:none}
 .stage{position:absolute;inset:9%;width:82%;border-radius:0;z-index:1}
-body.paused .chalk{animation-play-state:paused}
+
 body.no-halo .chalk{visibility:hidden}
-@keyframes chalk-breathe{from{transform:rotate(-7deg) scale(.98);opacity:.36}to{transform:rotate(-3deg) scale(1.035);opacity:.46}}
-@media(prefers-reduced-motion:reduce){.chalk{animation:none}}
+
+
 </style>
-<main><h1>A court comes to life.</h1><p>Pastel chalk strokes tucked directly behind the machine.</p>
+<svg width="0" height="0" aria-hidden="true" style="position:absolute;pointer-events:none"><defs>
+<filter id="chalk-boil" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+<feTurbulence id="chalk-noise" type="fractalNoise" baseFrequency=".021 .033" numOctaves="2" seed="3" result="grain"/>
+<feDisplacementMap in="SourceGraphic" in2="grain" scale="6" xChannelSelector="R" yChannelSelector="G" result="ink"/>
+<feColorMatrix id="chalk-color" in="ink" type="hueRotate" values="0"/>
+</filter></defs></svg>
+<main><h1>A court comes to life.</h1><p>Living chalk: softly trembling strokes and shifting pigment.</p>
 <div class="scene"><div class="chalk" aria-hidden="true"></div><div class="stage" id="stage" role="img" aria-label="Dormant tennis console"></div></div>
 <output id="caption" for="frame">1 / 6 — Dormant</output>
 <input id="frame" type="range" min="0" max="5" step="1" value="0" aria-label="Animation frame">
@@ -21,16 +27,18 @@ body.no-halo .chalk{visibility:hidden}
 const names=['Dormant','Button pressed; grass sprouts','Grass fills the court','Court lines appear','Net rises','Ball emerges'];
 const durations=[650,450,650,650,650,1400];
 const stage=document.getElementById('stage'),caption=document.getElementById('caption'),slider=document.getElementById('frame'),play=document.getElementById('play'),speed=document.getElementById('speed');
-let frame=0,playing=false,timer;
+let frame=0,playing=false,timer,boilTimer,boilStep=0;
+const seeds=[3,7,4,9,5,8,4,6];
+function scheduleBoil(){clearTimeout(boilTimer);if(!playing||matchMedia('(prefers-reduced-motion: reduce)').matches||document.body.classList.contains('no-halo'))return;boilTimer=setTimeout(()=>{boilStep++;document.getElementById('chalk-noise').setAttribute('seed',seeds[boilStep%seeds.length]);document.getElementById('chalk-color').setAttribute('values',String(7*Math.sin(boilStep/28)));scheduleBoil()},180)}
 function show(){stage.style.backgroundPosition=((frame%3)*50)+'% '+(Math.floor(frame/3)*100)+'%';slider.value=frame;caption.textContent=(frame+1)+' / 6 — '+names[frame];stage.setAttribute('aria-label',names[frame]);}
 function schedule(){clearTimeout(timer);if(playing)timer=setTimeout(()=>{frame=(frame+1)%6;show();schedule()},durations[frame]/Number(speed.value))}
-function setPlaying(value){playing=value;document.body.classList.toggle('paused',!value);play.textContent=playing?'Pause':'Play';schedule()}
+function setPlaying(value){playing=value;document.body.classList.toggle('paused',!value);play.textContent=playing?'Pause':'Play';schedule();scheduleBoil()}
 play.onclick=()=>setPlaying(!playing);
 document.getElementById('restart').onclick=()=>{frame=0;show();setPlaying(true)};
 slider.oninput=()=>{setPlaying(false);frame=Number(slider.value);show()};
 speed.onchange=schedule;
 document.addEventListener('visibilitychange',()=>{if(document.hidden)setPlaying(false)});
-document.getElementById('halo').onclick=function(){const off=document.body.classList.toggle('no-halo');this.setAttribute('aria-pressed',String(!off));this.textContent='Chalk halo: '+(off?'off':'on')};
+document.getElementById('halo').onclick=function(){const off=document.body.classList.toggle('no-halo');this.setAttribute('aria-pressed',String(!off));this.textContent='Chalk halo: '+(off?'off':'on');scheduleBoil()};
 const motion=matchMedia('(prefers-reduced-motion: reduce)');motion.addEventListener('change',e=>{if(e.matches)setPlaying(false)});
 const asset=new Image();asset.onload=()=>{show();if(!matchMedia('(prefers-reduced-motion: reduce)').matches)setPlaying(true)};asset.onerror=()=>{caption.textContent='Could not load animation frames';setPlaying(false)};asset.src='frames-cutout.png';
 </script></html>

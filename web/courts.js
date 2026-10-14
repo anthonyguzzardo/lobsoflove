@@ -29,7 +29,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setClearColor(PAPER, 1);
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(PAPER, 36, 54); // the world below a tile you just left falls away into the paper
+scene.fog = new THREE.Fog(PAPER, 33, 48); // the world below a tile you just left falls away into the paper
 const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 120);
 scene.add(new THREE.HemisphereLight(0xffffff, 0xe6dfd2, 1.55));
 const sun = new THREE.DirectionalLight(0xfff4e4, 2.1);
@@ -498,26 +498,96 @@ const GROUND = { ucsd: 0x8f9e74, lindavista: 0xa7a98c, balboa: 0x86a865, rooseve
 const facing = () => { const f = new THREE.Group(); f.rotation.y = Math.PI / 4; return f; };
 
 /** Venues without their own world: a ground in the venue's color, and its landmarks set back and to the side, at a size nothing on a tile allows. */
-function plainWorld(v, w, g) {
-  const f = facing();
-  w.add(f);
-  f.add(at(new THREE.Mesh(new THREE.PlaneGeometry(44, 44).rotateX(-Math.PI / 2), mat(GROUND[v.key] ?? 0x8fae6a, { roughness: 1 })), 0, 0, -6));
+/** The camera as it rests on the arena at `base` (same numbers as pose(), no orbit), for placing things where the screen shows them. */
+function restCamera(base) {
+  const c = camera.clone();
+  const look = base.clone().add(new THREE.Vector3(0, 0.2, 0));
+  const narrow = camera.aspect < 0.62 ? 1 : 0.84;
+  c.position.copy(look).add(new THREE.Vector3(Math.sin(rad(45)), 0.82, Math.cos(rad(45))).normalize().multiplyScalar(19.5 * narrow));
+  c.lookAt(look);
+  c.setViewOffset(window.innerWidth, window.innerHeight, 0, window.innerHeight * 0.13, window.innerWidth, window.innerHeight);
+  c.updateMatrixWorld(true);
+  return c;
+}
+
+/** Where on the world's ground (world-local) a point of the screen lands, looking at the arena at `base`. */
+function groundAt(base, nx, ny) {
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(nx, ny), restCamera(base));
+  const hit = new THREE.Vector3();
+  ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -WORLD_Y), hit);
+  return hit.sub(new THREE.Vector3(base.x, WORLD_Y, base.z));
+}
+
+/**
+ * Venues without their own world: a ground in the venue's color, and its landmarks placed in the open screen space beside the
+ * full-size arena (above its upper-left edge, clear of the back button), shrunk until they fit there.
+ */
+function plainWorld(v, w, g, base, others) {
+  w.add(at(new THREE.Mesh(new THREE.PlaneGeometry(60, 60).rotateX(-Math.PI / 2), mat(GROUND[v.key] ?? 0x8fae6a, { roughness: 1 })), 0, 0, 0));
   const props = new THREE.Group();
   const anim = FLAVOR[v.key]?.(props);
   for (const o of [...props.children]) if (o.userData.air) g.add(o); // aircraft still fly over the tile
   if (anim) anim(0);
   props.updateMatrixWorld(true);
   const pb = new THREE.Box3().setFromObject(props);
-  if (!pb.isEmpty()) {
-    // Landmarks sit in the open space above the arena; long strips run up the screen.
-    if (pb.max.x - pb.min.x > pb.max.z - pb.min.z) props.rotation.y = Math.PI / 2;
-    const k = 1.6;
-    props.scale.setScalar(k);
-    props.updateMatrixWorld(true);
-    const rb = new THREE.Box3().setFromObject(props);
-    props.position.set(-0.9 - (rb.min.x + rb.max.x) / 2, -rb.min.y, -7.2 - (rb.min.z + rb.max.z) / 2);
+  if (pb.isEmpty()) return anim;
+  const holder = new THREE.Group();
+  holder.add(props);
+  holder.rotation.y = Math.PI / 4; // face the camera like the arenas do
+  // Long strips run up the screen.
+  if (pb.max.x - pb.min.x > pb.max.z - pb.min.z) props.rotation.y = Math.PI / 2;
+  // The arena's outline on screen (its tile plus the back walls): the landmark must sit wholly above it, below the back button.
+  const cam = restCamera(base);
+  const P = (x, y, z) => new THREE.Vector3(base.x + x, base.y + y, base.z + z).project(cam);
+  const Lc = P(-SIDE / 2, 0.4, SIDE / 2); const Tc = P(-SIDE / 2, 0.4, -SIDE / 2); const Rc = P(SIDE / 2, 0.4, -SIDE / 2);
+  const edge = (x) => (x <= Tc.x ? Lc.y + ((x - Lc.x) / (Tc.x - Lc.x)) * (Tc.y - Lc.y) : Tc.y + ((x - Tc.x) / (Rc.x - Tc.x)) * (Rc.y - Tc.y));
+  // The neighbouring arenas float there too, shrunk: keep clear of their outlines.
+  const blocks = others.map((o) => {
+    const r = { x0: 9, x1: -9, y0: 9, y1: -9 };
+    for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) for (const y of [-0.4, 0.5]) {
+      const q = new THREE.Vector3(o.x + x * SIDE * AWAY / 2, o.y + y * AWAY, o.z + z * SIDE * AWAY / 2).project(cam);
+      r.x0 = Math.min(r.x0, q.x); r.x1 = Math.max(r.x1, q.x); r.y0 = Math.min(r.y0, q.y); r.y1 = Math.max(r.y1, q.y);
+    }
+    return r;
+  });
+  const fits = (r) => {
+    if (blocks.some((b) => r.x0 < b.x1 && r.x1 > b.x0 && r.y0 < b.y1 && r.y1 > b.y0)) return false;
+    if (r.x0 < -0.98 || r.x1 > 0.98 || r.y1 > 0.9) return false;
+    if (r.x0 < -0.3 && r.y1 > 0.66) return false; // the back button's corner
+    const floor = Math.max(edge(r.x0), edge(r.x1), r.x0 < Tc.x && r.x1 > Tc.x ? Tc.y : -1);
+    return r.y0 > floor + 0.02;
+  };
+  const corner = new THREE.Vector3();
+  const rectOf = () => {
+    holder.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(holder);
+    const r = { x0: 9, x1: -9, y0: 9, y1: -9 };
+    for (let c = 0; c < 8; c += 1) {
+      corner.set(c & 1 ? box.max.x : box.min.x, c & 2 ? box.max.y : box.min.y, c & 4 ? box.max.z : box.min.z);
+      corner.add(new THREE.Vector3(base.x, WORLD_Y, base.z)).project(cam);
+      r.x0 = Math.min(r.x0, corner.x); r.x1 = Math.max(r.x1, corner.x); r.y0 = Math.min(r.y0, corner.y); r.y1 = Math.max(r.y1, corner.y);
+    }
+    return r;
+  };
+  // Biggest size first: at each size, slide the landmark up from just above the arena's edge (middle, then the sides)
+  // and take the first place where it sits wholly in the open.
+  let placed = false;
+  for (let k = 2.6; k > 0.3 && !placed; k *= 0.93) {
+    holder.scale.setScalar(k);
+    for (const nx of [0, -0.5, 0.5, -0.7, 0.7]) {
+      for (let ny = edge(nx) + 0.04; ny < 0.9 && !placed; ny += 0.025) {
+        const spot = groundAt(base, nx, ny);
+        holder.position.set(0, 0, 0);
+        holder.updateMatrixWorld(true);
+        const rb = new THREE.Box3().setFromObject(holder);
+        holder.position.set(spot.x - (rb.min.x + rb.max.x) / 2, -rb.min.y, spot.z - (rb.min.z + rb.max.z) / 2);
+        if (fits(rectOf())) placed = true;
+      }
+      if (placed) break;
+    }
   }
-  f.add(props);
+  w.add(holder);
   return anim;
 }
 
@@ -718,7 +788,7 @@ function build(data) {
     g.add(a);
     // Everything the venue has besides its court lives in its world below, not on the tile.
     const world = new THREE.Group();
-    const anim = WORLD[v.key] ? WORLD[v.key](world, g) : plainWorld(v, world, g);
+    const anim = WORLD[v.key] ? WORLD[v.key](world, g) : plainWorld(v, world, g, base, [i - 1, i + 1].filter((j) => j >= 0 && j < venues.length).map((j) => FWD.clone().multiplyScalar(j * STEP).add(RIGHT.clone().multiplyScalar(j % 2 ? 0.55 : -0.55)).setY(0.1 + 0.14 * ((j * 7) % 3))));
     world.visible = false;
     scene.add(world);
     // Where the player stands once inside: the baseline nearer the camera.
@@ -1094,7 +1164,7 @@ function pose() {
   } else if (st.jump) {
     // Into the court: one hop from the tile's corner to the baseline, landing at player size.
     const k = THREE.MathUtils.clamp((st.jump.t - 0.09) / 0.5, 0, 1);
-    const to = islands[st.at].position.clone().add(islands[st.at].userData.spot);
+    const to = islands[st.at].position.clone().add(islands[st.at].userData.spot.clone().multiplyScalar(islands[st.at].userData.size.x));
     mascot.position.lerpVectors(st.jump.from, to, k);
     mascot.position.y += 0.9 * 4 * k * (1 - k);
     stretch = k <= 0 ? 1 - 0.22 * Math.min(1, st.jump.t / 0.09) : k < 1 ? 1 + 0.14 * Math.sin(Math.PI * k) : stretch;

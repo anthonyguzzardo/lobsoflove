@@ -34,11 +34,11 @@ const $ = (id) => document.getElementById(id);
 
 const CASTS = ['wall', 'moon', 'bot', 'goblin', 'grunter', 'junk', 'comet', 'ghost', 'lobber', 'rabbit'];
 const LABEL = {
-  wall: ['THE WALL', 'Everything comes back.'], moon: ['MOONBALLER', 'Twelve feet over the net, every time.'],
-  bot: ['SERVE BOT', 'Ace or double fault. No third option.'], goblin: ['DROPSHOT GOBLIN', 'You will run. You will not get there.'],
-  grunter: ['THE GRUNTER', 'Heard from three courts away.'], junk: ['JUNKBALLER', 'No pace, no spin, no rhythm, no mercy.'],
-  comet: ['NET RUSHER', 'Chip, charge, pray.'], ghost: ['THE NO-SHOW', '"Running five late."'],
-  lobber: ['GOT YOU, BITCH', "Come to the net. I dare you."], rabbit: ['THE JACKRABBIT', 'Faster than a certain blue hedgehog.'],
+  wall: ['THE WALL', "Hit it harder. It's still coming back."], moon: ['MOONBALLER', "I'll put it twelve feet up. All day."],
+  bot: ['SERVE BOT', "Ace or double. I don't do rallies."], goblin: ['DROPSHOT GOBLIN', "I drop it short. Then shorter."],
+  grunter: ['THE GRUNTER', "You'll hear me three courts over."], junk: ['JUNKBALLER', "No pace. No spin. I still win."],
+  comet: ['NET RUSHER', "I chip. I charge. I pray."], ghost: ['THE NO-SHOW', "Running five late. Start without me."],
+  lobber: ['GOT YOU, BITCH', "Come to the net. I dare you."], rabbit: ['THE JACKRABBIT', "I'm faster than a certain blue hedgehog."],
 };
 const COLORS = ['#d7f205', '#ff3d7f', '#35d6ff', '#ff8a1f', '#9b6bff', '#2fe08a', '#ff5252', '#f4f1e6'];
 
