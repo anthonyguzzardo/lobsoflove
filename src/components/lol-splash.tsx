@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, AppState, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { EnterServe } from './enter-serve';
 import { LoadingScene } from './loading-scene';
 
 export const SPLASH_BACKGROUND = '#171d30';
@@ -60,15 +61,13 @@ export function LolSplash({ onFinish, onReady, preview = false }: {
       {preview && <Pressable accessibilityRole="button" accessibilityLabel="Replay intro" onPress={() => setReplay(value => value + 1)} style={styles.control}>
         <Svg width={22} height={22} viewBox="0 0 24 24"><Path d="M4 10a8 8 0 1 1 0 6M4 4v6h6" fill="none" stroke="#eab26b" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></Svg>
       </Pressable>}
-      <Pressable accessibilityRole="button" accessibilityLabel={preview ? 'Enter game' : 'Skip intro'} onPress={finish} style={styles.control}>
-        <Svg width={22} height={22} viewBox="0 0 24 24"><Path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="#eab26b" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></Svg>
-      </Pressable>
+      <EnterServe label={preview ? 'Enter game' : 'Skip intro'} onEnter={finish} />
     </View>
   </Animated.View>;
 }
 const styles = StyleSheet.create({
   root: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: SPLASH_BACKGROUND, zIndex: 100, overflow: 'hidden' },
   composition: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  actions: { flexDirection: 'row', gap: 20, paddingVertical: 16, justifyContent: 'center' },
+  actions: { flexDirection: 'row', gap: 20, paddingVertical: 16, justifyContent: 'center', alignItems: 'center' },
   control: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#242b42', alignItems: 'center', justifyContent: 'center' },
 });
