@@ -175,6 +175,30 @@ function miniFighter(cast, color, size = 40) {
   return { canvas: c, head: Y(y1) };
 }
 
+/** The dock number's personality, cooler toward the top and sadder toward the bottom (styles in the page's CSS). */
+function tierOf(i, n) {
+  if (i === 0) return 'fire';
+  if (i === 1) return 'zap';
+  if (i === 2) return 'bronze roman';
+  if (i === n - 1) return 'last';
+  if (i === n - 2 && n >= 5) return 'droop';
+  return ['bounce', 'dizzy', 'jitter'][(i - 3) % 3]; // the middle of the pack, each one different from its neighbors
+}
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+/** Flips 3rd place's number to Roman numerals and back, now and then. */
+function romanFlip() {
+  const pool = [...dockEl.querySelectorAll('.lbl.roman:not(.flipping)')];
+  if (pool.length && !REDUCED) {
+    const e = pool[Math.floor(Math.random() * pool.length)];
+    const flip = (text) => { e.classList.remove('flip'); void e.offsetWidth; e.classList.add('flip'); setTimeout(() => { e.textContent = text; }, 140); };
+    e.classList.add('flipping');
+    flip(ROMAN[Number(e.dataset.n)] || e.dataset.n);
+    setTimeout(() => { flip(e.dataset.n); setTimeout(() => e.classList.remove('flipping'), 300); }, 1700);
+  }
+  setTimeout(romanFlip, 1800 + Math.random() * 2400);
+}
+setTimeout(romanFlip, 2000);
+
 function slotFor(i) {
   if (i === 0) return new THREE.Vector3(0, 0, 0);
   // Down the column, swaying right and left so the stack reads as floating, not filed.
@@ -237,7 +261,9 @@ function build(fighters) {
     stop.setAttribute('role', 'button');
     stop.setAttribute('aria-label', `Fly to number ${i + 1}, ${f.name}`);
     const mini = miniFighter(f.cast, f.color);
-    stop.append(mini.canvas, el('div', 'pf'), el('div', 'lbl', String(i + 1)));
+    const lbl = el('div', `lbl ${tierOf(i, fighters.length)}`, String(i + 1));
+    lbl.dataset.n = String(i + 1);
+    stop.append(mini.canvas, el('div', 'pf'), lbl);
     dockEl.append(stop);
     floaters.push({ f, body, carrier, home, ph, tag, stop, mini, spin: 0, roll: 0, tilt: 0 });
   });
@@ -471,7 +497,10 @@ function frame(now) {
     const s = i === 0 ? 1 : 0.86;
     const x = (v3.x * 0.5 + 0.5) * window.innerWidth;
     const y = (-v3.y * 0.5 + 0.5) * window.innerHeight;
-    g.tag.style.opacity = fade.toFixed(3);
+    // Plates fade out as they slide down under the dock, so its numbers never sit on top of a plate's.
+    const dockTop = dockEl.getBoundingClientRect().top;
+    const underDock = Math.max(0, Math.min(1, (dockTop - 10 - y) / 60));
+    g.tag.style.opacity = (fade * underDock).toFixed(3);
     g.tag.style.zIndex = String(100 - i);
     g.tag.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translateX(-50%) rotate(${(g.tilt * 57.3).toFixed(2)}deg) scale(${s.toFixed(3)})`;
   });

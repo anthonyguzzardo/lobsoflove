@@ -4,11 +4,11 @@
     "slug": "lobsoflove",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/app-icon-v1.png",
     "scheme": "lobsoflove",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/app-icon-v1.png",
       "bundleIdentifier": "com.mrfox.lobsoflove",
       "buildNumber": "1",
       "supportsTablet": false,
@@ -18,17 +18,16 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#171d30",
+        "foregroundImage": "./assets/images/android-icon-v1.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.mrfox.lobsoflove"
+      "package": "com.mrfox.lobsoflove",
+      "icon": "./assets/images/app-icon-v1.png"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon-v1.png"
     },
     "plugins": [
       "expo-router",

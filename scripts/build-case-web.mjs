@@ -204,14 +204,52 @@ body{background:#050507;color:var(--cream);font-family:-apple-system,"Helvetica 
 .tag.pop .rk{animation-delay:.03s}.tag.pop .pt{animation-delay:.06s}
 @keyframes jiggle{0%{scale:1}25%{scale:1.18 .86}55%{scale:.92 1.08}100%{scale:1}}
 /* The dock, after home's: little floating platforms, one per rank, in each fighter's color. A real ball hops between them. */
-#dockwrap{position:fixed;left:0;right:0;bottom:0;padding:26px 14px calc(env(safe-area-inset-bottom) + 10px);background:linear-gradient(180deg,rgba(5,5,7,0),rgba(5,5,7,.7) 45%);pointer-events:none}
-#dock{position:relative;display:flex;justify-content:space-between;align-items:flex-end;height:104px;pointer-events:auto;touch-action:none}
+#dockwrap{position:fixed;left:0;right:0;bottom:0;padding:26px 14px calc(env(safe-area-inset-bottom) + 10px);background:linear-gradient(180deg,rgba(5,5,7,0),rgba(5,5,7,.9) 40%);pointer-events:none}
+#dock{position:relative;display:flex;justify-content:space-between;align-items:flex-end;height:114px;pointer-events:auto;touch-action:none}
 #dock .slot{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer;animation:bob 3.6s ease-in-out infinite}
 #dock .pf{width:min(40px,78%);height:11px;border-radius:2px;background:#2a211c;border-top:2px solid var(--pc);box-shadow:0 5px 0 #120d0b,0 10px 14px rgba(0,0,0,.55);transition:transform .32s cubic-bezier(.34,1.56,.64,1),background .2s,box-shadow .2s}
 #dock .slot.on .pf{background:var(--pc);box-shadow:0 5px 0 color-mix(in srgb,var(--pc) 55%,#000),0 0 18px color-mix(in srgb,var(--pc) 45%,transparent)}
 #dock .slot.land .pf{transform:translateY(4px);transition:transform .12s cubic-bezier(.7,0,.84,0)}
-#dock .lbl{font:900 italic 17px/1 -apple-system,Helvetica,sans-serif;margin-top:9px;color:var(--dim);transition:color .2s,transform .32s cubic-bezier(.34,1.56,.64,1)}
+#dock .lbl{font:900 italic 17px/1 -apple-system,Helvetica,sans-serif;margin-top:20px;color:var(--dim);transition:color .2s,transform .32s cubic-bezier(.34,1.56,.64,1)}
 #dock .slot.on .lbl{color:var(--cream);transform:scale(1.25)}
+/* Rank numbers get cooler toward the top and sadder toward the bottom. */
+#dock .lbl{position:relative;isolation:isolate}
+#dock .lbl.fire{color:#fffbe8;text-shadow:1.5px 1.5px 0 #16181d,-1.5px 1.5px 0 #16181d,1.5px -1.5px 0 #16181d,-1.5px -1.5px 0 #16181d,0 2.5px 0 #16181d,0 0 10px #ff7a1a;animation:flick .11s infinite alternate}
+#dock .lbl.fire:before,#dock .lbl.fire:after{content:"";position:absolute;left:50%;bottom:20%;width:16px;height:19px;margin-left:-9px;border-radius:50% 50% 45% 45%/62% 62% 38% 38%;background:radial-gradient(ellipse at 50% 85%,#fff3b0 0,#ffb020 32%,#ff4d00 62%,rgba(255,77,0,0) 74%);transform-origin:50% 100%;animation:flame .46s ease-in-out infinite alternate;z-index:-1}
+#dock .lbl.fire:after{width:10px;height:14px;margin-left:0;animation-duration:.33s;animation-delay:-.2s}
+@keyframes flame{0%{transform:scale(1,1) rotate(-6deg);opacity:.85}100%{transform:scale(.8,1.15) rotate(6deg);opacity:1}}
+@keyframes flick{from{filter:brightness(1)}to{filter:brightness(1.3)}}
+/* Second place: electric. A white-hot blue digit that crackles, with lightning bolts zapping off either side on off-beats. */
+#dock .lbl.zap{color:#eaf8ff;text-shadow:1px 1px 0 #16181d,-1px 1px 0 #16181d,1px -1px 0 #16181d,-1px -1px 0 #16181d,0 0 6px #35d6ff,0 0 14px #2f6bff;animation:crackle 1.7s steps(1) infinite}
+@keyframes crackle{0%,100%{filter:brightness(1)}8%{filter:brightness(1.8);translate:1px 0}10%{filter:brightness(1);translate:0 0}46%{filter:brightness(1.6);translate:-1px 0}48%{translate:0 0;filter:brightness(1)}}
+#dock .lbl.zap:before,#dock .lbl.zap:after{content:"";position:absolute;width:9px;height:15px;background:#bff4ff;filter:drop-shadow(0 0 3px #35d6ff);clip-path:polygon(55% 0,10% 55%,45% 55%,30% 100%,90% 38%,52% 38%,75% 0);opacity:0;animation:bolt 1.7s steps(1) infinite}
+#dock .lbl.zap:before{left:-11px;top:-2px;transform:rotate(-18deg)}
+#dock .lbl.zap:after{right:-11px;top:1px;transform:rotate(16deg) scaleX(-1);animation-delay:-.85s}
+@keyframes bolt{0%,100%{opacity:0}6%{opacity:1}9%{opacity:.2}11%{opacity:1}15%{opacity:0}}
+#dock .lbl.bronze{color:#d08a4e;text-shadow:0 1px 0 #5a3014}
+/* The middle of the pack: a bounce like a ball, a dizzy spin with a dot orbiting its head, and a nervous jitter. */
+#dock .lbl.bounce{transform-origin:50% 100%;animation:hop 2.6s infinite}
+@keyframes hop{0%,58%,100%{translate:0 0;scale:1}64%{translate:0 0;scale:1.2 .8}72%{translate:0 -8px;scale:.88 1.12}80%{translate:0 0;scale:1.16 .84}86%{translate:0 -2px;scale:.97 1.03}92%{translate:0 0;scale:1}}
+#dock .lbl.dizzy{animation:dizzy 4.4s cubic-bezier(.5,0,.2,1) infinite}
+@keyframes dizzy{0%,62%{rotate:0deg}84%{rotate:380deg}91%{rotate:350deg}100%{rotate:360deg}}
+#dock .lbl.dizzy:after{content:"";position:absolute;left:50%;top:-6px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:#ffe23a;box-shadow:0 0 4px #ffe23a;animation:orbit 1.1s linear infinite}
+@keyframes orbit{from{transform:rotate(0deg) translateX(8px) scaleY(.5)}to{transform:rotate(360deg) translateX(8px) scaleY(.5)}}
+#dock .lbl.jitter{animation:jit .9s steps(2) infinite}
+@keyframes jit{0%,100%{translate:0 0}20%{translate:-1px 0}40%{translate:1px -1px}60%{translate:-1px 1px}80%{translate:1px 0}}
+#dock .lbl.flip{animation:flip .28s cubic-bezier(.7,0,.3,1)}
+@keyframes flip{0%{transform:rotateX(0)}50%{transform:rotateX(90deg)}100%{transform:rotateX(0)}}
+#dock .lbl.droop{transform-origin:20% 100%;animation:droop 5.5s ease-in-out infinite;color:#7d736b}
+#dock .lbl.droop:after{content:"z";position:absolute;right:-9px;top:-5px;font:900 italic 10px -apple-system,Helvetica,sans-serif;color:#a69a90;opacity:0;rotate:-32deg;animation:zzz 5.5s ease-out infinite}
+@keyframes zzz{0%,38%{opacity:0;translate:0 0;scale:.6}48%{opacity:1;scale:1}63%{opacity:0;translate:7px -13px;scale:1.3}100%{opacity:0}}
+@keyframes droop{0%,10%{rotate:0deg;translate:0 0}55%{rotate:32deg;translate:2px 2px}62%{rotate:30deg;translate:2px 2px}66%{rotate:-8deg;translate:0 -3px}72%,100%{rotate:0deg;translate:0 0}}
+#dock .lbl.last{color:#6d655e;animation:dying 3.4s steps(1) infinite}
+/* Only the digit flickers (its color), so the cloud and rain hanging off it stay steady. */
+@keyframes dying{0%,17%,23%,58%,65%,100%{color:rgba(109,101,94,.9)}19%,21%,60%{color:rgba(109,101,94,.12)}20%,62%{color:rgba(109,101,94,.55)}}
+#dock .lbl.last:before{content:"";position:absolute;left:50%;top:-11px;width:8px;height:8px;margin-left:-10px;border-radius:50%;background:#7a808c;box-shadow:6px -2px 0 1px #7a808c,12px 0 0 #7a808c;animation:drift 3s ease-in-out infinite alternate}
+#dock .lbl.last:after{content:"";position:absolute;left:50%;top:-4px;width:14px;height:12px;margin-left:-6px;background:radial-gradient(circle,#35d6ff 0 1px,transparent 1.6px) 0 0/5px 7px;-webkit-mask:linear-gradient(#000 40%,transparent);mask:linear-gradient(#000 40%,transparent);animation:rain .45s linear infinite}
+@keyframes drift{from{translate:-1px 0}to{translate:2px 0}}
+@keyframes rain{from{background-position:0 0}to{background-position:-1px 7px}}
+@media(prefers-reduced-motion:reduce){#dock .lbl,#dock .lbl:before,#dock .lbl:after{animation:none!important}}
 @keyframes bob{0%,100%{translate:0 0}50%{translate:0 -3px}}
 #dball{position:absolute;left:0;top:0;width:20px;height:20px;margin:-10px 0 0 -10px;pointer-events:none;will-change:transform;opacity:0;z-index:2}
 #dball i{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%,#f4ff7a 0,#d7f205 46%,#a9c400 100%);box-shadow:inset -3px -4px 5px rgba(60,80,0,.35),0 0 10px rgba(215,242,5,.35)}
