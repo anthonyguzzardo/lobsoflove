@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+import { BackSwing } from '@/components/back-swing';
 import venues from '@/data/venues.json';
 import { COURTS_HTML } from '@/generated/courts-html';
 import { ANTHEMS, playAnthem, stopAnthem, toggleMute } from '@/lib/anthems';
@@ -77,7 +78,7 @@ export default function Courts() {
           else if (msg.type === 'slid') { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('swish', 0.8); }
           else if (msg.type === 'dive') sfx('go', 0.8);
           else if (msg.type === 'mute') toggleMute();
-          else if (msg.type === 'back') goBack();
+          else if (msg.type === 'back') goBack(); // the page says there was no court to step out of
           else if (msg.type === 'link') { const a = ANTHEMS[msg.anthem]; if (a) void Linking.openURL(a.link); }
           else if (msg.type === 'pick') {
             pickCourt(msg.id);
@@ -86,6 +87,7 @@ export default function Courts() {
           } else console.warn('courts scene:', msg.message, msg.at ?? '');
         }}
       />
+      <BackSwing floating onBack={() => run('window.back()')} />
     </View>
   );
 }

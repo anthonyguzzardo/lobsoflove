@@ -22,8 +22,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { TessellateModifier } from 'three/addons/modifiers/TessellateModifier.js';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { bodyGeometry, clamp, det3, ENTER, EXIT, EXTRUDE, extractRotation, FACE, FEEL, inv3, makeClusters, NL, NN, nid, POP, quatMat, v, weightsFor } from './jelly-core.js';
 
 const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
 window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
@@ -32,21 +31,6 @@ window.addEventListener('unhandledrejection', (e) => post({ type: 'error', messa
 const PAPER = 0xefece5;
 const INK = 0x16181d;
 const $ = (id) => document.getElementById(id);
-const clamp = THREE.MathUtils.clamp;
-const bez = (x1, y1, x2, y2) => (t) => {
-  // Cubic bezier easing, solved for x by Newton steps.
-  let u = t;
-  for (let i = 0; i < 6; i += 1) {
-    const x = 3 * (1 - u) * (1 - u) * u * x1 + 3 * (1 - u) * u * u * x2 + u * u * u - t;
-    const dx = 3 * (1 - u) * (1 - u) * x1 + 6 * (1 - u) * u * (x2 - x1) + 3 * u * u * (1 - x2);
-    if (Math.abs(dx) < 1e-6) break;
-    u = clamp(u - x / dx, 0, 1);
-  }
-  return 3 * (1 - u) * (1 - u) * u * y1 + 3 * (1 - u) * u * u * y2 + u * u * u;
-};
-const EXIT = bez(0.7, 0, 0.84, 0);
-const POP = bez(0.34, 1.56, 0.64, 1);
-const ENTER = bez(0.16, 1, 0.3, 1);
 
 const CASTS = ['wall', 'moon', 'bot', 'goblin', 'grunter', 'junk', 'comet', 'ghost', 'lobber', 'rabbit'];
 const LABEL = {
@@ -57,80 +41,6 @@ const LABEL = {
   lobber: ['GOT YOU, BITCH', "Come to the net. I dare you."], rabbit: ['THE JACKRABBIT', 'Faster than a certain blue hedgehog.'],
 };
 const COLORS = ['#d7f205', '#ff3d7f', '#35d6ff', '#ff8a1f', '#9b6bff', '#2fe08a', '#ff5252', '#f4f1e6'];
-
-// Silhouettes, drawn in the same 200x200 box as the 2D avatars (y down), mapped to units (1 unit = 100 px, y up).
-const v = (x, y) => [(x - 100) / 100, (100 - y) / 100];
-function path() {
-  const s = new THREE.Shape();
-  const api = {
-    m(x, y) { s.moveTo(...v(x, y)); return api; },
-    l(x, y) { s.lineTo(...v(x, y)); return api; },
-    q(cx, cy, x, y) { s.quadraticCurveTo(...v(cx, cy), ...v(x, y)); return api; },
-    arc(cx, cy, r, a0, a1, cw) { s.absarc(...v(cx, cy), r / 100, a0, a1, cw); return api; },
-    ell(cx, cy, rx, ry) { s.absellipse(...v(cx, cy), rx / 100, ry / 100, 0, Math.PI * 2, false); return api; },
-    shape: s,
-  };
-  return api;
-}
-const rrect = (x, y, w, h, r) => path().m(x + r, y).l(x + w - r, y).q(x + w, y, x + w, y + r).l(x + w, y + h - r).q(x + w, y + h, x + w - r, y + h)
-  .l(x + r, y + h).q(x, y + h, x, y + h - r).l(x, y + r).q(x, y, x + r, y).shape;
-const poly = (pts) => { const p = path().m(...pts[0]); pts.slice(1).forEach((q) => p.l(...q)); return p.shape; };
-const circle = (cx, cy, r) => path().ell(cx, cy, r, r).shape;
-function crescent() {
-  // Outer disc minus an offset disc, as one polygon (an off-center hole would break the triangulator).
-  const c1 = new THREE.Vector2(0, 0); const r1 = 0.76;
-  const c2 = new THREE.Vector2(0.4, 0.18); const r2 = 0.6;
-  const d = c1.distanceTo(c2);
-  const a = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
-  const h = Math.sqrt(r1 * r1 - a * a);
-  const tu = Math.atan2(c2.y - c1.y, c2.x - c1.x);
-  const al = Math.atan2(h, a);
-  const be = Math.atan2(h, d - a);
-  const s = new THREE.Shape();
-  const N = 64;
-  for (let i = 0; i <= N; i += 1) {
-    const t = tu + al + ((Math.PI * 2 - 2 * al) * i) / N;
-    i ? s.lineTo(c1.x + r1 * Math.cos(t), c1.y + r1 * Math.sin(t)) : s.moveTo(c1.x + r1 * Math.cos(t), c1.y + r1 * Math.sin(t));
-  }
-  for (let i = 0; i <= N; i += 1) {
-    const t = tu + Math.PI + be - (2 * be * i) / N;
-    s.lineTo(c2.x + r2 * Math.cos(t), c2.y + r2 * Math.sin(t));
-  }
-  return s;
-}
-const SHAPES = {
-  wall: () => [rrect(38, 36, 124, 130, 16)],
-  moon: () => [crescent()],
-  bot: () => [circle(100, 14, 9), rrect(96, 14, 8, 26, 3), rrect(46, 38, 108, 82, 18), rrect(62, 122, 76, 50, 12), rrect(28, 64, 16, 32, 7), rrect(156, 64, 16, 32, 7)],
-  goblin: () => [path().ell(100, 106, 58, 62).shape, poly([[50, 100], [6, 58], [60, 76]]), poly([[150, 100], [194, 58], [140, 76]])],
-  grunter: () => [circle(100, 100, 72)],
-  junk: () => [rrect(38, 44, 124, 18, 9), rrect(84, 28, 32, 18, 7), poly([[48, 66], [152, 66], [142, 174], [58, 174]])],
-  comet: () => [circle(112, 108, 62), poly([[12, 50], [92, 66], [62, 88]]), poly([[6, 104], [56, 96], [54, 120]]), poly([[22, 154], [62, 128], [74, 152]])],
-  // An arch: the path of a lob.
-  lobber: () => [path().m(24, 176).l(24, 120).arc(100, 120, 76, Math.PI, 0, true).l(176, 176).l(134, 176).l(134, 120).arc(100, 120, 34, 0, Math.PI, false).l(66, 176).shape],
-  rabbit: () => [path().ell(74, 52, 15, 40).shape, path().ell(126, 52, 15, 40).shape, path().ell(100, 124, 62, 54).shape],
-  ghost: () => [path().m(42, 176).l(42, 88).arc(100, 88, 58, Math.PI, 0, true).l(158, 176).l(135, 162).l(117, 178).l(100, 162).l(83, 178).l(65, 162).shape],
-};
-/** Where the face sits on each body (svg box), and how far forward of the front face. */
-const FACE = {
-  wall: [100, 90], moon: [62, 104], bot: [100, 76], goblin: [100, 100],
-  grunter: [100, 86], junk: [100, 108], comet: [116, 102], ghost: [100, 88], lobber: [100, 63], rabbit: [100, 122],
-};
-
-// How each play style is made of jelly. alpha: shape stiffness per 240 Hz step. beta: how much it stretches as a whole.
-// grav: weight. damp: how fast the wobble dies (1/s). pull: how hard a finger can drag it. float: hover height (the ghost).
-const FEEL = {
-  wall: { alpha: 0.03, beta: 0.0, grav: 18, damp: 7, pull: 0.12 },
-  moon: { alpha: 0.012, beta: 0.15, grav: 13, damp: 4.5, pull: 0.3 },
-  bot: { alpha: 0.05, beta: 0.0, grav: 15, damp: 9, pull: 0.25 },
-  goblin: { alpha: 0.01, beta: 0.3, grav: 14, damp: 4, pull: 0.3 },
-  grunter: { alpha: 0.014, beta: 0.1, grav: 16, damp: 4.2, pull: 0.25 },
-  junk: { alpha: 0.0055, beta: 0.5, grav: 14, damp: 3, pull: 0.35 },
-  comet: { alpha: 0.018, beta: 0.15, grav: 14, damp: 5, pull: 0.3 },
-  ghost: { alpha: 0.012, beta: 0.2, grav: 0, damp: 3.5, pull: 0.35, float: 0.35 },
-  lobber: { alpha: 0.013, beta: 0.2, grav: 12, damp: 4.2, pull: 0.3 },
-  rabbit: { alpha: 0.022, beta: 0.12, grav: 16, damp: 5.5, pull: 0.35 },
-};
 
 // Renderer and studio.
 const canvas = $('c');
@@ -181,37 +91,6 @@ shadow.rotation.x = -Math.PI / 2;
 shadow.renderOrder = -1;
 scene.add(shadow);
 
-// Lattice.
-const NL = 4;
-const NN = NL * NL * NL;
-const nid = (i, j, k) => i + NL * (j + NL * k);
-const bern = (s) => [(1 - s) ** 3, 3 * s * (1 - s) ** 2, 3 * s * s * (1 - s), s ** 3];
-function weightsFor(p, box) {
-  const s = (p.x - box.min.x) / (box.max.x - box.min.x);
-  const t = (p.y - box.min.y) / (box.max.y - box.min.y);
-  const u = (p.z - box.min.z) / (box.max.z - box.min.z);
-  const bs = bern(clamp(s, 0, 1)); const bt = bern(clamp(t, 0, 1)); const bu = bern(clamp(u, 0, 1));
-  const w = new Float32Array(NN);
-  for (let k = 0; k < NL; k += 1) for (let j = 0; j < NL; j += 1) for (let i = 0; i < NL; i += 1) w[nid(i, j, k)] = bs[i] * bt[j] * bu[k];
-  return w;
-}
-
-const EXTRUDE = { depth: 0.4, bevelEnabled: true, bevelThickness: 0.17, bevelSize: 0.1, bevelSegments: 6, curveSegments: 28, steps: 1 };
-function bodyGeometry(cast, fine) {
-  let g = new THREE.ExtrudeGeometry(SHAPES[cast](), EXTRUDE);
-  g.deleteAttribute('uv');
-  g.deleteAttribute('normal');
-  if (fine) g = new TessellateModifier(0.085, 8).modify(g);
-  g = mergeVertices(g, 1e-4);
-  g.computeBoundingBox();
-  const b = g.boundingBox;
-  g.userData.off = [-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2];
-  g.translate(...g.userData.off);
-  g.computeBoundingBox();
-  g.computeVertexNormals();
-  return g;
-}
-
 const jelly = new THREE.MeshPhysicalMaterial({
   color: 0xffffff, vertexColors: true, roughness: 0.3, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.07,
   transmission: 0.28, thickness: 0.9, ior: 1.35, sheen: 0.4, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xffffff), envMapIntensity: 1,
@@ -253,20 +132,10 @@ const B = {
   colors: null, colorFrom: null, flood: null,
   S: new THREE.Vector3(1, 1, 1),
 };
-let clusters = [];
-{
-  for (let k = 0; k < NL - 1; k += 1) for (let j = 0; j < NL - 1; j += 1) for (let i = 0; i < NL - 1; i += 1) {
-    const idx = [];
-    for (let c = 0; c < 8; c += 1) idx.push(nid(i + (c & 1), j + ((c >> 1) & 1), k + ((c >> 2) & 1)));
-    clusters.push({ idx, q: [0, 0, 0, 1], global: false });
-  }
-  clusters.push({ idx: [...Array(NN).keys()], q: [0, 0, 0, 1], global: true });
-}
-const count = new Float32Array(NN);
-for (const c of clusters) for (const m of c.idx) count[m] += c.global ? 2 : 1;
+const { clusters, count } = makeClusters();
 
 function setBody(cast, keepNodes) {
-  const geo = bodyGeometry(cast, true);
+  const geo = bodyGeometry(cast);
   const box = geo.boundingBox.clone().expandByScalar(0.015);
   const pos = geo.attributes.position;
   const n = pos.count;
@@ -319,57 +188,8 @@ function setBody(cast, keepNodes) {
   for (const b of brows) b.visible = cast === 'goblin';
 }
 
-// Small 3x3 math on flat arrays, column-major.
-function quatMat(q, out) {
-  const [x, y, z, w] = q;
-  out[0] = 1 - 2 * (y * y + z * z); out[1] = 2 * (x * y + z * w); out[2] = 2 * (x * z - y * w);
-  out[3] = 2 * (x * y - z * w); out[4] = 1 - 2 * (x * x + z * z); out[5] = 2 * (y * z + x * w);
-  out[6] = 2 * (x * z + y * w); out[7] = 2 * (y * z - x * w); out[8] = 1 - 2 * (x * x + y * y);
-  return out;
-}
-const Rm = new Float32Array(9);
 const Rup = new Float32Array(9);
 const POSE = [Math.sin(-0.08), 0, 0, Math.cos(-0.08)]; // rest pose: leaned back 0.16 rad about x
-/** Rotation part of A, warm-started from q (Muller et al. 2016, "A Robust Method to Extract the Rotational Part of Deformations"). */
-function extractRotation(A, q) {
-  for (let it = 0; it < 6; it += 1) {
-    quatMat(q, Rm);
-    let ox = 0; let oy = 0; let oz = 0; let dot = 0;
-    for (let c = 0; c < 3; c += 1) {
-      const rx = Rm[c * 3]; const ry = Rm[c * 3 + 1]; const rz = Rm[c * 3 + 2];
-      const ax = A[c * 3]; const ay = A[c * 3 + 1]; const az = A[c * 3 + 2];
-      ox += ry * az - rz * ay; oy += rz * ax - rx * az; oz += rx * ay - ry * ax;
-      dot += rx * ax + ry * ay + rz * az;
-    }
-    const inv = 1 / (Math.abs(dot) + 1e-9);
-    ox *= inv; oy *= inv; oz *= inv;
-    const w = Math.hypot(ox, oy, oz);
-    if (w < 1e-9) break;
-    const s = Math.sin(w / 2) / w; const cw = Math.cos(w / 2);
-    const ax = ox * s; const ay = oy * s; const az = oz * s;
-    const [qx, qy, qz, qw] = q;
-    q[0] = cw * qx + ax * qw + ay * qz - az * qy;
-    q[1] = cw * qy - ax * qz + ay * qw + az * qx;
-    q[2] = cw * qz + ax * qy - ay * qx + az * qw;
-    q[3] = cw * qw - ax * qx - ay * qy - az * qz;
-    const l = Math.hypot(q[0], q[1], q[2], q[3]);
-    q[0] /= l; q[1] /= l; q[2] /= l; q[3] /= l;
-  }
-  return quatMat(q, Rm);
-}
-function inv3(m, out) {
-  const [a, b, c, d, e, f, g, h, i] = m;
-  const A = e * i - f * h; const Bq = -(d * i - f * g); const C = d * h - e * g;
-  const det = a * A + b * Bq + c * C;
-  if (Math.abs(det) < 1e-12) return false;
-  const id = 1 / det;
-  out[0] = A * id; out[3] = Bq * id; out[6] = C * id;
-  out[1] = -(b * i - c * h) * id; out[4] = (a * i - c * g) * id; out[7] = -(a * h - b * g) * id;
-  out[2] = (b * f - c * e) * id; out[5] = -(a * f - c * d) * id; out[8] = (a * e - b * d) * id;
-  return true;
-}
-const det3 = (m) => m[0] * (m[4] * m[8] - m[7] * m[5]) - m[3] * (m[1] * m[8] - m[7] * m[2]) + m[6] * (m[1] * m[5] - m[4] * m[2]);
-
 const goal = new Float32Array(NN * 3);
 const rs = new Float32Array(NN * 3); // scaled rest positions this step
 const Apq = new Float32Array(9); const Aqq = new Float32Array(9); const AqqI = new Float32Array(9); const Alin = new Float32Array(9);
@@ -967,7 +787,7 @@ const miniPupilGeo = new THREE.SphereGeometry(0.05, 12, 10);
 const miniSmileGeo = new THREE.TorusGeometry(0.11, 0.026, 8, 20, Math.PI);
 const padGeo = new RoundedBoxGeometry(40, 7, 14, 2, 2.5);
 const minis = CASTS.map((cast, i) => {
-  const g = bodyGeometry(cast, false);
+  const g = bodyGeometry(cast, 0);
   g.userData.halfH = g.boundingBox.max.y / 2;
   g.translate(0, -g.boundingBox.max.y / 2, 0);
   g.computeBoundingBox();
@@ -990,7 +810,7 @@ const minis = CASTS.map((cast, i) => {
 // 2.1 the ball lands; 2.15 the rusher faceplants toward the camera (0.25 s, exit curve), "GOT YOU." with a grin, twirl and hop.
 // 2.9-3.3 it sinks into the paper. The camera pulls back 45% and drifts left for the whole bit.
 const victim = (() => {
-  const g = bodyGeometry('comet', false);
+  const g = bodyGeometry('comet', 0);
   const m = new THREE.Mesh(g, new THREE.MeshPhysicalMaterial({ color: 0xa7abb3, roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.1 }));
   m.userData.face = faceOn(m, g, 'comet');
   // Panic mouth for when it turns round and sees the ball going over.

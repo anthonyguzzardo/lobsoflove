@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 import { brushUnderline } from './lib/brush.js';
+import { RainbowTrail, SoftBody } from './jelly-core.js';
 
 const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
 window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
@@ -304,26 +305,50 @@ const dustGeo = new THREE.BufferGeometry();
 dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
 scene.add(new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.045, transparent: true, opacity: 0.85, depthWrite: false })));
 
-// Mascot: a chunky block in the fighter's color, eyes on the camera side, four stub feet.
+// The mascot is your fighter: the same jelly body, face and color as the fighter screen (web/jelly-core.js).
+// `mascot` is the carrier that walks the path; the jelly rides it and feels every takeoff and landing (SoftBody.shove).
 const mascot = new THREE.Group();
-const skin = mat(0xd7f205, { roughness: 0.6 });
-const bodyMesh = rbox(0.62, 0.56, 0.62, 0.09, skin);
-bodyMesh.position.y = 0.4;
-mascot.add(bodyMesh);
-for (const [x, z] of [[-0.19, -0.19], [0.19, -0.19], [-0.19, 0.19], [0.19, 0.19]]) mascot.add(at(rbox(0.16, 0.16, 0.16, 0.04, skin), x, 0.08, z));
-const eyes = [];
-for (const sgn of [-1, 1]) {
-  const e = new THREE.Mesh(new THREE.PlaneGeometry(0.095, 0.16), new THREE.MeshBasicMaterial({ color: INK }));
-  e.position.set(sgn * 0.13, 0.45, 0.312);
-  mascot.add(e);
-  eyes.push(e);
-}
+const HERO_SCALE = 0.42;
+const hero = new SoftBody({ cast: 'wall', color: '#d7f205', edge: 0.14 });
+hero.group.scale.setScalar(HERO_SCALE);
+mascot.add(hero.group);
 mascot.rotation.y = rad(45); // the face looks straight down the camera's diagonal
 scene.add(mascot);
+const trail = new RainbowTrail(scene, { n: 22, band: 0.03 });
+
+// How each play style gets from tile to tile (s and world units). pre: wind-up squash before it leaves. dur: time in the air.
+// h: arc height. The jelly does the rest: it squashes as the carrier launches, floats at the top and splats when it stops.
+const HOPS = {
+  wall: { pre: 0.16, dur: 0.5, h: 0.35, heavy: true }, // barely leaves the ground, lands like a brick
+  moon: { pre: 0.12, dur: 0.78, h: 2.1 }, // a huge floaty moonball
+  bot: { pre: 0.06, dur: 0.4, h: 0.8, turn: true }, // snaps round in robotic quarter turns
+  goblin: { pre: 0.05, dur: 0.5, h: 0.32, double: true }, // two sneaky little skips
+  grunter: { pre: 0.24, dur: 0.45, h: 1.0 }, // a long effortful load-up
+  junk: { pre: 0.09, dur: 0.52, h: 0.8, wobble: true }, // wobbles off line and back
+  comet: { pre: 0.04, dur: 0.3, h: 0.4 }, // a low lunge
+  ghost: { pre: 0.1, dur: 0.72, h: 0.5, glide: true }, // glides over, never really lands
+  lobber: { pre: 0.12, dur: 0.62, h: 1.6, sly: true }, // lobs itself, smug about it
+  rabbit: { pre: 0.03, dur: 0.2, h: 0.22, trail: true }, // zips, leaving a rainbow
+};
+const hopOf = () => HOPS[hero.cast] || HOPS.wall;
+// What each one does while it waits on a tile (every 4.5 s or so).
+const IDLE = {
+  rabbit: () => [0, 40, 80, 120, 160, 200].forEach((ms, i) => setTimeout(() => hero.kick(i % 2 ? -1.2 : 1.2, 0, 0), ms)), // can't keep still
+  moon: () => hero.kick(0, 4.5, 0),
+  bot: () => hero.spin(Math.random() < 0.5 ? 4 : -4),
+  goblin: () => hero.kick(Math.random() < 0.5 ? 1.5 : -1.5, 2.4, 0),
+  grunter: () => [0, 60, 120].forEach((ms, i) => setTimeout(() => hero.kick(i % 2 ? -1.4 : 1.4, 0.4, 0), ms)),
+  junk: () => hero.poke(hero.com().add(new THREE.Vector3(0.3, 0.5, 0.3)), new THREE.Vector3(-0.5, -0.5, 0), 2.4),
+  comet: () => hero.kick(0, 1.8, 2.2),
+  ghost: () => hero.spin(2.4),
+  lobber: () => { hero.mood.sly = 1.4; },
+  wall: () => hero.poke(hero.com().add(new THREE.Vector3(0, 0.8, 0)), new THREE.Vector3(0, -1, 0), 1.4, 0.7),
+};
+const carrier = { p: new THREE.Vector3(), v: new THREE.Vector3(), ready: false, idleAt: 4 };
 
 // State.
 const st = {
-  at: 0, target: 0, hop: null, squash: { x: 0, v: 0 }, clock: 0, lit: 0,
+  at: 0, target: 0, hop: null, clock: 0, lit: 0,
   cam: { x: spots[0].x, y: spots[0].y, z: spots[0].z, vx: 0, vy: 0, vz: 0 },
 };
 function spring(s, target, dt, hz, ratio) {
@@ -450,7 +475,7 @@ function slideRender(t) {
   $('skid').style.width = `${sl.x > 2 ? sl.x + BALL / 2 + 6 : 0}px`;
 }
 /** The ball reached the baseline: the fighter springs, then we go in. */
-function onSlid() { st.squash.x = -0.3; st.squash.v = 0; post({ type: 'slid' }); setTimeout(enter, 260); }
+function onSlid() { hero.kick(0, 6, 0); hero.mood.happy = 0.8; post({ type: 'slid' }); setTimeout(enter, 260); }
 const dock = $('dock');
 dock.insertAdjacentHTML('beforeend', PLACES.map((p, k) => `<button class="slot" data-i="${k + 1}"><span class="pf"></span><span class="lbl">${p.label}</span></button>`).join(''));
 dock.addEventListener('click', (e) => { const b = e.target.closest('.slot'); if (b) goTo(Number(b.dataset.i)); });
@@ -573,7 +598,8 @@ canvas.addEventListener('pointerup', (e) => {
 });
 
 window.setHome = (d) => {
-  skin.color.set(d.color);
+  hero.setColor(d.color);
+  if (d.cast && d.cast !== hero.cast) hero.setCast(d.cast, false);
   mirrorDisc.material.color.set(d.color);
   st.record = d.record; // shown on the standings key, where a record means something
   st.gear = d.gear; // what is worn out, shown on the gear key
@@ -589,20 +615,40 @@ function advance(dt) {
   if (!st.hop && st.at !== st.target) {
     const to = st.at + Math.sign(st.target - st.at);
     st.hop = { from: st.at, to, t: 0 };
+    if (hopOf().sly) hero.mood.sly = 1;
     post({ type: 'hop' });
   }
   if (st.hop) {
     st.hop.t += dt;
-    if (st.hop.t >= 0.09 + 0.42) {
+    const hp = hopOf();
+    if (st.hop.t >= hp.pre + hp.dur) {
       st.at = st.hop.to;
       st.hop = null;
-      st.squash.x = 0.28; st.squash.v = 0;
-      tiles[st.at].userData.dip.x = 0.07; tiles[st.at].userData.dip.v = 0;
+      tiles[st.at].userData.dip.x = hp.heavy ? 0.16 : 0.07; tiles[st.at].userData.dip.v = 0;
+      if (hp.heavy) hero.kick(0, -4, 0);
+      carrier.idleAt = st.clock + 4.5;
       post({ type: 'land' });
       if (st.at === st.target && st.enterOnLand) { st.enterOnLand = false; setTimeout(enter, 260); }
     }
   }
-  spring(st.squash, 0, dt, 3.2, 0.45);
+  // Carry the jelly: place the carrier on its path, then hand the jelly the carrier's acceleration (in its own units, capped).
+  {
+    const p = carrierPos();
+    if (!carrier.ready) { carrier.p.copy(p); carrier.ready = true; }
+    const vel = p.clone().sub(carrier.p).divideScalar(dt);
+    const acc = vel.clone().sub(carrier.v).divideScalar(dt);
+    carrier.p.copy(p); carrier.v.copy(vel);
+    // Up and down it only feels the jolts (takeoff, landing), not the smooth arc between, or it would float off its own feet.
+    if (Math.abs(acc.y) < 150) acc.y = 0;
+    const local = acc.applyQuaternion(mascot.quaternion.clone().invert()).multiplyScalar(0.6 / HERO_SCALE);
+    const dv = local.multiplyScalar(dt).clampLength(0, 5);
+    hero.kick(-dv.x, -dv.y, -dv.z);
+    const hp = hopOf();
+    const pre = st.hop && st.hop.t < hp.pre ? st.hop.t / hp.pre : 0;
+    hero.squash = Math.max(pre * (hp.heavy ? 0.9 : 0.7), 0.7 * charge); // wind-up, or pulling the ball loads the fighter
+    hero.simulate(dt, st.clock);
+    if (!st.hop && st.clock > carrier.idleAt) { carrier.idleAt = st.clock + 4.5 + Math.random(); (IDLE[hero.cast] || (() => {}))(); }
+  }
   for (const t of tiles) {
     spring(t.userData.dip, 0, dt, 2.6, 0.5);
     const want = t.userData.i === st.target && t.userData.i > 0 ? 1 : 0;
@@ -620,6 +666,20 @@ function advance(dt) {
 
 const tileY = (i) => tiles[i].position.y;
 
+/** Where the carrier is right now: on its tile, or somewhere along this play style's hop. */
+function carrierPos() {
+  if (!st.hop) return tiles[st.at].position.clone().add(STAND);
+  const hp = hopOf();
+  const a = tiles[st.hop.from].position.clone().add(STAND);
+  const b = tiles[st.hop.to].position.clone().add(STAND);
+  const k = THREE.MathUtils.clamp((st.hop.t - hp.pre) / hp.dur, 0, 1);
+  const kk = hp.glide ? k * k * (3 - 2 * k) : k;
+  const p = a.clone().lerp(b, kk);
+  p.y += hp.double ? hp.h * Math.abs(Math.sin(Math.PI * 2 * k)) : hp.h * 4 * k * (1 - k);
+  if (hp.wobble) p.addScaledVector(new THREE.Vector3(b.z - a.z, 0, a.x - b.x).normalize(), 0.25 * Math.sin(Math.PI * 3 * k) * (1 - k));
+  return p;
+}
+
 function pose() {
   const t = st.clock;
   for (const g of tiles) {
@@ -631,33 +691,21 @@ function pose() {
     if (u.labelMat.map !== u.faces[lit]) { u.labelMat.map = u.faces[lit]; u.labelMat.needsUpdate = true; }
     u.floorShadow.position.set(g.position.x + 0.3, FLOOR_Y, g.position.z + 0.3);
   }
-  // Mascot.
-  let stretch = 1 + 0.025 * Math.sin((t * Math.PI * 2) / 2.2);
-  if (st.hop) {
-    const a = tiles[st.hop.from].position.clone().add(STAND);
-    const b = tiles[st.hop.to].position.clone().add(STAND);
-    const pre = Math.min(1, st.hop.t / 0.09);
-    const k = THREE.MathUtils.clamp((st.hop.t - 0.09) / 0.42, 0, 1);
-    mascot.position.lerpVectors(a, b, k);
-    mascot.position.y += 0.95 * 4 * k * (1 - k);
-    stretch = k <= 0 ? 1 - 0.22 * pre : 1 + 0.14 * Math.sin(Math.PI * k);
-    mascot.rotation.z = rad(-7) * Math.sin(Math.PI * k) * (b.x - a.x > 0 ? 1 : -1);
-  } else {
-    mascot.position.copy(tiles[st.at].position).add(STAND);
-    mascot.rotation.z = 0;
-  }
-  stretch -= st.squash.x + 0.22 * charge; // pulling the ball loads the fighter
-  mascot.scale.set(1 / Math.sqrt(stretch), stretch, 1 / Math.sqrt(stretch));
+  // Mascot: the carrier sits on its path; the jelly draws itself.
+  mascot.position.copy(carrierPos());
+  const hp = hopOf();
+  const hk = st.hop ? THREE.MathUtils.clamp((st.hop.t - hp.pre) / hp.dur, 0, 1) : 0;
+  mascot.rotation.y = rad(45) + (st.hop && hp.turn ? (Math.PI / 2) * Math.floor(hk * 4) : 0);
+  hero.render(t);
+  trail.update(hero.group.localToWorld(hero.com()), !!st.hop && hp.trail && hk > 0 && hk < 1);
   // Its shadow stays on the tile it is over and tightens as it rises.
-  const ground = st.hop ? THREE.MathUtils.lerp(tiles[st.hop.from].position.y, tiles[st.hop.to].position.y, THREE.MathUtils.clamp((st.hop.t - 0.09) / 0.42, 0, 1)) : tiles[st.at].position.y;
+  const ground = st.hop ? THREE.MathUtils.lerp(tiles[st.hop.from].position.y, tiles[st.hop.to].position.y, hk) : tiles[st.at].position.y;
   const height = Math.max(0, mascot.position.y - ground);
   footShadow.position.set(mascot.position.x, ground + 0.012, mascot.position.z);
   footShadow.scale.setScalar(1 - 0.45 * Math.min(1, height / 0.95));
   footShadow.material.opacity = 0.75 - 0.4 * Math.min(1, height / 0.95);
   slideRender(t);
   dockRender();
-  const blink = (t % 3.1) < 0.11 ? 0.12 : 1;
-  for (const e of eyes) e.scale.y = blink;
   // Props.
   const bt = (t % 0.9) / 0.9;
   ball.position.y = 0.13 + 0.34 * 4 * bt * (1 - bt);

@@ -2,7 +2,6 @@ import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { BackSwing } from '@/components/back-swing';
@@ -17,7 +16,6 @@ const KEYS = ['ucsd', 'lindavista', 'balboa', 'roosevelt', 'northpark', 'barnes'
 export default function Season() {
   const roster = useRoster();
   const matches = useMatches();
-  const insets = useSafeAreaInsets();
   const web = useRef<WebView>(null);
   const ready = useRef(false);
 
@@ -66,9 +64,7 @@ export default function Season() {
           }
         }}
       />
-      <View style={[styles.back, { top: insets.top + 4 }]} pointerEvents="box-none">
-        <BackSwing />
-      </View>
+      <BackSwing floating />
     </View>
   );
 }
@@ -76,5 +72,4 @@ export default function Season() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#ebe8e2' },
   web: { flex: 1, backgroundColor: '#ebe8e2' },
-  back: { position: 'absolute', left: 12 },
 });

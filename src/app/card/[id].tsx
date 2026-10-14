@@ -6,11 +6,12 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
 
+import { BackSwing } from '@/components/back-swing';
 import { FighterAvatar } from '@/components/fighter';
 import { Underlined } from '@/components/brush-stroke';
 import { C } from '@/constants/arcade';
 import { computeSeason, useMatches } from '@/lib/matches';
-import { goBack, goHome } from '@/lib/nav';
+import { goHome } from '@/lib/nav';
 import { useRoster } from '@/lib/roster';
 
 export default function MatchCard() {
@@ -26,7 +27,7 @@ export default function MatchCard() {
   const l = award ? byId(award.loser) : undefined;
 
   if (!match || !award || !w || !l) {
-    return <View style={[styles.root, styles.center]}><Text style={styles.dim}>Match not found.</Text><Pressable onPress={goBack}><Text style={styles.link}>BACK</Text></Pressable></View>;
+    return <View style={[styles.root, styles.center]}><Text style={styles.dim}>Match not found.</Text><BackSwing /></View>;
   }
   const winnerIsP1 = award.winner === match.p1;
   const line = match.sets.map(([a, b]) => (winnerIsP1 ? `${a}–${b}` : `${b}–${a}`)).join('   ');

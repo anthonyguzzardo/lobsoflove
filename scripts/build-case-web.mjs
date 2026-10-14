@@ -124,7 +124,6 @@ const courtsCss = homeCss + `
 #back.show{opacity:1;pointer-events:auto}
 #h2{color:var(--accent,#e2562f);font-size:13px;line-height:1.25;margin-top:4px;font-weight:700}#h1{font-size:23px}
 #h1{text-transform:uppercase}
-#home{pointer-events:auto;align-self:flex-start;font:800 11px var(--mono);letter-spacing:.12em;color:var(--ink);background:none;border:0;padding:8px 14px 8px 0;margin:-4px 0 2px}
 /* One row of facts, read in a glance: a drawn court with the count, a drawn floodlight that is lit or not, and the song. */
 #facts{display:flex;align-items:center;gap:16px;margin-top:10px;pointer-events:auto}
 #facts .fact{display:flex;align-items:center;gap:6px;flex:none}
@@ -151,33 +150,10 @@ const courtsCss = homeCss + `
 #dock .lbl{font-size:9px;letter-spacing:.06em}
 #ctl button{font:800 9.5px var(--mono);letter-spacing:.1em;border:1.5px solid var(--ink);border-radius:2px;padding:4px 6px;background:none;color:var(--ink)}
 #ctl #mute{background:var(--accent,#e2562f)}
-#ui.dive>*:not(#home){opacity:0;transition:opacity .28s}
-#ui.dive>#home{color:#fffdf0;background:rgba(22,24,29,.72);border-radius:3px;padding:8px 12px;margin-top:-2px}
+#ui.dive>*{opacity:0;transition:opacity .28s}
 #fade{transition:opacity .5s}body.dive #fade{opacity:0}
 `;
 const courtsCssExtra = `
-/* A floating tennis ball on a small paper platform. */
-#home,#ui.dive>#home{all:unset;position:fixed;left:12px;top:calc(env(safe-area-inset-top) + 2px);width:60px;height:56px;pointer-events:auto;z-index:5;cursor:pointer;touch-action:manipulation;transition:transform .2s}
-#home svg{width:60px;height:56px;display:block;overflow:visible}
-#home:focus-visible{outline:2px solid var(--ink);outline-offset:4px;border-radius:12px}
-#home .ball{transform-origin:35px 23px;animation:backIdle 2.1s ease-in-out infinite}
-#home .seam{transform-origin:35px 23px;animation:backRoll 2.1s ease-in-out infinite}
-#home .ball-shadow{transform-origin:35px 41px;animation:backShadow 2.1s ease-in-out infinite}
-#home .trail{opacity:0;transform-origin:30px 28px}
-#home.held{transform:translateY(2px) scale(.95)}
-#home.held .ball{animation:none;transform:translateX(5px) scale(.86,1.1)}
-#home.held .seam{animation-play-state:paused}
-#home.swing .ball{animation:backhand .28s ease-in forwards}
-#home.swing .seam{animation:backSpin .28s ease-in forwards}
-#home.swing .trail{animation:backRibbon .28s ease-out forwards}
-#home.swing .ball-shadow{animation:none;opacity:0}
-@keyframes backIdle{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-@keyframes backRoll{0%,100%{transform:rotate(-18deg)}50%{transform:rotate(24deg)}}
-@keyframes backShadow{0%,100%{opacity:.3;transform:scaleX(1)}50%{opacity:.17;transform:scaleX(.7)}}
-@keyframes backhand{0%,12%{transform:translateX(5px) scale(.86,1.1)}55%{transform:translate(-14px,-10px) scale(1.2,.88);opacity:1}100%{transform:translateX(-48px);opacity:0}}
-@keyframes backSpin{to{transform:rotate(-160deg)}}
-@keyframes backRibbon{0%{opacity:0;transform:scaleX(.7)}45%{opacity:1}100%{opacity:0;transform:translateX(-18px) scaleX(1.3)}}
-@media(prefers-reduced-motion:reduce){#home,#home *{animation:none!important;transition:none!important}#home.held,#home.held .ball{transform:none}}
 /* The song for this court: one quiet line under the facts. The disc toggles sound, the title opens it in Apple Music. */
 #songline{display:flex;align-items:center;gap:7px;min-width:0;flex:1;pointer-events:auto}
 #songline #mute{all:unset;width:24px;height:24px;border-radius:50%;background:var(--accent,#e2562f);color:var(--ink);font:800 12px var(--mono);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 2px 0 rgba(22,24,29,.35)}
@@ -187,13 +163,51 @@ const courtsCssExtra = `
 #ui{padding-top:calc(env(safe-area-inset-top) + 2px)!important}
 `;
 const courtsBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
-<button id="home" aria-label="Back"><svg viewBox="0 0 60 56" aria-hidden="true"><defs><radialGradient id="back-felt" cx="30%" cy="25%" r="80%"><stop offset="0" stop-color="#f1ff8d"/><stop offset=".55" stop-color="#d7f205"/><stop offset="1" stop-color="#8ca511"/></radialGradient></defs><path d="M8 42Q30 34 52 42L48 48Q30 55 12 48Z" fill="#d5cdbd"/><path d="M8 42Q30 32 52 42Q30 53 8 42" fill="#fffdf0" stroke="#c5bdac"/><path d="M19 40L14 43L19 46M15 43H27" fill="none" stroke="#16181d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><ellipse class="ball-shadow" cx="35.5" cy="41.5" rx="11.5" ry="2.5" fill="#16181d"/><g class="trail" fill="none" stroke-linecap="round"><path d="M9 26C24 2 33 43 55 17" stroke="#e2562f" stroke-width="3"/><path d="M11 30C28 7 35 47 57 23" stroke="#7e91c9" stroke-width="2"/></g><g class="ball"><circle cx="35" cy="23" r="13" fill="url(#back-felt)"/><g class="seam"><path d="M26 13C37 18 37 28 26 33M44 13C33 18 33 28 44 33" fill="none" stroke="#fffdf0" stroke-width="1.8"/></g></g></svg></button><header hidden><h1></h1><p id="sub"></p><div class="meter"><div class="bar"><i id="fill"></i></div><div id="pct"></div></div></header>
 <div class="grow"></div>
 <div id="head"><div id="h1"></div><div id="h2"></div><div id="facts"><span class="fact" id="count"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" rx="1.5" fill="var(--accent,#e2562f)"/><path d="M11 1v12M5.5 3.5v7M16.5 3.5v7M5.5 7h11" stroke="#fffdf0" stroke-width="1.1" fill="none"/></svg><b></b><small>COURTS</small></span><span class="fact" id="lights"><svg viewBox="0 0 22 22" aria-hidden="true"><g class="rays"><path d="M4 9 1 7.5M4 12H1M5 15l-2.5 2" stroke="#e9b535" stroke-width="1.6" stroke-linecap="round"/></g><path d="M12 8v13" stroke="currentColor" stroke-width="1.8"/><rect class="head" x="5" y="3" width="11" height="6" rx="1.5"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b></b></span><button class="fact" id="listen" aria-label="Sound on. Tap to mute."><svg viewBox="0 0 22 22" aria-hidden="true"><path d="M3 8.5h4l5-4v13l-5-4H3z" fill="currentColor"/><g class="waves" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M15 8.2a4 4 0 0 1 0 5.6"/><path d="M17.6 5.8a7.5 7.5 0 0 1 0 10.4"/></g><path class="x" d="M15.5 8.5l5 5M20.5 8.5l-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b id="lstxt">SOUND</b></button></div><div id="blurb"></div></div>
 <div id="enter" role="slider" aria-label="Slide the ball to go in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>
 <div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div>
 </div>`;
 emit('courts-html.ts', 'COURTS_HTML', page({ css: courtsCss + courtsCssExtra, body: courtsBody, pre: `window.VENUES=${readFileSync(`${root}src/data/venues.json`)};`, js: bundle('web/courts.js') }));
+
+// Standings: the tesseract. Jelly fighters weightless in a corridor of smeared books; their lines hang under them.
+const standingsCss = `
+:root{--cream:#efe3cf;--amber:#e0a35a;--dim:#8c8077;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+body{background:#050507;color:var(--cream);font-family:-apple-system,"Helvetica Neue",Helvetica,sans-serif}
+#c{position:fixed;inset:0}
+#vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(115% 85% at 50% 45%,rgba(5,5,7,0) 55%,rgba(5,5,7,.8) 100%)}
+#top{position:fixed;left:0;right:0;top:0;height:calc(env(safe-area-inset-top) + 170px);pointer-events:none;background:linear-gradient(180deg,rgba(5,5,7,.92) 0%,rgba(5,5,7,.75) 55%,rgba(5,5,7,0) 100%)}
+#head{position:fixed;left:18px;right:56px;top:calc(env(safe-area-inset-top) + 70px);pointer-events:none}
+#kick{font:700 10.5px var(--mono);letter-spacing:.55em;color:var(--amber)}
+#title{font-weight:200;font-size:29px;letter-spacing:.34em;margin-top:5px}
+#tags{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.tag{position:absolute;left:0;top:0;display:flex;align-items:center;gap:9px;white-space:nowrap;transform-origin:50% 0;will-change:transform,opacity;padding:7px 12px 9px;border-top:1px solid rgba(224,163,90,.4);background:linear-gradient(180deg,rgba(5,5,7,.6),rgba(5,5,7,0));opacity:0}
+.tag .rk{font-weight:200;font-size:27px;line-height:1;color:var(--dim)}
+.tag .nm{font-weight:800;font-style:italic;font-size:14px;letter-spacing:.06em}
+.tag .sub{font:600 10px var(--mono);letter-spacing:.14em;color:var(--dim);margin-top:2px}
+.tag .pt{font-weight:200;font-size:25px;line-height:1;margin-left:4px}
+.tag.lead{border-top-color:var(--amber)}.tag.lead .rk,.tag.lead .pt{color:var(--amber)}
+.tag.on{border-top-width:2px;border-top-color:var(--cream)}
+#rail{position:fixed;right:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:4px}
+#rail button{all:unset;font:700 10px var(--mono);color:var(--dim);width:28px;height:24px;line-height:24px;text-align:center;border-right:2px solid rgba(140,128,119,.3);transition:color .2s,border-color .2s}
+#rail button.on{color:var(--amber);border-right-color:var(--amber)}
+#bottom{position:fixed;left:0;right:0;bottom:0;padding-bottom:calc(env(safe-area-inset-bottom) + 10px);background:linear-gradient(180deg,rgba(5,5,7,0),rgba(5,5,7,.88) 38%);pointer-events:none}
+#mk{font:700 10px var(--mono);letter-spacing:.55em;color:var(--amber);padding:22px 18px 8px}
+#matches{display:flex;gap:8px;overflow-x:auto;padding:0 18px 4px;touch-action:pan-x;-webkit-overflow-scrolling:touch;scrollbar-width:none;pointer-events:auto}
+#matches::-webkit-scrollbar{display:none}
+.m{all:unset;flex:none;display:flex;gap:9px;align-items:stretch;padding:8px 12px 8px 0;max-width:230px;border:1px solid #3a2c24;border-top-color:rgba(239,227,207,.35);background:rgba(14,12,12,.82);border-radius:3px;transition:transform .12s cubic-bezier(.16,1,.3,1)}
+.m:active{transform:translateX(5px) scale(.96)}
+.m i{width:4px;flex:none;border-radius:1px}
+.m .mn{font-weight:800;font-style:italic;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m .ms{font:600 10px var(--mono);letter-spacing:.06em;color:var(--dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m .w{color:var(--amber)}
+#empty{display:none;font-size:13px;color:var(--dim);padding:0 18px 6px}
+`;
+const standingsBody = `<canvas id="c"></canvas><div id="vig"></div><div id="top"></div><div id="tags"></div>
+<div id="head"><div id="kick">SEASON 1</div><div id="title">STANDINGS</div></div>
+<div id="rail"></div>
+<div id="bottom"><div id="mk">MATCHES</div><div id="empty">Love–love. Nobody has played yet.</div><div id="matches"></div></div>`;
+emit('standings-html.ts', 'STANDINGS_HTML', page({ css: standingsCss, body: standingsBody, js: bundle('web/standings.js') }));
 
 // Ink: the write-anything canvas. Plain 2D canvas, no three.js. #safe only exists so the page can read the notch inset.
 emit('ink-html.ts', 'INK_HTML', page({ css: 'body{background:#efece5}#safe{position:fixed;padding-top:env(safe-area-inset-top);visibility:hidden;pointer-events:none}', body: '<div id="safe"></div><canvas id="c"></canvas>', js: bundle('web/ink.js') }));

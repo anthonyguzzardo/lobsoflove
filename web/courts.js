@@ -29,7 +29,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setClearColor(PAPER, 1);
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(PAPER, 28, 42); // the world below a tile you just left falls away into the paper
+scene.fog = new THREE.Fog(PAPER, 36, 54); // the world below a tile you just left falls away into the paper
 const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 120);
 scene.add(new THREE.HemisphereLight(0xffffff, 0xe6dfd2, 1.55));
 const sun = new THREE.DirectionalLight(0xfff4e4, 2.1);
@@ -493,6 +493,7 @@ const FLAVOR = {
  * Each world is built facing the camera: local x runs to screen right, local -z runs up the screen (away from you).
  */
 const WORLD_Y = -3.2;
+const AWAY = 0.36; // the arenas you are not on shrink to this, so the world below stays in view
 const GROUND = { ucsd: 0x8f9e74, lindavista: 0xa7a98c, balboa: 0x86a865, roosevelt: 0x7fa060, northpark: 0xb3ab9d };
 const facing = () => { const f = new THREE.Group(); f.rotation.y = Math.PI / 4; return f; };
 
@@ -508,13 +509,13 @@ function plainWorld(v, w, g) {
   props.updateMatrixWorld(true);
   const pb = new THREE.Box3().setFromObject(props);
   if (!pb.isEmpty()) {
-    // Long strips run up the screen beside the tile instead of hiding behind it.
+    // Landmarks sit in the open space above the arena; long strips run up the screen.
     if (pb.max.x - pb.min.x > pb.max.z - pb.min.z) props.rotation.y = Math.PI / 2;
     const k = 1.6;
     props.scale.setScalar(k);
     props.updateMatrixWorld(true);
     const rb = new THREE.Box3().setFromObject(props);
-    props.position.set(-2.5 - (rb.min.x + rb.max.x) / 2, -rb.min.y, -4.6 - (rb.min.z + rb.max.z) / 2);
+    props.position.set(-0.9 - (rb.min.x + rb.max.x) / 2, -rb.min.y, -7.2 - (rb.min.z + rb.max.z) / 2);
   }
   f.add(props);
   return anim;
@@ -724,7 +725,7 @@ function build(data) {
     const end = toWorld(L / 2 - 0.06, count > 1 ? (count - 1) / 2 * pitch : 0).multiplyScalar(scaleA);
     const spot = end.dot(CAM) > 0 ? end : end.multiplyScalar(-1);
     g.traverse((o) => { o.userData.island = i; });
-    g.userData = { anim, boardMeshes, i, base, period: 3.6 + (i % 3) * 0.6, phase: i * 1.7, dip: sp(), sink: sp(), glow: 0, world, rise: sp(), pad, labelMat, faces, boards, spot: spot.setY(0.04), shadow: blob(SIDE * 1.9, 0.5), stand: new THREE.Vector3(SIDE / 2 - 0.3, 0, SIDE / 2 - 0.3) };
+    g.userData = { anim, boardMeshes, i, base, period: 3.6 + (i % 3) * 0.6, phase: i * 1.7, dip: sp(), sink: sp(), glow: 0, world, rise: sp(), size: sp(i === 0 ? 1 : AWAY), pad, labelMat, faces, boards, spot: spot.setY(0.04), shadow: blob(SIDE * 1.9, 0.5), stand: new THREE.Vector3(SIDE / 2 - 0.3, 0, SIDE / 2 - 0.3) };
     scene.add(g, g.userData.shadow);
     islands.push(g);
   });
@@ -852,9 +853,9 @@ function onSlid() { st.squash.x = -0.3; st.squash.v = 0; post({ type: 'slid' });
 function paint() {
   const v = venues[st.target];
   const n = venues.length;
-  $('pct').textContent = `${String(st.target + 1).padStart(2, '0')} / ${String(n).padStart(2, '0')}`;
-  $('fill').style.width = `${((st.target + 1) / n) * 100}%`;
-  $('fill').style.background = v.accent;
+  const pct = $('pct'); if (pct) pct.textContent = `${String(st.target + 1).padStart(2, '0')} / ${String(n).padStart(2, '0')}`;
+  const fill = $('fill'); // the header meter is optional: the page may be built without it
+  if (fill) { fill.style.width = `${((st.target + 1) / n) * 100}%`; fill.style.background = v.accent; }
   document.documentElement.style.setProperty('--accent', v.accent);
   $('h1').textContent = `${v.name}.`;
   $('h2').textContent = v.tagline;
@@ -864,7 +865,7 @@ function paint() {
   // Stats only once there is something to say; an empty record is noise.
   $('blurb').textContent = v.played ? [`${v.played} played here`, v.king ? `king: ${v.king}` : null, `you ${v.rec}`].filter(Boolean).join(' · ') : '';
   setKey(String(st.target + 1), 'JUMP IN', 'SLIDE TO PLAY HERE');
-  $('sub').textContent = 'your six. the song is on the wall.';
+  const sub = $('sub'); if (sub) sub.textContent = 'your six. the song is on the wall.';
 }
 
 // The dock: one floating platform per venue in its own color. A real ball hops to the one you pick, with your fighter.
@@ -958,7 +959,6 @@ function enter() {
   $('ui').classList.add('dive');
   document.body.classList.add('dive'); // the paper fades lift too, so the court fills the screen
   post({ type: 'dive' });
-  $('home').classList.add('out');
   const id = venues[st.at].id;
   st.pickTimer = setTimeout(() => post({ type: 'pick', id }), 2600); // long enough to actually be inside the court before moving on
 }
@@ -970,12 +970,10 @@ function undive() {
   st.jump = null;
   $('ui').classList.remove('dive');
   document.body.classList.remove('dive');
-  $('home').classList.remove('out');
 }
 window.undive = undive;
-// Back is always one step: out of the court if you are in one, otherwise off this screen.
-// Wind up on touch; only a completed click sends the ball back.
-let backPending = false;
+// Back is always one step: out of the court if you are in one, otherwise off this screen. The app's back button calls this.
+window.back = () => { if (st.diving) undive(); else post({ type: 'back' }); };
 // The record beside the lights opens this court's song in Apple Music.
 // Sound: the record beside the lights is the mute button (tapping the wall board does the same). It spins while the song plays.
 function setMuted(m) {
@@ -987,26 +985,6 @@ function setMuted(m) {
   $('listen').setAttribute('aria-label', m ? 'Muted. Tap for sound.' : 'Sound on. Tap to mute.');
 }
 $('listen').addEventListener('click', () => setMuted(!st.muted));
-const backControl = $('home');
-const releaseBack = () => backControl.classList.remove('held');
-backControl.addEventListener('pointerdown', () => {
-  if (!backPending) backControl.classList.add('held');
-});
-backControl.addEventListener('pointerup', releaseBack);
-backControl.addEventListener('pointerleave', releaseBack);
-backControl.addEventListener('pointercancel', releaseBack);
-backControl.addEventListener('click', () => {
-  if (backPending) return;
-  backPending = true;
-  releaseBack();
-  backControl.classList.add('swing');
-  post({ type: 'press' });
-  setTimeout(() => {
-    backControl.classList.remove('swing');
-    backPending = false;
-    if (st.diving) undive(); else post({ type: 'back' });
-  }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 280);
-});
 
 const ray = new THREE.Raycaster();
 let down = null;
@@ -1036,7 +1014,7 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-const standOn = (i) => islands[i].position.clone().add(islands[i].userData.stand);
+const standOn = (i) => islands[i].position.clone().add(islands[i].userData.stand.clone().multiplyScalar(islands[i].userData.size.x));
 const HOP = 0.62;
 
 function advance(dt) {
@@ -1065,6 +1043,7 @@ function advance(dt) {
   for (const g of islands) {
     const u = g.userData;
     spring(u.dip, 0, dt, 2.6, 0.5);
+    spring(u.size, u.i === (st.hop ? st.hop.to : st.at) ? 1 : AWAY, dt, 1.6, 0.8); // the arena you are on is full size, the rest shrink back
     spring(u.rise, u.i === (st.hop ? st.hop.to : st.at) ? 1 : 0, dt, 0.9, 1); // the ground of where you are rises; the last one falls away
     spring(u.sink, st.diving && u.i !== st.at ? 1 : 0, dt, 1.4, 0.9);
     for (const tex of u.boards) tex.offset.x += dt * 0.07 * tex.repeat.x;
@@ -1086,6 +1065,8 @@ function pose() {
   for (const g of islands) {
     const u = g.userData;
     g.position.copy(u.base);
+    g.scale.setScalar(u.size.x);
+    u.shadow.scale.setScalar(u.size.x);
     g.position.y += 0.035 * Math.sin((t * Math.PI * 2) / u.period + u.phase) * (1 - st.dive.x) - u.dip.x - 7 * u.sink.x;
     g.visible = u.sink.x < 0.97;
     u.world.position.set(u.base.x, WORLD_Y - 12 * (1 - u.rise.x), u.base.z);

@@ -6,7 +6,6 @@ import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { BackSwing } from '@/components/back-swing';
@@ -109,7 +108,6 @@ export default function Closet() {
   const [demo] = useState(() => demoCloset(Date.now()));
   const items = params.demo === '1' ? demo : saved;
   const matches = useMatches();
-  const insets = useSafeAreaInsets();
   const web = useRef<WebView>(null);
   const ready = useRef(false);
   const focused = useRef<string | null>(null);
@@ -210,9 +208,7 @@ export default function Closet() {
           }
         }}
       />
-      <View style={[styles.back, { top: insets.top + 4 }]} pointerEvents="box-none">
-        <BackSwing onBack={back} />
-      </View>
+      <BackSwing floating onBack={back} />
       {editing ? (
         <KeyboardAvoidingView style={styles.sheet} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <Pressable style={StyleSheet.absoluteFill} onPress={commit} accessibilityLabel="Done" />
@@ -250,7 +246,6 @@ const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
   web: { flex: 1, backgroundColor: '#efece5' },
-  back: { position: 'absolute', left: 12 },
   sheet: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(239,236,229,0.92)', justifyContent: 'flex-end', paddingHorizontal: 16 },
   card: { backgroundColor: '#fffdf8', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#16181d', shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 5 } },
   label: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: '#e2562f' },

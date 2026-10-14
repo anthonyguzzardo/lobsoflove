@@ -3,7 +3,6 @@ import { useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { BackSwing } from '@/components/back-swing';
@@ -34,7 +33,6 @@ const FIELDS: Record<Field, { label: string; max: number; placeholder: string }>
 export default function MakeYourFighter() {
   const params = useLocalSearchParams<{ demo?: string }>();
   const roster = useRoster();
-  const insets = useSafeAreaInsets();
   const you = roster.find((f) => f.isYou) ?? roster[0];
   const [draft, setDraft] = useState<Fighter>(you);
   const [editing, setEditing] = useState<Field | null>(null);
@@ -114,9 +112,7 @@ export default function MakeYourFighter() {
           }
         }}
       />
-      <View style={[styles.back, { top: insets.top + 4 }]} pointerEvents="box-none">
-        <BackSwing />
-      </View>
+      <BackSwing floating />
       {editing ? (
         <KeyboardAvoidingView style={styles.sheet} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <Pressable style={StyleSheet.absoluteFill} onPress={commit} accessibilityLabel="Done" />
@@ -155,7 +151,6 @@ const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
   web: { flex: 1, backgroundColor: '#efece5' },
-  back: { position: 'absolute', left: 12 },
   sheet: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(239,236,229,0.92)', justifyContent: 'flex-end', paddingHorizontal: 16 },
   card: { backgroundColor: '#fffdf8', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#16181d', shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 5 } },
   label: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: '#e2562f' },

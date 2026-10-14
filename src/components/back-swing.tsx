@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   type SharedValue,
@@ -134,8 +135,12 @@ function Puff({ go, p, i }: { go: SharedValue<number>; p: (typeof PUFFS)[number]
   );
 }
 
-/** A motley, smoking pill; touch winds the ball up, release sends it rushing right to left on a candy-rope trail. */
-export function BackSwing({ onBack = goBack }: { onBack?: () => void }) {
+/**
+ * The one back button for every screen: a motley, smoking pill; touch winds the ball up, release sends it rushing
+ * right to left on a candy-rope trail. `floating` pins it top left under the notch, over full-screen scenes and WebViews.
+ */
+export function BackSwing({ onBack = goBack, floating = false }: { onBack?: () => void; floating?: boolean }) {
+  const insets = useSafeAreaInsets();
   const go = useSharedValue(0);
   const held = useSharedValue(0);
   const clock = useSharedValue(0);
@@ -195,7 +200,7 @@ export function BackSwing({ onBack = goBack }: { onBack?: () => void }) {
     }, reducedMotion ? 0 : FLIGHT_MS + 30);
   };
 
-  return (
+  const button = (
     <Pressable
       hitSlop={12}
       accessibilityRole="button"
@@ -248,9 +253,12 @@ export function BackSwing({ onBack = goBack }: { onBack?: () => void }) {
       </Animated.View>
     </Pressable>
   );
+  if (!floating) return button;
+  return <View pointerEvents="box-none" style={[styles.floating, { top: insets.top + 4 }]}>{button}</View>;
 }
 
 const styles = StyleSheet.create({
+  floating: { position: 'absolute', left: 12, zIndex: 20 },
   hit: { alignSelf: 'flex-start', width: W + 4, height: H + 4, marginBottom: 6, zIndex: 10 },
   shadow: { position: 'absolute', left: 0, top: 0, width: W, height: H, borderRadius: H / 2, backgroundColor: INK },
   pill: { position: 'absolute', left: 0, top: 0, width: W, height: H, borderRadius: H / 2, borderWidth: 2.5, borderColor: INK },

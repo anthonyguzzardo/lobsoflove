@@ -34,6 +34,7 @@ export default function Home() {
   const data = JSON.stringify({
     name: you.name,
     color: you.color,
+    cast: you.cast,
     record: played ? `you: ${row?.wins}–${row?.losses}, ${row?.points} points` : '',
     place: played ? rows.findIndex((r) => r.id === you.id) + 1 : 0,
     gear: (() => { const due = dueList(closet, matches); return due.length ? `${due.length} due: ${due[0]}${due.length > 1 ? ', ...' : ''}` : ''; })(),
