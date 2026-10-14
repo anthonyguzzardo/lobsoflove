@@ -11,6 +11,7 @@
 //   three fast circles            leave (so do a swipe in from the left edge and a two-finger swipe down)
 
 import { drawBrush, paperGrain } from './lib/brush.js';
+import { DRAW_MS, drawEase, wobbleLine } from '../src/lib/brush.ts';
 
 const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
 window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
@@ -344,8 +345,18 @@ function drawCard(t) {
   let y = H * 0.3;
   const sizes = [46, 38, 22];
   c.lines.forEach((ln, i) => {
-    revealText(ln, cx, y, `700 ${sizes[i] ?? 22}px ${HAND}`, i === 0 && ln.startsWith('W') ? CLAY : INK, born + i * 110, t);
+    const hit = revealText(ln, cx, y, `700 ${sizes[i] ?? 22}px ${HAND}`, i === 0 && ln.startsWith('W') ? CLAY : INK, born + i * 110, t);
     y += (sizes[i] ?? 22) + 20;
+    if (i === 0) {
+      // The headline of the card gets the brush underline, drawing itself in once the words are written.
+      if (S.underBorn !== born) { S.underBorn = born; S.under = { pts: [], brush: null, full: wobbleLine(hit.x1 - hit.x0, 0, born % 97) }; }
+      const k = drawEase(clamp01((t - born - 320) / DRAW_MS));
+      if (k > 0) {
+        S.under.pts = S.under.full.slice(0, Math.max(2, Math.ceil(S.under.full.length * k))).map(([x, yy]) => [hit.x0 + x, hit.y1 + 10 + yy]);
+        drawBrush(g, [S.under], alpha, 11);
+      }
+      y += 14;
+    }
   });
   if (c.warn) { revealText(c.warn, cx, y + 4, `700 20px ${HAND}`, CLAY, born + 380, t); y += 40; }
 

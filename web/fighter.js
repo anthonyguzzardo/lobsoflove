@@ -329,6 +329,7 @@ function quatMat(q, out) {
 }
 const Rm = new Float32Array(9);
 const Rup = new Float32Array(9);
+const POSE = [Math.sin(-0.08), 0, 0, Math.cos(-0.08)]; // rest pose: leaned back 0.16 rad about x
 /** Rotation part of A, warm-started from q (Muller et al. 2016, "A Robust Method to Extract the Rotational Part of Deformations"). */
 function extractRotation(A, q) {
   for (let it = 0; it < 6; it += 1) {
@@ -443,12 +444,13 @@ function step() {
     }
     let R = extractRotation(Apq, cl.q);
     if (cl.global && !grab.on) {
-      // A weeble, not a melon: left alone it climbs back upright and turns to face you (about 1.5 Hz with the jelly's own ring).
+      // A weeble, not a melon: left alone it climbs back to its pose and turns to face you. The pose leans back 0.16 rad
+      // so the face points up at the camera instead of at the floor. Pull 0.025 per step: back up within about half a second.
       const up = cl.up || (cl.up = [0, 0, 0, 1]);
-      const k = 0.012;
-      const d = cl.q[3] < 0 ? -1 : 1;
-      for (let i = 0; i < 3; i += 1) up[i] = cl.q[i] * d * (1 - k);
-      up[3] = cl.q[3] * d * (1 - k) + k;
+      // Twice as strong once a move is over, so it settles back to itself between bits.
+      const k = clock > fx.freeUntil + 0.3 && swap.phase === 'idle' ? 0.05 : 0.025;
+      const d = cl.q[0] * POSE[0] + cl.q[3] * POSE[3] < 0 ? -1 : 1;
+      for (let i = 0; i < 4; i += 1) up[i] = cl.q[i] * d * (1 - k) + POSE[i] * k;
       const l = Math.hypot(up[0], up[1], up[2], up[3]);
       for (let i = 0; i < 4; i += 1) up[i] /= l;
       R = quatMat(up, Rup);
@@ -487,7 +489,7 @@ function step() {
     B.p[o + 1] += (goal[o + 1] / c - B.p[o + 1]) * a;
     B.p[o + 2] += (goal[o + 2] / c - B.p[o + 2]) * a;
     // Paper floor, side walls, back wall and the glass in front: hits keep half their skid.
-    if (B.p[o + 1] < 0) { floorHit = Math.max(floorHit, -B.v[o + 1]); B.p[o + 1] = 0; B.p[o] -= (B.p[o] - B.x[o]) * 0.35; B.p[o + 2] -= (B.p[o + 2] - B.x[o + 2]) * 0.35; }
+    if (B.p[o + 1] < 0) { floorHit = Math.max(floorHit, -B.v[o + 1]); B.p[o + 1] = 0; B.p[o] -= (B.p[o] - B.x[o]) * 0.15; B.p[o + 2] -= (B.p[o + 2] - B.x[o + 2]) * 0.15; } // light grip, so a tipped body can slide its feet back under it
     if (B.p[o + 1] > WALL.top) B.p[o + 1] = WALL.top;
     if (B.p[o] < -WALL.x) B.p[o] = -WALL.x; else if (B.p[o] > WALL.x) B.p[o] = WALL.x;
     if (B.p[o + 2] < WALL.zb) B.p[o + 2] = WALL.zb; else if (B.p[o + 2] > WALL.zf) B.p[o + 2] = WALL.zf;
@@ -616,32 +618,24 @@ function spin(wy, wz = 0) {
 // Each play style's tic while it waits: the way it would fidget at the net.
 let shoutAt = -10;
 // Shout bubble over the head, face overrides, and a short camera shake.
-const fx = { shoutUntil: -1, happyUntil: -1, winceUntil: -1, shakeUntil: -1, sipUntil: -1, freeUntil: -1, dizzyUntil: -1, lookAt: null, bonkAt: -10 };
+const fx = { shoutUntil: -1, happyUntil: -1, winceUntil: -1, shakeUntil: -1, sipUntil: -1, freeUntil: -1, slyUntil: -1 };
 function showShout(text, dur) { $('shout').textContent = text; fx.shoutUntil = clock + dur; }
 const flex = new THREE.Vector3(1, 1, 1);
 const TICS = {
   wall: { every: 6, go() { startDrink(); } },
-  moon: { every: 3.0, go() { kick(0, 6.4, 0); spin(0, (Math.random() - 0.5) * 2); post({ type: 'boing' }); } },
-  bot: { every: 2.4, go() { spin(Math.random() < 0.5 ? 4.5 : -4.5); post({ type: 'beep' }); } },
-  goblin: { every: 2.8, go() { fx.freeUntil = clock + 0.45; const s = com().x > 0 ? -1 : 1; kick(2.4 * s, 3.2, 0); } },
-  grunter: { every: 2.6, go() { [0, 60, 120, 180].forEach((ms, i) => setTimeout(() => kick(i % 2 ? -1.8 : 1.8, 0.6, 0), ms)); shoutAt = clock; showShout('HNNGH!', 0.7); post({ type: 'grunt' }); } },
-  junk: { every: 2.2, go() { const m = Math.floor(Math.random() * NN); const p = new THREE.Vector3(B.x[m * 3], B.x[m * 3 + 1], B.x[m * 3 + 2]); poke(p, new THREE.Vector3(Math.random() - 0.5, -0.4, Math.random() - 0.5).normalize(), 2.6, 0.5); } },
-  comet: { every: 3.0, go() { fx.freeUntil = clock + 0.4; kick(0, 2.4, 4.2); post({ type: 'swish' }); } },
-  ghost: { every: 3.2, go() { spin(3.2); } },
-  // Lobs a ball straight up, watches it the whole 2.2 s hang, and it comes down on its own head. Every time.
-  lobber: { every: 4.6, go() {
-    const c = com();
-    const m = new THREE.Mesh(ballGeo, ballMat);
-    m.position.set(c.x, c.y + 0.85, c.z + 0.15);
-    scene.add(m);
-    balls.push({ m, v: new THREE.Vector3((Math.random() - 0.5) * 0.3, 10.5, 0), state: 'lob', drive: false, vi: -1, aim: -1 });
-    kick(0, 1.4, 0);
-    post({ type: 'pock' });
-  } },
+  moon: { every: 4.0, go() { fx.freeUntil = clock + 0.9; kick(0, 6.4, 0); spin(0, (Math.random() - 0.5) * 2); post({ type: 'boing' }); } },
+  bot: { every: 4.0, go() { fx.freeUntil = clock + 0.4; spin(Math.random() < 0.5 ? 4.5 : -4.5); post({ type: 'beep' }); } },
+  goblin: { every: 4.0, go() { fx.freeUntil = clock + 0.45; const s = com().x > 0 ? -1 : 1; kick(2.4 * s, 3.2, 0); } },
+  grunter: { every: 4.5, go() { [0, 60, 120, 180].forEach((ms, i) => setTimeout(() => kick(i % 2 ? -1.8 : 1.8, 0.6, 0), ms)); shoutAt = clock; showShout('HNNGH!', 0.7); post({ type: 'grunt' }); } },
+  junk: { every: 4.0, go() { const m = Math.floor(Math.random() * NN); const p = new THREE.Vector3(B.x[m * 3], B.x[m * 3 + 1], B.x[m * 3 + 2]); poke(p, new THREE.Vector3(Math.random() - 0.5, -0.4, Math.random() - 0.5).normalize(), 2.6, 0.5); } },
+  comet: { every: 4.5, go() { fx.freeUntil = clock + 0.4; kick(0, 2.4, 4.2); post({ type: 'swish' }); } },
+  ghost: { every: 4.5, go() { fx.freeUntil = clock + 0.6; spin(3.2); } },
+  // GOT YOU baits a net rusher and lobs it. See LURE.
+  lobber: { every: 6, go() { startLure(); } },
   // Zips to one wall, back across to the other, then brakes: 230 ms per leg.
-  rabbit: { every: 2.6, go() {
+  rabbit: { every: 4.5, go() {
     const sd = com().x > 0 ? -1 : 1;
-    fx.freeUntil = clock + 0.62;
+    fx.freeUntil = clock + 0.8;
     kick(9 * sd, 0.6, 0); post({ type: 'dash' });
     setTimeout(() => { kick(-17 * sd, 4, 0); post({ type: 'dash' }); }, 230); // the way back is a leap
     setTimeout(() => kick(8 * sd, 0, 0), 460);
@@ -744,25 +738,6 @@ function ballsStep(dt) {
         poke(b.m.position, nrm, 1.5, 0.45);
         post({ type: 'return' });
       }
-    } else if (b.state === 'lob') {
-      b.v.y -= 9.8 * dt;
-      b.m.position.addScaledVector(b.v, dt);
-      b.m.rotation.x += dt * 9;
-      fx.lookAt = b.m.position;
-      // Coming down: the first thing it meets is the top of the head.
-      if (b.v.y < 0) {
-        raycaster.set(b.m.position, new THREE.Vector3(0, -1, 0));
-        raycaster.far = BALL_R + Math.abs(b.v.y) * dt;
-        const hit = raycaster.intersectObject(bodyMesh, false)[0];
-        if (hit || b.m.position.y < 0.2) {
-          // BONK: a 30%-deep squash from the top, dizzy eyes for 1.1 s, and the ball pops off to one side.
-          poke(hit ? hit.point : b.m.position, new THREE.Vector3(0, -1, 0), 6, 0.6);
-          b.state = 'out'; b.v.set((Math.random() < 0.5 ? -1 : 1) * 2.2, 4.5, 0.6);
-          fx.lookAt = null; fx.dizzyUntil = clock + 1.1; fx.shakeUntil = clock + 0.12; fx.bonkAt = clock;
-          showShout('BONK!', 0.8);
-          post({ type: 'bonk' });
-        }
-      }
     } else {
       // Returns are flat drives at the camera (no gravity), so they hold their spot on screen and swell toward you.
       if (!b.drive) b.v.y -= 9.8 * dt;
@@ -776,12 +751,6 @@ function ballsStep(dt) {
       }
       if (b.m.position.distanceTo(camera.position) < 1.2 || b.bounces > 3 || Math.abs(b.m.position.x) > 5) { scene.remove(b.m); balls.splice(i, 1); }
     }
-  }
-  // Bonk squash: 28% shorter, 18% wider at impact, back on the pop curve over 0.5 s (the jelly rings on top of it).
-  if (B.cast === 'lobber') {
-    const k = (clock - fx.bonkAt) / 0.5;
-    const a = k < 1 ? 1 - POP(k) : 0;
-    flex.set(1 + 0.18 * a, 1 - 0.28 * a, 1 + 0.1 * a);
   }
   const allIn = drill.on && !drill.queue.length && drill.landed >= drill.total;
   if (allIn && drill.total >= 3 && drill.flexAt < 0) drill.flexAt = clock + 0.32; // a beat to show off the pellets
@@ -976,6 +945,23 @@ shelfScene.environmentIntensity = 0.8;
 shelfScene.add(new THREE.HemisphereLight(0xffffff, 0xe6dfd2, 1.2));
 { const k2 = new THREE.DirectionalLight(0xfff4e8, 2.2); k2.position.set(-3, 6, 8); shelfScene.add(k2); }
 const shelfCam = new THREE.OrthographicCamera(0, 1, 0, -1, -100, 100);
+function faceOn(m, g, cast) {
+  const [ox, oy, oz] = g.userData.off;
+  const [fx, fy] = v(...FACE[cast]);
+  const fz = EXTRUDE.depth + EXTRUDE.bevelThickness + oz + 0.02;
+  const fyy = fy + oy - (g.userData.halfH || 0);
+  const pupils = [];
+  for (const sx of [-1, 1]) {
+    const w = new THREE.Mesh(miniEyeGeo, eyeMat); w.scale.set(0.9, 1.25, 0.45); w.position.set(fx + ox + sx * 0.1, fyy + 0.03, fz);
+    const pu = new THREE.Mesh(miniPupilGeo, inkMat); pu.scale.set(1, 1.35, 0.5); pu.position.set(fx + ox + sx * 0.1, fyy + 0.03, fz + 0.04);
+    pu.userData.y0 = pu.position.y;
+    m.add(w, pu);
+    pupils.push(pu);
+  }
+  const sm = new THREE.Mesh(miniSmileGeo, inkMat); sm.rotation.z = Math.PI; sm.position.set(fx + ox, fyy - 0.15, fz);
+  m.add(sm);
+  return { pupils, smile: sm };
+}
 const miniEyeGeo = new THREE.SphereGeometry(0.1, 16, 12);
 const miniPupilGeo = new THREE.SphereGeometry(0.05, 12, 10);
 const miniSmileGeo = new THREE.TorusGeometry(0.11, 0.026, 8, 20, Math.PI);
@@ -988,19 +974,7 @@ const minis = CASTS.map((cast, i) => {
   const mat = new THREE.MeshPhysicalMaterial({ color: COLORS[0], roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08, sheen: 0.4 });
   const m = new THREE.Mesh(g, mat);
   // A little face on the front of every candy, at the same spot as the big one's, so none of them read as lying face-down.
-  {
-    const [ox, oy, oz] = g.userData.off;
-    const [fx, fy] = v(...FACE[cast]);
-    const fz = EXTRUDE.depth + EXTRUDE.bevelThickness + oz + 0.02;
-    const fyy = fy + oy - g.userData.halfH;
-    for (const sx of [-1, 1]) {
-      const w = new THREE.Mesh(miniEyeGeo, eyeMat); w.scale.set(0.9, 1.25, 0.45); w.position.set(fx + ox + sx * 0.1, fyy + 0.03, fz);
-      const pu = new THREE.Mesh(miniPupilGeo, inkMat); pu.scale.set(1, 1.35, 0.5); pu.position.set(fx + ox + sx * 0.1, fyy + 0.03, fz + 0.04);
-      m.add(w, pu);
-    }
-    const sm = new THREE.Mesh(miniSmileGeo, inkMat); sm.rotation.z = Math.PI; sm.position.set(fx + ox, fyy - 0.15, fz);
-    m.add(sm);
-  }
+  faceOn(m, g, cast);
   // Each candy stands on its own little platform, drawn in the same 3D pass so the candy sits on it, never behind it.
   const pad = new THREE.Mesh(padGeo, new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.8 }));
   shelfScene.add(pad);
@@ -1008,6 +982,85 @@ const minis = CASTS.map((cast, i) => {
   shelfScene.add(m);
   return m;
 });
+// LURE: GOT YOU's bait, played on our side of the net (GOT YOU faces the camera, so the net is in front of it). t in s.
+// 0-0.6 a gray Net Rusher charges in from the camera side (z 4.2 to the net at 1.4, 0.85 to the left), back to us, hopping 0.15.
+// 0.6-0.8 GOT YOU coils (86% tall, sly half-shut eyes cut at the rusher). 0.8 it flicks a 1.3 s lob over the rusher, landing
+// 3.2 behind it, toward the camera, and springs back up on the pop curve. 1.0-1.2 the rusher leans back to look up;
+// 1.2-1.45 it spins round to face us, mouth wide; then scrambles back toward the camera at 1.4 units/s, too slow.
+// 2.1 the ball lands; 2.15 the rusher faceplants toward the camera (0.25 s, exit curve), "GOT YOU." with a grin, twirl and hop.
+// 2.9-3.3 it sinks into the paper. The camera pulls back 45% and drifts left for the whole bit.
+const victim = (() => {
+  const g = bodyGeometry('comet', false);
+  const m = new THREE.Mesh(g, new THREE.MeshPhysicalMaterial({ color: 0xa7abb3, roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.1 }));
+  m.userData.face = faceOn(m, g, 'comet');
+  // Panic mouth for when it turns round and sees the ball going over.
+  const o = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), inkMat);
+  o.scale.set(1, 1.2, 0.3);
+  o.position.copy(m.userData.face.smile.position).add(new THREE.Vector3(0, -0.04, 0));
+  o.visible = false;
+  m.add(o);
+  m.userData.panic = o;
+  m.rotation.order = 'YXZ'; // turn first, then fall forward in the turned frame
+  m.visible = false;
+  scene.add(m);
+  return m;
+})();
+const victimShadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: shadow.material.map, transparent: true, depthWrite: false }));
+victimShadow.rotation.x = -Math.PI / 2;
+victimShadow.visible = false;
+scene.add(victimShadow);
+const lure = { t: -1, fired: false, planted: false };
+function startLure() { if (lure.t >= 0) return; Object.assign(lure, { t: 0, fired: false, planted: false }); victim.visible = victimShadow.visible = true; }
+function lureStep(dt) {
+  if (lure.t < 0) return;
+  if (B.cast !== 'lobber') { lure.t = -1; victim.visible = victimShadow.visible = false; return; }
+  lure.t += dt;
+  const t = lure.t;
+  const X = -0.85; const NET = 1.4; const LAND = 4.6; const S = 0.45;
+  let z = NET; let y = 0; let ry = Math.PI; let rx = 0; let sc = S; let panic = false;
+  if (t < 0.6) { z = 4.2 + (NET - 4.2) * ENTER(t / 0.6); y = 0.15 * Math.abs(Math.sin(t * 16)); sc = S * Math.min(1, t / 0.15); }
+  else if (t < 1.45) { rx = t > 1.0 ? -0.3 * Math.min(1, (t - 1.0) / 0.12) : 0; if (t > 1.2) { ry = Math.PI * (1 - inOut(Math.min(1, (t - 1.2) / 0.25))); panic = true; } }
+  else if (t < 2.15) { z = NET + 1.4 * (t - 1.45); y = 0.12 * Math.abs(Math.sin(t * 22)); ry = 0; panic = true; }
+  else { z = NET + 1.4 * 0.7; ry = 0; panic = true; rx = 1.5 * EXIT(Math.min(1, (t - 2.15) / 0.25)); if (t > 2.9) sc = S * (1 - Math.min(1, (t - 2.9) / 0.4)); }
+  const look = panic; // eyes up at the ball going over
+  victim.userData.panic.visible = panic;
+  victim.userData.face.smile.visible = !panic;
+  victim.position.set(X, y, z);
+  victim.rotation.set(rx, ry, 0);
+  victim.scale.setScalar(Math.max(0.0001, sc));
+  victimShadow.position.set(X, 0.003, z);
+  victimShadow.scale.set(sc * 2.2, sc * 1.2, 1);
+  victimShadow.material.opacity = 0.8 / (1 + y * 4);
+  for (const p of victim.userData.face.pupils) p.position.y = p.userData.y0 + (look ? 0.035 : 0);
+  // GOT YOU: coil, then release.
+  if (t >= 0.6 && t < 0.8) { const k = inOut((t - 0.6) / 0.2); flex.set(1 + 0.08 * k, 1 - 0.14 * k, 1); fx.slyUntil = clock + 0.1; }
+  else if (t >= 0.8 && t < 1.2) { const k = POP((t - 0.8) / 0.4); flex.set(1.08 - 0.08 * k, 0.86 + 0.14 * k, 1); }
+  else flex.set(1, 1, 1);
+  if (t >= 0.8 && !lure.fired) {
+    lure.fired = true;
+    const c = com();
+    const start = new THREE.Vector3(c.x, c.y + 0.8, c.z);
+    const T = 1.3;
+    const vel = new THREE.Vector3(X, BALL_R, LAND).sub(start).divideScalar(T);
+    vel.y += 0.5 * 9.8 * T;
+    const m = new THREE.Mesh(ballGeo, ballMat);
+    m.position.copy(start);
+    scene.add(m);
+    balls.push({ m, v: vel, state: 'out', drive: false, vi: -1, aim: -1 });
+    kick(0, 2, 0);
+    fx.slyUntil = clock + 1.2;
+    post({ type: 'pock' });
+  }
+  if (t >= 2.15 && !lure.planted) {
+    lure.planted = true;
+    showShout('GOT YOU.', 1.1);
+    fx.happyUntil = clock + 1.1;
+    spin(4); kick(0, 3, 0);
+    post({ type: 'gotyou' });
+  }
+  if (t > 3.3) { lure.t = -1; victim.visible = victimShadow.visible = false; flex.set(1, 1, 1); }
+}
+
 function paintMinis(hex) {
   // Left to right, 50 ms apart.
   minis.forEach((m, i) => { m.userData.paintAt = clock + 0.05 * i; m.userData.paint = hex; });
@@ -1142,11 +1195,11 @@ function fillText() {
   const nm = named ? raw : 'TAP TO NAME';
   if ($('name').dataset.v !== nm) { $('name').dataset.v = nm; letters($('name'), nm); }
   $('name').classList.toggle('empty', !named);
-  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   for (const [id, k, label] of [['bio', 'bio', 'TRASH TALK'], ['pro', 'favoritePro', 'FAVORITE PRO'], ['court', 'homeCourt', 'HOME COURT'], ['racket', 'racket', 'RACKET']]) {
     const val = current[k];
-    $(id).innerHTML = `<i>${ICONS[id]}</i><span><b>${label}</b><em>${val ? esc(k === 'bio' ? `"${val}"` : val) : 'TAP TO ADD'}</em></span>`;
-    $(id).classList.toggle('empty', !val);
+    $(id).innerHTML = ICONS[id];
+    $(id).setAttribute('aria-label', val ? `${label}: ${val}` : `Add ${label.toLowerCase()}`);
+    $(id).classList.toggle('full', !!val);
   }
 }
 window.setFighter = (f) => {
@@ -1272,17 +1325,15 @@ function poseFace(dt) {
   const surprise = clock - shoutAt < 0.5 ? 1 : 0;
   const sp = B.cast === 'wall' ? 0.24 : 0.2;
   // Pupils follow the finger when held, otherwise drift to the camera with a slow saccade.
-  // Dizzy pupils roll in circles at 2.2 Hz; a ball in the air pulls them up to follow it.
-  const dizzy = clock < fx.dizzyUntil;
-  const watch = fx.lookAt;
+  // Sly: half-shut eyes cut sideways at the net rusher.
+  const sly = clock < fx.slyUntil;
   let lx = grab.on ? clamp((grab.T.x - tmpA.x) * 0.4, -0.03, 0.03) : 0.015 * Math.sin(clock * 0.7);
   let ly = grab.on ? clamp((grab.T.y - tmpA.y) * 0.4, -0.03, 0.03) : 0.01 * Math.sin(clock * 0.5);
-  if (watch) { lx = clamp((watch.x - tmpA.x) * 0.1, -0.03, 0.03); ly = 0.035; }
-  if (dizzy) { lx = 0.03 * Math.cos(clock * 14); ly = 0.03 * Math.sin(clock * 14); }
+  if (sly) { lx = -0.03; ly = -0.012; }
   for (const e of eyes) {
     e.position.set(e.userData.sx * sp / 2, 0.03, 0.02);
     const happy = clock < fx.happyUntil; const wince = clock < fx.winceUntil;
-    e.scale.set(1, happy || clock < fx.sipUntil ? 0.16 : wince ? 0.28 : blink * (1 - 0.7 * g) * (1 + 0.25 * surprise), 1);
+    e.scale.set(1, happy || clock < fx.sipUntil ? 0.16 : wince ? 0.28 : sly ? 0.5 : blink * (1 - 0.7 * g) * (1 + 0.25 * surprise), 1);
     e.userData.pupil.position.set(lx, ly, 0.04);
   }
   for (const b of brows) b.position.set(b.userData.sx * 0.11, 0.17, 0.03);
@@ -1314,6 +1365,7 @@ function advance(dt) {
   dropsStep(dt);
   ballsStep(dt);
   drinkStep(dt);
+  lureStep(dt);
   slideStep(dt);
   shelfStep(dt);
 }
@@ -1335,17 +1387,18 @@ function frame(now) {
     shadow.position.set(c.x, 0.002, c.z);
     shadow.scale.set(2.3 + lift * 0.6, 1.3 + lift * 0.4, 1);
     shadow.material.opacity = 1 / (1 + lift * 1.6);
-    springTo(cam.x, c.x * 0.45, dt, 1.3, 1);
+    // During GOT YOU's lure the camera pulls back 45% and drifts left so the net rusher is in the shot too.
+    const wide = lure.t >= 0 && lure.t < 3.1;
+    springTo(cam.x, c.x * 0.45 + (wide ? -0.45 : 0), dt, 1.3, 1);
     // Frame the rest shape to the stage: its height fills 56% of the stage, its width 66% of the screen. The camera aims at the
     // middle of the body (plus the ghost's hover) and only drifts 30% after hops, so a jump reads as a jump.
     const rb = B.geo.boundingBox; const bh = rb.max.y - rb.min.y; const bw = rb.max.x - rb.min.x;
     const stH = Math.max(120, $('stage').getBoundingClientRect().height);
     const tan = 2 * Math.tan(THREE.MathUtils.degToRad(15));
     const fitH = (bh / 0.5) * (window.innerHeight / stH) / tan;
-    const sr = $('stage').getBoundingClientRect(); const sc = $('stats').getBoundingClientRect();
-    const availW = Math.max(120, sc.left - sr.left - 8);
+    const availW = Math.max(120, $('stage').getBoundingClientRect().width);
     const fitW = (bw / 0.6) * (window.innerWidth / availW) / (tan * camera.aspect);
-    springTo(cam.d, Math.max(fitH, fitW), dt, 1.3, 1);
+    springTo(cam.d, Math.max(fitH, fitW) * (wide ? 1.45 : 1), dt, 1.3, 1);
     const mid = bh / 2 + (B.feel.float || 0);
     springTo(cam.y, mid + Math.max(0, c.y - mid) * 0.3, dt, 1.3, 1);
   }
@@ -1364,7 +1417,7 @@ function frame(now) {
   const orbit = THREE.MathUtils.degToRad(2) * Math.sin((clock * Math.PI * 2) / 9);
   const look = new THREE.Vector3(cam.x.x, cam.y.x, 0);
   const D = cam.d.x;
-  camera.position.set(look.x + D * Math.sin(orbit), look.y + D * 0.2, D * Math.cos(orbit));
+  camera.position.set(look.x + D * Math.sin(orbit), look.y + D * 0.15, D * Math.cos(orbit));
   if (clock < fx.shakeUntil) {
     const k = (fx.shakeUntil - clock) / 0.18;
     camera.position.x += (Math.random() - 0.5) * 0.16 * k; camera.position.y += (Math.random() - 0.5) * 0.16 * k;
@@ -1372,8 +1425,7 @@ function frame(now) {
   camera.lookAt(look);
   const w = window.innerWidth; const h = window.innerHeight;
   const st = $('stage').getBoundingClientRect();
-  // Fighter centered in the stage left of the stats column.
-  const cx = (st.left + $('stats').getBoundingClientRect().left) / 2;
+  const cx = st.left + st.width / 2;
   camera.setViewOffset(w, h, w / 2 - cx, h / 2 - (st.top + st.height * 0.5), w, h);
   slideRender(clock);
   renderer.setViewport(0, 0, w, h);

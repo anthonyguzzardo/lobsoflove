@@ -2,12 +2,34 @@
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lobs of Love — loading motion study</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#171d30;color:#f4ead9;font:16px system-ui,sans-serif;min-height:100svh;display:grid;place-items:center}main{width:min(94vw,620px);padding:24px 0}h1{font-size:21px;font-weight:550;margin:0 0 6px}p{color:#b8c0d3;font-size:14px;line-height:1.5;margin:0 0 16px}.stage{width:100%;aspect-ratio:1;background-image:url(frames.png);background-size:300% 200%;background-repeat:no-repeat;border-radius:16px}nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0}button,select{font:inherit;color:#f4ead9;background:#29324b;border:1px solid #53617c;border-radius:8px;padding:12px;min-height:44px;cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #eab26b;outline-offset:3px}#play{background:#eab26b;color:#171d30;border-color:#eab26b}input{width:100%;accent-color:#eab26b;min-height:32px}output{display:block;margin-top:8px;font-size:15px}a{color:#eab26b}
+
+body{isolation:isolate;overflow-x:hidden;background:#141a2c}
+main{position:relative;z-index:1}
+.atmosphere{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at 50% 40%,#252e4a 0%,#141a2c 75%)}
+.wisp{position:absolute;width:min(65vw,800px);height:min(65vw,800px);min-width:340px;min-height:340px;border-radius:43% 57% 64% 36% / 45% 39% 61% 55%;filter:blur(48px);opacity:.35;animation:drift 19s ease-in-out infinite alternate,morph 13s ease-in-out infinite alternate;will-change:transform}
+.wisp.one{left:-22%;top:0;background:radial-gradient(ellipse,#5866a6, #424975 48%,transparent 72%)}
+.wisp.two{right:-20%;top:22%;background:radial-gradient(ellipse,#65547e,#423d68 48%,transparent 72%);animation-delay:-9s,-4s;animation-duration:23s,17s}
+.wisp.three{left:10%;bottom:-55%;background:radial-gradient(ellipse,#38716b,#304855 48%,transparent 72%);opacity:.26;animation-delay:-14s,-8s}
+.wisp.four{right:-10%;top:-45%;background:radial-gradient(ellipse,#ca9367,#765e65 40%,transparent 70%);opacity:.22;animation-duration:27s,21s;animation-delay:-6s,-11s}
+.pebble{position:absolute;width:65px;height:90px;border-radius:62% 38% 57% 43%;background:linear-gradient(135deg,#b58b68aa,#65516d22);box-shadow:inset 5px 3px 14px #efb67a22;filter:blur(3px);opacity:.26;animation:bob 11s ease-in-out infinite alternate}
+.pebble.a{left:12%;top:24%;transform:rotate(-24deg)}.pebble.b{right:13%;bottom:22%;width:35px;height:46px;animation-delay:-5s}
+.stage{position:relative;mix-blend-mode:lighten;mask-image:linear-gradient(to right,transparent,#000 4%,#000 96%,transparent);border-radius:24px}
+h1{text-shadow:0 2px 20px #141a2c}nav{padding:4px 0}button,select{background:#29324bcc;backdrop-filter:blur(12px)}
+body.paused .atmosphere *,body.still .atmosphere *{animation-play-state:paused}
+body.quiet .atmosphere{opacity:0}.atmosphere{transition:opacity .6s ease}
+@keyframes drift{from{transform:translate(-3%, -3%) rotate(-12deg) scale(.92)}to{transform:translate(14%, 9%) rotate(18deg) scale(1.12)}}
+@keyframes morph{from{border-radius:43% 57% 64% 36% / 45% 39% 61% 55%}to{border-radius:65% 35% 38% 62% / 64% 61% 39% 36%}}
+@keyframes bob{from{transform:translateY(-18px) rotate(-18deg) scale(.92)}to{transform:translateY(24px) rotate(22deg) scale(1.08)}}
+@media(prefers-reduced-motion:reduce){.atmosphere *{animation:none!important}.atmosphere{transition:none}}
+@media(max-width:600px){.wisp{filter:blur(32px);opacity:.28}.pebble.a{left:0;top:15%}.pebble.b{right:2%;bottom:15%}main{padding:20px 0}}
+
 </style>
-<main><h1>A court comes to life.</h1><p>Six-frame motion study from the existing loading artwork.</p>
+<div class="atmosphere" aria-hidden="true"><i class="wisp one"></i><i class="wisp two"></i><i class="wisp three"></i><i class="wisp four"></i><i class="pebble a"></i><i class="pebble b"></i></div>
+<main><h1>A court comes to life.</h1><p>A little atmosphere around the six-frame loading study.</p>
 <div class="stage" id="stage" role="img" aria-label="Dormant tennis console"></div>
 <output id="caption" for="frame">1 / 6 — Dormant</output>
 <input id="frame" type="range" min="0" max="5" step="1" value="0" aria-label="Animation frame">
-<nav><button id="play">Play</button><button id="restart">Restart</button><label>Speed <select id="speed"><option value="1">Normal</option><option value="0.5">Slow</option><option value="2">Fast</option></select></label></nav>
+<nav><button id="play">Play</button><button id="restart">Restart</button><label>Speed <select id="speed"><option value="1">Normal</option><option value="0.5">Slow</option><option value="2">Fast</option></select></label><button id="atmosphere" aria-pressed="true">Atmosphere: on</button></nav>
 <p>Button press → grass grows → lines appear → net rises → ball emerges. This is a stepped timing sketch; intermediate motion is still to be drawn.</p><a href="frames.png">View all six frames</a></main>
 <script>
 const names=['Dormant','Button pressed; grass sprouts','Grass fills the court','Court lines appear','Net rises','Ball emerges'];
@@ -16,11 +38,13 @@ const stage=document.getElementById('stage'),caption=document.getElementById('ca
 let frame=0,playing=false,timer;
 function show(){stage.style.backgroundPosition=((frame%3)*50)+'% '+(Math.floor(frame/3)*100)+'%';slider.value=frame;caption.textContent=(frame+1)+' / 6 — '+names[frame];stage.setAttribute('aria-label',names[frame]);}
 function schedule(){clearTimeout(timer);if(playing)timer=setTimeout(()=>{frame=(frame+1)%6;show();schedule()},durations[frame]/Number(speed.value))}
-function setPlaying(value){playing=value;play.textContent=playing?'Pause':'Play';schedule()}
+function setPlaying(value){playing=value;document.body.classList.toggle('paused',!value);play.textContent=playing?'Pause':'Play';schedule()}
 play.onclick=()=>setPlaying(!playing);
 document.getElementById('restart').onclick=()=>{frame=0;show();setPlaying(true)};
 slider.oninput=()=>{setPlaying(false);frame=Number(slider.value);show()};
 speed.onchange=schedule;
 document.addEventListener('visibilitychange',()=>{if(document.hidden)setPlaying(false)});
+document.getElementById('atmosphere').onclick=function(){const off=document.body.classList.toggle('quiet');this.setAttribute('aria-pressed',String(!off));this.textContent='Atmosphere: '+(off?'off':'on')};
+const motion=matchMedia('(prefers-reduced-motion: reduce)');document.body.classList.toggle('still',motion.matches);motion.addEventListener('change',e=>{document.body.classList.toggle('still',e.matches);if(e.matches)setPlaying(false)});
 const asset=new Image();asset.onload=()=>{show();if(!matchMedia('(prefers-reduced-motion: reduce)').matches)setPlaying(true)};asset.onerror=()=>{caption.textContent='Could not load frames.png';setPlaying(false)};asset.src='frames.png';
 </script></html>

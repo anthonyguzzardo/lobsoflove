@@ -15,6 +15,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
+import { brushUnderline } from './lib/brush.js';
+
 const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
 window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
 window.addEventListener('unhandledrejection', (e) => post({ type: 'error', message: String(e.reason) }));
@@ -1158,4 +1160,6 @@ window.demoCloset = () => {
   setTimeout(() => window.demoSlide(0.95), 10600);
   setTimeout(() => unfocus(), 13600);
 };
+// The headline's second line gets a self-drawing brush stroke under it; it redraws whenever the headline changes.
+brushUnderline(document.getElementById('h2'));
 post({ type: 'ready' });

@@ -7,6 +7,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CaseWeb } from '@/components/case-web';
+import { Underlined } from '@/components/brush-stroke';
 import { DISC_ART } from '@/lib/discs';
 import { computeSeason, useMatches } from '@/lib/matches';
 import { CAST, useRoster } from '@/lib/roster';
@@ -70,7 +71,7 @@ export default function CaseSelect() {
 
       <View style={styles.now}>
         <Text style={styles.track}>TRACK {String(index + 1).padStart(2, '0')} / {String(rivals.length).padStart(2, '0')}  ·  {record}</Text>
-        <Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit>{picked.name}</Text>
+        <Underlined redrawKey={picked.id} style={{ maxWidth: '100%' }}><Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit>{picked.name}</Text></Underlined>
         <Text style={styles.tagline} numberOfLines={1}>{loading ? 'Loading…' : open ? CAST[picked.cast].tagline : 'Tap to open · drag to spin'}</Text>
       </View>
 

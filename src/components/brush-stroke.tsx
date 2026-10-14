@@ -1,8 +1,8 @@
 import { Canvas, Circle, Group, Line, Path, Skia, vec } from '@shopify/react-native-skia';
-import { useMemo } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type StyleProp, View, type ViewStyle } from 'react-native';
 
-import { BRUSH_WIDTH, HIGHLIGHT, SHADOW, marks, mix, type Brush, type Pt } from '@/lib/brush';
+import { BRUSH_WIDTH, DRAW_MS, HIGHLIGHT, SHADOW, brushCycle, drawEase, marks, mix, wobbleLine, type Brush, type Pt } from '@/lib/brush';
 
 function smooth(pts: readonly Pt[]) {
   const p = Skia.Path.Make();
@@ -50,5 +50,44 @@ export function BrushStroke({ points, brush, width, style }: { points: readonly 
     <Canvas style={style} pointerEvents="none">
       <BrushTube points={points} brush={brush} width={width} />
     </Canvas>
+  );
+}
+
+const nextBrush = brushCycle(1);
+let seeds = 1;
+
+/**
+ * Wraps a line of text and draws a brush stroke under it that draws itself in, left to right.
+ * It draws again (next color, new wobble) whenever `redrawKey` changes.
+ */
+export function Underlined({ children, redrawKey, width = 9, gap = 3, style }: { children: ReactNode; redrawKey?: string | number; width?: number; gap?: number; style?: StyleProp<ViewStyle> }) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  // Which brush and wobble this stroke uses, and how far it has drawn (0 to 1). Only the animation frame sets it.
+  const [anim, setAnim] = useState<{ brush: Brush; seed: number; k: number } | null>(null);
+  useEffect(() => {
+    const look = { brush: nextBrush(), seed: seeds++ };
+    const t0 = Date.now();
+    let raf = 0;
+    const step = () => {
+      const k = drawEase(Math.min(1, (Date.now() - t0) / DRAW_MS));
+      setAnim({ ...look, k });
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [redrawKey]);
+  const h = width * 2 + 20;
+  const seed = anim?.seed ?? 0;
+  const full = useMemo(() => (size.w > 8 ? wobbleLine(size.w, h / 2, seed).map(([x, y]) => [x + width, y] as const) : []), [size.w, h, width, seed]);
+  const pts = anim ? full.slice(0, Math.max(2, Math.ceil(full.length * anim.k))) : [];
+  return (
+    <View style={[{ alignSelf: 'flex-start', marginBottom: width + gap }, style]}>
+      <View onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>{children}</View>
+      {anim && pts.length > 1 ? (
+        <Canvas pointerEvents="none" style={{ position: 'absolute', left: -width, top: size.h + gap - h / 2 + width / 2, width: size.w + width * 2, height: h }}>
+          <BrushTube points={pts} brush={anim.brush} width={width} />
+        </Canvas>
+      ) : null}
+    </View>
   );
 }

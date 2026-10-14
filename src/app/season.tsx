@@ -11,7 +11,7 @@ import { useMatches } from '@/lib/matches';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 
-const KEYS = ['ucsd', 'lindavista', 'balboa', 'roosevelt', 'northpark'];
+const KEYS = ['ucsd', 'lindavista', 'balboa', 'roosevelt', 'northpark', 'barnes'];
 
 /** Season lines: every player is a line, every court a station, drawn live by a hand (web/lines.js). */
 export default function Season() {
@@ -30,7 +30,7 @@ export default function Season() {
     }));
     const real = players.filter((p) => p.stops.length > 0);
     if (real.length) return JSON.stringify({ sample: false, players: real });
-    // Nothing logged at the five courts yet: draw sample routes in the roster's own colors so the page is never empty.
+    // Nothing logged at the courts yet: draw sample routes in the roster's own colors so the page is never empty.
     return JSON.stringify({
       sample: true,
       players: players.slice(0, 6).map((p, i) => ({ ...p, stops: [0, 1, 2, 3].map((k) => KEYS[(i * 2 + k * (i % 2 ? 3 : 2)) % KEYS.length]) })),

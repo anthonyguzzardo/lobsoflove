@@ -14,7 +14,7 @@ import { sfx } from '@/lib/sfx';
 
 type Field = 'name' | 'bio' | 'favoritePro' | 'homeCourt' | 'racket';
 type Msg =
-  | { type: 'ready' | 'press' | 'line' | 'slid' | 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' | 'serve' | 'pock' | 'return' | 'flex' | 'burst' | 'cheer' | 'dash' | 'gulp' | 'crush' | 'ahh' | 'ballbounce' | 'bonk' }
+  | { type: 'ready' | 'press' | 'line' | 'slid' | 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' | 'serve' | 'pock' | 'return' | 'flex' | 'burst' | 'cheer' | 'dash' | 'gulp' | 'crush' | 'ahh' | 'ballbounce' | 'gotyou' }
   | { type: 'bloop'; cast: CastId }
   | { type: 'thud'; v: number }
   | { type: 'cast'; cast: CastId }
@@ -101,7 +101,7 @@ export default function MakeYourFighter() {
             case 'gulp': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('bloop', 0.5); break;
             case 'crush': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('pock', 0.6); break;
             case 'ahh': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); break;
-            case 'bonk': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('pock', 1); sfx('bounce', 0.7); break;
+            case 'gotyou': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('select', 0.8); break;
             case 'ballbounce': sfx('bounce', 0.45); break;
             case 'serve': sfx('bounce', 0.3); break;
             case 'pock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('pock', 0.7); break;
@@ -122,6 +122,7 @@ export default function MakeYourFighter() {
           <Pressable style={StyleSheet.absoluteFill} onPress={commit} accessibilityLabel="Done" />
           <View style={[styles.card, { marginBottom: 12 }]}>
             <Text style={styles.label}>{FIELDS[editing].label}</Text>
+            {editing !== 'name' ? <Text style={styles.hint}>Shows on your player card.</Text> : null}
             <TextInput
               value={text}
               onChangeText={setText}
@@ -158,6 +159,7 @@ const styles = StyleSheet.create({
   sheet: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(239,236,229,0.92)', justifyContent: 'flex-end', paddingHorizontal: 16 },
   card: { backgroundColor: '#fffdf8', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#16181d', shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 5 } },
   label: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: '#e2562f' },
+  hint: { fontFamily: MONO, fontWeight: '700', fontSize: 13, color: '#16181d', marginTop: 4 },
   input: { fontFamily: MONO, fontWeight: '700', fontSize: 18, color: '#16181d', paddingVertical: 10, borderBottomWidth: 2.5, borderBottomColor: '#16181d' },
   inputName: { fontSize: 28, fontWeight: '800' },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },

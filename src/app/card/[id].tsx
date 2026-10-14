@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
 
 import { FighterAvatar } from '@/components/fighter';
+import { Underlined } from '@/components/brush-stroke';
 import { C } from '@/constants/arcade';
 import { computeSeason, useMatches } from '@/lib/matches';
 import { goBack, goHome } from '@/lib/nav';
@@ -53,7 +54,7 @@ export default function MatchCard() {
             </View>
             <Text style={[styles.pts, { color: C.ball }]}>+{award.winnerPoints}</Text>
           </View>
-          <Text style={styles.score}>{line}</Text>
+          <Underlined redrawKey={line}><Text style={styles.score}>{line}</Text></Underlined>
           {award.bonuses.length ? <Text style={styles.bonus}>{award.bonuses.join('  ·  ')}</Text> : null}
           <View style={[styles.row, { marginTop: 8 }]}>
             <FighterAvatar cast={l.cast} color={l.color} size={46} />
@@ -68,7 +69,7 @@ export default function MatchCard() {
       <Pressable onPress={share} style={({ pressed }) => [styles.cta, pressed && { transform: [{ scale: 0.97 }] }]} accessibilityRole="button"><Text style={styles.ctaText}>SEND TO THE GROUP CHAT</Text></Pressable>
       <View style={styles.links}>
         <Pressable onPress={goHome} style={styles.second} accessibilityRole="button"><Text style={styles.link}>‹ HOME</Text></Pressable>
-        <Pressable onPress={() => router.replace('/standings')} style={styles.second} accessibilityRole="button"><Text style={styles.link}>STANDINGS ›</Text></Pressable>
+        <Pressable onPress={() => router.dismissTo('/standings')} style={styles.second} accessibilityRole="button"><Text style={styles.link}>STANDINGS ›</Text></Pressable>
       </View>
     </View>
   );

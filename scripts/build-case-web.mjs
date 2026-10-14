@@ -36,11 +36,11 @@ h1{margin:0;font-size:17px;letter-spacing:.06em;font-weight:800}h1 b{color:var(-
 .meter{text-align:right;min-width:112px}.meter span{font-size:8.5px;letter-spacing:.14em;opacity:.55}
 .bar{height:5px;background:rgba(22,24,29,.14);margin:5px 0 3px;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--clay);transition:width .32s cubic-bezier(.16,1,.3,1)}
 #pct{font-size:19px;font-weight:800}
-/* The dock: five little floating platforms, one per place. A real ball hops between them; the one it sits on is the active one. */
+/* The dock: little floating platforms, one per place. A real ball hops between them; the one it sits on is the active one. */
 #dock{position:relative;display:flex;justify-content:space-between;align-items:flex-end;height:86px;margin:2px 0 0;pointer-events:auto;padding:0 4px}
 #dock .slot{all:unset;position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
 #dock .pf{width:50px;height:14px;border-radius:3px;background:#f4f1ea;position:relative;box-shadow:0 6px 0 #d8d2c5,0 12px 14px rgba(40,34,26,.18);transition:background .2s,transform .32s cubic-bezier(.34,1.56,.64,1);animation:bob 3.6s ease-in-out infinite}
-#dock .slot:nth-child(2) .pf{animation-delay:-.9s}#dock .slot:nth-child(3) .pf{animation-delay:-1.8s}#dock .slot:nth-child(4) .pf{animation-delay:-2.7s}#dock .slot:nth-child(5) .pf{animation-delay:-.45s}
+#dock .slot:nth-child(2) .pf{animation-delay:-.9s}#dock .slot:nth-child(3) .pf{animation-delay:-1.8s}#dock .slot:nth-child(4) .pf{animation-delay:-2.7s}#dock .slot:nth-child(5) .pf{animation-delay:-.45s}#dock .slot:nth-child(6) .pf{animation-delay:-1.35s}
 @keyframes bob{0%,100%{translate:0 0}50%{translate:0 -3px}}
 #dock .slot.on .pf{background:var(--pc,var(--clay));box-shadow:0 6px 0 color-mix(in srgb,var(--pc,#e2562f) 62%,#000),0 12px 14px rgba(40,34,26,.22)}
 #dock .slot.land .pf{transform:translateY(4px)}
@@ -215,17 +215,15 @@ const fighterCss = homeCss + `
 @keyframes tagin{0%{opacity:0;transform:translateY(6px)}100%{opacity:.75;transform:none}}
 /* Stats: a column beside the fighter, like a select-screen sidebar. Label in clay over the value; empty ones are outlined. */
 #stage{position:relative}
-#stats{position:absolute;right:0;top:50%;transform:translateY(-50%);width:146px;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
-/* Stat tiles: solid ink, a clay icon block, and a ledge you press down into. */
-#stats button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;height:48px;padding:0 8px 0 6px;border-radius:6px;background:var(--ink);color:var(--paper);box-shadow:0 4px 0 #000,0 8px 12px rgba(22,24,29,.18);transition:transform .1s,box-shadow .1s}
-#stats button:active{transform:translateY(4px);box-shadow:0 0 0 #000,0 3px 6px rgba(22,24,29,.18)}
-#stats i{flex:none;width:36px;height:36px;border-radius:4px;background:var(--clay);display:flex;align-items:center;justify-content:center}
-#stats svg{width:24px;height:24px;fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-#stats span{min-width:0;display:flex;flex-direction:column}
-#stats b{font:800 10px var(--mono);letter-spacing:.08em;color:var(--clay);white-space:nowrap}
-#stats em{font:800 12.5px var(--mono);font-style:normal;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#stats button.empty em{opacity:.55;font-size:11px;letter-spacing:.06em}
-#tag{margin-bottom:12px}
+/* Player-card details: four small icon keys on the line under the nameplate, out of the fighter's way. Filled ones turn clay. */
+#under{display:flex;align-items:center;gap:10px;margin:10px 2px 12px}
+#under #tag{flex:1;min-width:0;margin:0;white-space:normal;line-height:1.3}
+#stats{flex:none;display:flex;gap:6px;pointer-events:auto}
+#stats button{all:unset;box-sizing:border-box;width:32px;height:32px;border-radius:6px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1.8px var(--ink),0 3px 0 rgba(22,24,29,.35);transition:transform .1s,box-shadow .1s}
+#stats button:active{transform:translateY(3px);box-shadow:inset 0 0 0 1.8px var(--ink)}
+#stats button.full{background:var(--clay)}
+#stats svg{width:20px;height:20px;fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
 #shelf{position:relative;height:136px;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:1fr 1fr;margin-bottom:6px}
 #drops{display:flex;justify-content:space-between;padding:0 6px;margin:0 0 14px;pointer-events:auto}
 /* Paint drops: a teardrop of glossy color on a little ink saucer when picked. */
@@ -242,8 +240,8 @@ const fighterCss = homeCss + `
 @keyframes shout{0%{scale:.4;rotate:-14deg}100%{scale:1;rotate:-6deg}}
 `;
 const fighterBody = `<canvas id="c"></canvas><div id="vig"></div><div id="grain"></div><div id="ui">
-<div id="stage"><div id="stats"><button id="bio" data-edit="bio"></button><button id="pro" data-edit="favoritePro"></button><button id="court" data-edit="homeCourt"></button><button id="racket" data-edit="racket"></button></div></div>
-<div id="plate"><div id="style"></div><button id="name" data-edit="name" aria-label="Edit name"></button></div><div id="tag"></div>
+<div id="stage"></div>
+<div id="plate"><div id="style"></div><button id="name" data-edit="name" aria-label="Edit name"></button></div><div id="under"><div id="tag"></div><div id="stats"><button id="bio" data-edit="bio"></button><button id="pro" data-edit="favoritePro"></button><button id="court" data-edit="homeCourt"></button><button id="racket" data-edit="racket"></button></div></div>
 <div id="shelf" aria-label="Play styles"></div>
 <div id="drops" aria-label="Colors"></div>
 <div id="enter" role="slider" aria-label="Slide the ball to lock in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>

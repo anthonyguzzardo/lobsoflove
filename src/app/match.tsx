@@ -7,6 +7,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FighterAvatar } from '@/components/fighter';
+import { Underlined } from '@/components/brush-stroke';
 import { C } from '@/constants/arcade';
 import { courtById, usePickedCourt } from '@/lib/courts';
 import { addMatch, type SetScore, useMatches, winnerOf } from '@/lib/matches';
@@ -58,7 +59,7 @@ export default function MatchScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled">
       <BackSwing />
-      <Text style={styles.kicker}>NEW MATCH</Text>
+      <Underlined width={6}><Text style={styles.kicker}>NEW MATCH</Text></Underlined>
       <View style={styles.versus}>
         <View style={styles.who}><FighterAvatar cast={you.cast} color={you.color} size={84} /><Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{you.name}</Text></View>
         <Text style={styles.vs}>VS</Text>

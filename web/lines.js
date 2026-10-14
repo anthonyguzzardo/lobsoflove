@@ -38,7 +38,7 @@ function resize() {
 
 // ---------- Stations from the real venues ----------
 const VENUES = window.VENUES || [];
-const NOTE = { ucsd: 'La Jolla', lindavista: 'Linda Vista', balboa: 'Morley Field', roosevelt: 'by the zoo', northpark: 'North Park' };
+const NOTE = { ucsd: 'La Jolla', lindavista: 'Linda Vista', balboa: 'Morley Field', roosevelt: 'by the zoo', northpark: 'North Park', barnes: 'Ocean Beach' };
 let stations = [];
 function layoutStations() {
   // Real positions from each venue's id (lat/lon), squeezed toward the middle so the far-off UCSD courts still fit on the page.

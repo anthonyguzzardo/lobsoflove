@@ -23,7 +23,7 @@ type Msg =
   | { type: 'error'; message: string; at?: string };
 
 /**
- * Courts: five favorite venues as to-scale islands, drawn by three.js in a WebView (web/courts.js).
+ * Courts: six favorite venues as to-scale islands, drawn by three.js in a WebView (web/courts.js).
  * Hopping onto a venue starts its song; "Play here" picks it.
  */
 export default function Courts() {
@@ -67,6 +67,7 @@ export default function Courts() {
             if (params.demo === '1') run('window.demoCourts()');
             if (params.demo === 'roosevelt') run('window.demoRoosevelt()');
             if (params.demo === 'northpark') run('window.demoNorthPark()');
+            if (params.demo === 'barnes') run('window.demoBarnes()');
             if (params.demo === 'lv') run('window.demoLv()');
           } else if (msg.type === 'stage') playAnthem(msg.anthem);
           else if (msg.type === 'hop') { void Haptics.selectionAsync(); sfx('tick', 0.5); }

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FighterAvatar } from '@/components/fighter';
+import { Underlined } from '@/components/brush-stroke';
 import { C } from '@/constants/arcade';
 import { computeSeason, scoreLine, useMatches, winnerOf } from '@/lib/matches';
 import { BackSwing } from '@/components/back-swing';
@@ -20,7 +21,7 @@ export default function Standings() {
     <ScrollView style={styles.root} contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 }}>
       <BackSwing />
       <Text style={styles.kicker}>SEASON 1</Text>
-      <Text style={styles.title}>STANDINGS</Text>
+      <Underlined><Text style={styles.title}>STANDINGS</Text></Underlined>
       {rows.map((r, i) => {
         const f = byId(r.id);
         if (!f) return null;

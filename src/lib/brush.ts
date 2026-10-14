@@ -94,3 +94,22 @@ export function brushCycle(start = 0) {
   let n = start;
   return () => BRUSHES[n++ % BRUSHES.length];
 }
+
+/**
+ * A hand-drawn underline `w` long at height `y`: a slight wave, a small dip, a lift at the end.
+ * `seed` changes the wobble so two underlines never match exactly.
+ */
+export function wobbleLine(w: number, y: number, seed = 0, step = 6): [number, number][] {
+  const out: [number, number][] = [];
+  const n = Math.max(2, Math.round(w / step));
+  for (let i = 0; i <= n; i++) {
+    const k = i / n;
+    const wave = Math.sin(k * Math.PI * 2 + seed * 1.7) * 1.6 + Math.sin(k * Math.PI * 5 + seed) * 0.6;
+    out.push([k * w, y + wave + (jit(i, seed) - 0.5) * 0.8 - Math.max(0, k - 0.85) * 18]);
+  }
+  return out;
+}
+
+/** How long an underline takes to draw itself, and its curve (the enter ease from docs/mo-design). */
+export const DRAW_MS = 420;
+export const drawEase = (t: number) => 1 - Math.pow(1 - t, 4);

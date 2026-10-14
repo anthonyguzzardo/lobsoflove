@@ -12,7 +12,7 @@ const VENUES = [
   { id: 'c327506_1171342', key: 'northpark', lights: false, name: 'North Park Rec Center', short: 'NORTH PARK', anthem: 'downtown', accent: '#ff3d7f', lat: 32.75059, lng: -117.13423, r: 110, tagline: 'Under the water tower. Day play only.' },
   // OSM maps Barnes only as one facility outline with no tennis pitches inside, so the map bake never found it. Its 25 lit courts
   // (23 hard, 2 clay, per Youth Tennis San Diego) are laid out by hand: five rows of five, long axis north-south.
-  { id: 'c327534_1172349', key: 'barnes', lights: true, name: 'Barnes Tennis Center', short: 'BARNES TC', anthem: 'ob', accent: '#ff5e9a', lat: 32.75338, lng: -117.23485, r: 160, tagline: 'Twenty-five courts where the river meets the ocean.', grid: { rows: 5, cols: 5 } },
+  { id: 'c327534_1172349', key: 'barnes', lights: true, name: 'Barnes Tennis Center', short: 'BARNES TC', anthem: 'ob', accent: '#ff5e9a', lat: 32.75338, lng: -117.23485, r: 160, tagline: 'Where the river meets the ocean.', grid: { rows: 5, cols: 5 } },
 ];
 
 /** A block of true-size courts (36.6 x 18.3 m with run-off) for a venue the map has no pitches for. */
