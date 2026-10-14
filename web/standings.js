@@ -1,23 +1,26 @@
 // Standings: the tesseract. Every fighter is its real jelly body (web/jelly-core.js), weightless in the void like an astronaut,
-// ranked by depth: the leader floats nearest, the rest drift away down a corridor of books smeared through time.
+// stacked top to bottom by rank in front of a corridor of books smeared through time. Scrolling down is falling down the table.
 // After docs/mo-design/vids/blackhole-scene-interstellar.mov (the shelves behind the bookcase: streaks of cream, amber, rust,
 // rose and slate on black, warm lattice light).
 //
 // Motion spec.
 // - Corridor: a 24-unit segment tiled four deep, flowing toward the camera at 0.6 units/s, so the hold is never frozen.
-//   Lattice frames every 4 units. Fog from 3 to 24 swallows the far end.
+//   Lattice frames every 4 units. Fog from 8 to 28 swallows the far end. The corridor rides along with the camera as it
+//   scrolls, so it reads as an endless shaft.
 // - Fighters: no gravity, held at their float height by the jelly's own float spring (0.9 Hz). The carrier tumbles
 //   +-17 deg roll on a 9 s sine, +-11 deg pitch on 7 s, +-23 deg yaw on 11 s, each with its own phase, and bobs 0.08 on 5 s.
-// - Camera: rides depth on a spring at 1.4 Hz, damping ratio 1 (no bounce on a camera). Drag to fly through the ranks,
-//   with a fling that decays at 4/s. Tap a fighter to fly to it.
+// - Ranks: 1.45 units apart down a column, swaying 0.32 to 0.42 left and right of center; the leader floats 1.25x bigger.
+// - Camera: rides height on a spring at 1.4 Hz, damping ratio 1 (no bounce on a camera). Drag scrolls 1:1 with the finger,
+//   with a fling that decays at 4/s. Tap a fighter to center it.
 // - Dock: one floating platform per rank along the bottom, in the fighter's color. A ball hops to whichever rank the camera
-//   is at: 360 ms, arc 22 px plus 5 px per platform crossed, squash 0.8 on takeoff and landing; the platform dips 4 px.
-//   Tap or drag along the dock to fly there.
+//   Each platform carries a little flat cutout of its fighter, from the same silhouettes as the jelly bodies. The ball hops
+//   between their heads: 360 ms, arc 22 px plus 5 px per platform crossed, squash 0.8 on takeoff and landing, and keeps
+//   bouncing 8 px on the head of whoever is in view. Tap or drag along the dock to fly there.
 // - Tap: pokes the jelly where your finger hit (power 7, sigma 0.5), spins it, and kicks the carrier's tumble 1.4 rad/s,
 //   decaying at 0.7/s, so it rolls away and drifts back.
 import * as THREE from 'three';
 
-import { FEEL, SoftBody } from './jelly-core.js';
+import { FACE, FEEL, SHAPES, SoftBody } from './jelly-core.js';
 import { Debris } from './standings-debris.js';
 
 const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
@@ -37,7 +40,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setClearColor(VOID, 1);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(VOID, 3, 24);
+scene.fog = new THREE.Fog(VOID, 8, 28);
 const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 60);
 scene.add(new THREE.HemisphereLight(0xffe2b8, 0x18202c, 1.1));
 const key = new THREE.DirectionalLight(0xffc98a, 2.6);
@@ -126,23 +129,56 @@ const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xf2d6a
 scene.add(dust);
 
 // The fighters.
-const DZ = 2.4; // depth between ranks
+const DY = 1.45; // height between ranks
 const SCALE = 0.44;
-const CAM_BACK = 4.8; // camera distance in front of the fighter it is looking at
+const LEAD = 1.25; // the leader floats this much bigger
+const CAM_DIST = 7; // camera distance in front of the column: about five ranks fit on a phone
+const FOCUS = 1.5; // the camera looks this far below the rank in focus, so it sits in the upper third with the next ones below
 const FLOAT = 0.45;
 let floaters = [];
 const tagsEl = $('tags');
 const dockEl = $('dock');
 const ballEl = $('dball');
-const st = { camZ: CAM_BACK, camV: 0, target: CAM_BACK, fling: 0, sel: 0, frame: 0, at: -1, hop: null, ball: null };
-const debris = new Debris(scene, { halfW: CW, halfH: CH, rng: rng(23) });
+const st = { camY: -FOCUS, camV: 0, target: -FOCUS, fling: 0, sel: 0, frame: 0, at: -1, hop: null, ball: null, rest: 0 };
+// The corridor, its dust and the wreckage ride with the camera's height, so scrolling never reaches a floor.
+const rig = new THREE.Group();
+scene.add(rig);
+rig.add(corridor, dust);
+const debris = new Debris(rig, { halfW: CW, halfH: CH, rng: rng(23) });
+
+/** A fighter as a flat cutout for the dock: its silhouette in its color, ink outline, two eyes. Returns where its head is. */
+function miniFighter(cast, color, size = 40) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const c = document.createElement('canvas');
+  c.className = 'mini';
+  c.width = size * dpr; c.height = size * dpr;
+  c.style.width = `${size}px`; c.style.height = `${size}px`;
+  const g = c.getContext('2d');
+  g.scale(dpr, dpr);
+  const parts = SHAPES[cast]().map((sh) => sh.extractPoints(24));
+  let x0 = Infinity; let x1 = -Infinity; let y0 = Infinity; let y1 = -Infinity;
+  for (const p of parts) for (const q of p.shape) { x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); }
+  const k = Math.min((size - 6) / (x1 - x0), (size - 4) / (y1 - y0));
+  const X = (x) => size / 2 + (x - (x0 + x1) / 2) * k;
+  const Y = (y) => size - 2 - (y - y0) * k; // standing on the bottom edge, so it sits on its platform
+  const trace = (pts) => { pts.forEach((q, j) => (j ? g.lineTo(X(q.x), Y(q.y)) : g.moveTo(X(q.x), Y(q.y)))); g.closePath(); };
+  g.beginPath();
+  for (const p of parts) { trace(p.shape); for (const h of p.holes) trace(h); }
+  g.fillStyle = color; g.fill('evenodd');
+  g.lineWidth = 2; g.lineJoin = 'round'; g.strokeStyle = '#16181d'; g.stroke();
+  const [fx, fy] = FACE[cast];
+  const ex = (fx - 100) / 100; const ey = (100 - fy) / 100;
+  for (const sx of [-1, 1]) {
+    g.beginPath(); g.arc(X(ex + sx * 0.11), Y(ey + 0.03), 0.075 * k, 0, TAU); g.fillStyle = '#fffdf0'; g.fill();
+    g.beginPath(); g.arc(X(ex + sx * 0.11) + 0.01 * k, Y(ey + 0.03), 0.04 * k, 0, TAU); g.fillStyle = '#16181d'; g.fill();
+  }
+  return { canvas: c, head: Y(y1) };
+}
 
 function slotFor(i) {
-  if (i === 0) return new THREE.Vector3(0, 0.1, 0);
-  // Behind the leader they scatter to the four corners in turn (upper right, lower left, upper left, lower right), so no one hides behind anyone.
-  const sx = i % 4 === 1 || i % 4 === 0 ? 1 : -1;
-  const sy = i % 2 ? 1 : -1;
-  return new THREE.Vector3(sx * (0.6 + 0.12 * ((i * 0.618) % 1)), sy * (1.0 + 0.25 * ((i * 0.37) % 1)), -i * DZ);
+  if (i === 0) return new THREE.Vector3(0, 0, 0);
+  // Down the column, swaying right and left so the stack reads as floating, not filed.
+  return new THREE.Vector3((i % 2 ? 1 : -1) * (0.32 + 0.1 * ((i * 0.618) % 1)), -i * DY, -0.35 * ((i * 0.37) % 1));
 }
 
 function clear() {
@@ -170,8 +206,9 @@ function build(fighters) {
   fighters.forEach((f, i) => {
     const body = new SoftBody({ cast: f.cast, color: f.color, edge: 0.14, transmission: 0.14 });
     body.feel = { ...FEEL[f.cast], grav: 0, float: FLOAT }; // weightless: held at its float height, nothing to stand on
-    body.group.scale.setScalar(SCALE);
-    body.group.position.y = -(FLOAT + body.height / 2) * SCALE; // the carrier's origin is the body's middle, so it tumbles about it
+    const size = SCALE * (i === 0 ? LEAD : 1);
+    body.group.scale.setScalar(size);
+    body.group.position.y = -(FLOAT + body.height / 2) * size; // the carrier's origin is the body's middle, so it tumbles about it
     const carrier = new THREE.Group();
     carrier.add(body.group);
     const home = slotFor(i);
@@ -199,18 +236,19 @@ function build(fighters) {
     stop.style.animationDelay = `${-(i * 0.9) % 3.6}s`;
     stop.setAttribute('role', 'button');
     stop.setAttribute('aria-label', `Fly to number ${i + 1}, ${f.name}`);
-    stop.append(el('div', 'pf'), el('div', 'lbl', String(i + 1)));
+    const mini = miniFighter(f.cast, f.color);
+    stop.append(mini.canvas, el('div', 'pf'), el('div', 'lbl', String(i + 1)));
     dockEl.append(stop);
-    floaters.push({ f, body, carrier, home, ph, tag, stop, spin: 0, roll: 0, tilt: 0 });
+    floaters.push({ f, body, carrier, home, ph, tag, stop, mini, spin: 0, roll: 0, tilt: 0 });
   });
   select(Math.min(st.sel, floaters.length - 1), true);
-  st.camZ = st.target;
+  st.camY = st.target;
 }
 
 function select(i, quiet) {
   if (!floaters.length) return;
   st.sel = Math.max(0, Math.min(floaters.length - 1, i));
-  st.target = floaters[st.sel].home.z + CAM_BACK;
+  st.target = floaters[st.sel].home.y - FOCUS;
   st.fling = 0;
   floaters.forEach((g, k) => { g.tag.classList.toggle('on', k === st.sel); });
   if (!quiet) post({ type: 'line' });
@@ -232,7 +270,7 @@ dockEl.addEventListener('pointerdown', (e) => {
   scrubbing = true;
   dockEl.setPointerCapture(e.pointerId);
   const i = slotAt(e.clientX);
-  if (i !== st.sel || Math.abs(st.target - (floaters[i].home.z + CAM_BACK)) > 0.01) select(i, true);
+  if (i !== st.sel || Math.abs(st.target - (floaters[i].home.y - FOCUS)) > 0.01) select(i, true);
 });
 dockEl.addEventListener('pointermove', (e) => {
   if (!scrubbing) return;
@@ -243,19 +281,22 @@ const endScrub = () => { scrubbing = false; };
 dockEl.addEventListener('pointerup', endScrub);
 dockEl.addEventListener('pointercancel', endScrub);
 
-/** Where the ball sits on platform i, in dock coordinates. */
+/** Where the ball sits on fighter i's head, in dock coordinates. */
 function perch(i) {
   const d = dockEl.getBoundingClientRect();
-  const r = floaters[i].stop.querySelector('.pf').getBoundingClientRect();
-  return { x: r.left + r.width / 2 - d.left, y: r.top - d.top - 10 };
+  const m = floaters[i].mini;
+  const r = m.canvas.getBoundingClientRect();
+  return { x: r.left + r.width / 2 - d.left, y: r.top + m.head * (r.height / 40) - d.top - 10 };
 }
 function hopTo(i) {
   if (i === st.at || !floaters[i]) return;
-  const to = perch(i);
+  const now = performance.now();
   if (st.at < 0 || !st.ball) {
-    st.ball = { ...to };
+    st.ball = perch(i);
+    st.rest = now;
   } else {
-    st.hop = { from: { ...st.ball }, to, t0: performance.now(), dur: 360, h: 22 + 5 * Math.abs(i - st.at), i };
+    // Take off from wherever the ball is drawn right now (mid-bounce or mid-hop), never from a remembered spot.
+    st.hop = { from: { ...st.ball }, t0: now, dur: 360, h: 22 + 5 * Math.abs(i - st.at), i };
     const from = floaters[st.at].stop; // the platform it leaves dips under the push-off
     from.classList.add('land');
     setTimeout(() => from.classList.remove('land'), 120);
@@ -265,25 +306,33 @@ function hopTo(i) {
   st.at = i;
 }
 function drawBall(now) {
-  if (!st.ball) { ballEl.style.opacity = '0'; return; }
+  if (!st.ball || st.at < 0) { ballEl.style.opacity = '0'; return; }
   ballEl.style.opacity = '1';
-  let { x, y } = st.ball; let sx = 1; let sy = 1;
+  // The head it is heading for is measured every frame: platforms bob and the active cutout grows, so a target taken
+  // at takeoff would be stale by landing.
+  const to = perch(st.at);
+  let x; let y; let sx = 1; let sy = 1;
   if (st.hop) {
     const u = Math.min(1, (now - st.hop.t0) / st.hop.dur);
-    x = st.hop.from.x + (st.hop.to.x - st.hop.from.x) * u;
-    y = st.hop.from.y + (st.hop.to.y - st.hop.from.y) * u - st.hop.h * 4 * u * (1 - u);
+    x = st.hop.from.x + (to.x - st.hop.from.x) * u;
+    y = st.hop.from.y + (to.y - st.hop.from.y) * u - st.hop.h * 4 * u * (1 - u);
     const squash = u < 0.12 ? 1 - u / 0.12 : u > 0.88 ? (u - 0.88) / 0.12 : 0;
     sx = 1 + 0.2 * squash; sy = 1 - 0.2 * squash;
     if (u >= 1) {
-      st.ball = { ...st.hop.to };
       const g = floaters[st.hop.i];
       if (g) { g.stop.classList.add('land'); setTimeout(() => g.stop.classList.remove('land'), 140); }
       st.hop = null;
+      st.rest = now; // the bounce starts from the head, so there is no jump
     }
   } else {
-    // Resting: it rocks on its platform like it is about to be served.
-    y += -2 * Math.max(0, Math.sin(now / 380));
+    // Resting: it keeps bouncing on their head, like it is about to be served. Squashes a little on each touch.
+    const ph = (now - st.rest) / 300;
+    x = to.x;
+    y = to.y - 8 * Math.abs(Math.sin(ph));
+    const touch = Math.max(0, 1 - Math.abs(Math.sin(ph)) * 6);
+    sx = 1 + 0.14 * touch; sy = 1 - 0.14 * touch;
   }
+  st.ball = { x, y };
   ballEl.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) scale(${sx.toFixed(3)},${sy.toFixed(3)})`;
 }
 
@@ -306,7 +355,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) down.moved = true;
   if (!down.moved) return;
   const now = performance.now();
-  const k = 0.014; // units of depth per pixel: a full-screen drag covers about six ranks
+  const k = (2 * CAM_DIST * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / window.innerHeight; // the column tracks the finger 1:1
   st.target = clampTarget(st.target + dy * k);
   const dtm = Math.max(1, now - down.lastT);
   down.v = (dy * k) / (dtm / 1000);
@@ -321,10 +370,10 @@ const endDrag = (e) => {
 canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointercancel', () => { down = null; });
 
-function clampTarget(z) {
-  const near = CAM_BACK + 0.6;
-  const far = (floaters.length ? floaters[floaters.length - 1].home.z : 0) + CAM_BACK - 0.6;
-  return Math.max(far, Math.min(near, z));
+function clampTarget(y) {
+  const top = 0.3 - FOCUS;
+  const bottom = (floaters.length ? floaters[floaters.length - 1].home.y : 0) - FOCUS - 0.3;
+  return Math.max(bottom, Math.min(top, y));
 }
 
 function tap(x, y) {
@@ -385,15 +434,15 @@ function frame(now) {
     if (Math.abs(st.fling) < 0.05) st.fling = 0;
   }
   const w = TAU * 1.4;
-  st.camV += (-w * w * (st.camZ - st.target) - 2 * w * st.camV) * dt;
-  st.camZ += st.camV * dt;
-  const near = floaters.length ? Math.max(0, Math.min(floaters.length - 1, Math.round((CAM_BACK - st.camZ) / DZ))) : 0;
-  const lookX = floaters[near] ? floaters[near].home.x * 0.35 : 0;
-  camera.position.set(lookX + 0.06 * Math.sin((t * TAU) / 9), 0.25 + 0.04 * Math.sin((t * TAU) / 7), st.camZ);
-  camera.lookAt(lookX * 0.6, 0, st.camZ - 6);
+  st.camV += (-w * w * (st.camY - st.target) - 2 * w * st.camV) * dt;
+  st.camY += st.camV * dt;
+  const near = floaters.length ? Math.max(0, Math.min(floaters.length - 1, Math.round(-(st.camY + FOCUS) / DY))) : 0;
+  camera.position.set(0.06 * Math.sin((t * TAU) / 9), st.camY + 0.15 + 0.04 * Math.sin((t * TAU) / 7), CAM_DIST);
+  camera.lookAt(0, st.camY, -6);
+  rig.position.y = st.camY;
   if (floaters.length) hopTo(near);
   drawBall(now);
-  debris.update(dt, st.camZ, REDUCED);
+  debris.update(dt, CAM_DIST, REDUCED);
 
   const amp = REDUCED ? 0.3 : 1;
   floaters.forEach((g, i) => {
@@ -407,19 +456,19 @@ function frame(now) {
     );
     g.carrier.position.set(g.home.x, g.home.y + amp * 0.08 * Math.sin((t * TAU) / 5 + d), g.home.z);
     g.body.simulate(dt, t + i * 0.7);
-    const dist = st.camZ - g.home.z;
-    // Far ones are mostly fog: draw them every other frame, and not at all past the fog.
-    if (dist > -0.5 && dist < 26 && (dist < 7 || (st.frame + i) % 2 === 0)) g.body.render(t + i * 0.7);
-    g.body.group.visible = dist > -0.5 && dist < 26;
+    const off = Math.abs(g.home.y - st.camY);
+    // Off screen: skip drawing. Near the edges: draw every other frame.
+    const onScreen = off < 4.2;
+    if (onScreen && (off < 3 || (st.frame + i) % 2 === 0)) g.body.render(t + i * 0.7);
+    g.body.group.visible = onScreen;
 
-    // Its plate hangs just under it, sized and faded by distance, and swings after the fighter's roll on a lag.
+    // Its plate hangs just under it and swings after the fighter's roll on a lag.
     v3.copy(g.carrier.position);
-    v3.y -= SCALE * 0.95;
+    v3.y -= SCALE * (i === 0 ? LEAD : 1) * 0.95;
     v3.project(camera);
-    const show = dist > 0.8 && dist < 11 && v3.z < 1;
-    const fade = show ? Math.max(0, Math.min(1, 1 - (dist - 7.5) / 3.5)) : 0;
+    const fade = onScreen ? Math.max(0, Math.min(1, 1 - (off - 3.1) / 0.6)) : 0;
     g.tilt += (g.carrier.rotation.z * 0.5 - g.tilt) * (1 - Math.exp(-5 * dt));
-    const s = Math.max(0.6, Math.min(1.2, 5.2 / dist));
+    const s = i === 0 ? 1 : 0.86;
     const x = (v3.x * 0.5 + 0.5) * window.innerWidth;
     const y = (-v3.y * 0.5 + 0.5) * window.innerHeight;
     g.tag.style.opacity = fade.toFixed(3);
