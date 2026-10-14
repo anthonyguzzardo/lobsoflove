@@ -12,8 +12,9 @@ CAST = {
     "goblin": ("DROPSHOT GOBLIN", "#2fe08a"), "bot": ("SERVE BOT", "#35d6ff"), "moon": ("MOONBALLER", "#9b6bff"),
     "grunter": ("THE GRUNTER", "#ff5252"), "junk": ("JUNKBALLER", "#ff8a1f"), "comet": ("NET RUSHER", "#ff3d7f"),
     "wall": ("THE WALL", "#d7f205"), "ghost": ("THE NO-SHOW", "#f4f1e6"),
+    "lobber": ("THE LOBBER", "#35d6ff"), "rabbit": ("THE JACKRABBIT", "#ff8a1f"),
 }
-FACE = {"wall": (100, 92), "moon": (78, 96), "bot": (100, 78), "goblin": (100, 100), "grunter": (100, 86), "junk": (100, 108), "comet": (112, 104), "ghost": (100, 88)}
+FACE = {"wall": (100, 92), "moon": (78, 96), "bot": (100, 78), "goblin": (100, 100), "grunter": (100, 86), "junk": (100, 108), "comet": (112, 104), "ghost": (100, 88), "lobber": (100, 64), "rabbit": (100, 120)}
 
 
 def rgb(h): return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
@@ -68,6 +69,17 @@ def body_mask(cast, k):
     elif cast == "ghost":
         d.pieslice(B(42, 30, 158, 146), 180, 360, fill=255)
         d.polygon(P([(42, 88), (158, 88), (158, 176), (135, 162), (117, 178), (100, 162), (83, 178), (65, 162), (42, 176)]), fill=255)
+    elif cast == "lobber":
+        d.ellipse(B(24, 44, 176, 196), fill=255)
+        d.rectangle(B(0, 120, 200, 200), fill=0)
+        d.rectangle(B(24, 120, 66, 176), fill=255)
+        d.rectangle(B(134, 120, 176, 176), fill=255)
+        d.ellipse(B(66, 86, 134, 154), fill=0)
+        d.rectangle(B(66, 120, 134, 200), fill=0)
+    elif cast == "rabbit":
+        d.ellipse(B(59, 12, 89, 92), fill=255)
+        d.ellipse(B(111, 12, 141, 92), fill=255)
+        d.ellipse(B(38, 70, 162, 178), fill=255)
     return m
 
 

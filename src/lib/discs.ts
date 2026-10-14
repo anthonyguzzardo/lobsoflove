@@ -10,4 +10,6 @@ export const DISC_ART: Record<CastId, number> = {
   junk: require('../../assets/discs/junk.png'),
   comet: require('../../assets/discs/comet.png'),
   ghost: require('../../assets/discs/ghost.png'),
+  lobber: require('../../assets/discs/lobber.png'),
+  rabbit: require('../../assets/discs/rabbit.png'),
 };

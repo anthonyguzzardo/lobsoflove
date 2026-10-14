@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
-export type CastId = 'wall' | 'moon' | 'bot' | 'goblin' | 'grunter' | 'junk' | 'comet' | 'ghost';
+export type CastId = 'wall' | 'moon' | 'bot' | 'goblin' | 'grunter' | 'junk' | 'comet' | 'ghost' | 'lobber' | 'rabbit';
 
 export type Fighter = {
   id: string;
@@ -26,6 +26,8 @@ export const CAST: Record<CastId, { label: string; tagline: string }> = {
   junk: { label: 'Junkballer', tagline: 'No pace, no spin, no rhythm, no mercy.' },
   comet: { label: 'Net Rusher', tagline: 'Chip, charge, pray.' },
   ghost: { label: 'The No-Show', tagline: '"Running five late."' },
+  lobber: { label: 'The Lobber', tagline: 'Over your head. Again. And again.' },
+  rabbit: { label: 'The Jackrabbit', tagline: 'Gets to everything. Leaves a rainbow.' },
 };
 
 export const CAST_IDS = Object.keys(CAST) as CastId[];

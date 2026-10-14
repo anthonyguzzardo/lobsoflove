@@ -9,6 +9,7 @@ const EYE = '#fffdf0';
 const FACE: Record<CastId, { x: number; y: number }> = {
   wall: { x: 100, y: 92 }, moon: { x: 78, y: 96 }, bot: { x: 100, y: 78 }, goblin: { x: 100, y: 100 },
   grunter: { x: 100, y: 86 }, junk: { x: 100, y: 108 }, comet: { x: 112, y: 104 }, ghost: { x: 100, y: 88 },
+  lobber: { x: 100, y: 64 }, rabbit: { x: 100, y: 120 },
 };
 
 function Body({ cast, color }: { cast: CastId; color: string }) {
@@ -63,6 +64,17 @@ function Body({ cast, color }: { cast: CastId; color: string }) {
       );
     case 'ghost':
       return <Path d="M42 176V88a58 58 0 0 1 116 0v88l-23-14-18 16-17-16-17 16-18-16Z" fill={color} opacity={0.82} />;
+    case 'lobber':
+      // An arch: the path of a lob.
+      return <Path d="M24 176V120a76 76 0 0 1 152 0v56h-42v-56a34 34 0 0 0-68 0v56Z" fill={color} />;
+    case 'rabbit':
+      return (
+        <G>
+          <Ellipse cx={74} cy={52} rx={15} ry={40} fill={color} />
+          <Ellipse cx={126} cy={52} rx={15} ry={40} fill={color} />
+          <Ellipse cx={100} cy={124} rx={62} ry={54} fill={color} />
+        </G>
+      );
   }
 }
 

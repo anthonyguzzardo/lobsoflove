@@ -15,7 +15,7 @@ const emit = (file, name, html) => {
 };
 
 // Opponent picker: the jewel case.
-const casts = ['wall', 'moon', 'bot', 'goblin', 'grunter', 'junk', 'comet', 'ghost'];
+const casts = ['wall', 'moon', 'bot', 'goblin', 'grunter', 'junk', 'comet', 'ghost', 'lobber', 'rabbit'];
 const art = Object.fromEntries(casts.map((c) => [c, 'data:image/jpeg;base64,' + readFileSync(`${root}assets/discs/${c}.jpg`).toString('base64')]));
 emit('case-html.ts', 'CASE_HTML', page({ css: 'body{background:#f6f5f2}', body: '<canvas id="c"></canvas>', pre: `window.DISC_ART=${JSON.stringify(art)};`, js: bundle('web/case.js') }));
 
@@ -45,8 +45,9 @@ h1{margin:0;font-size:17px;letter-spacing:.06em;font-weight:800}h1 b{color:var(-
 #dock .slot.on .pf{background:var(--pc,var(--clay));box-shadow:0 6px 0 color-mix(in srgb,var(--pc,#e2562f) 62%,#000),0 12px 14px rgba(40,34,26,.22)}
 #dock .slot.land .pf{transform:translateY(4px)}
 /* The hit: the launching platform dips and snaps up under the ball. */
-#dock .slot.kick .pf{animation:kick .24s cubic-bezier(.34,1.56,.64,1)}
-@keyframes kick{0%{transform:translateY(0)}30%{transform:translateY(5px)}65%{transform:translateY(-6px)}100%{transform:translateY(0)}}
+#dock .slot.load .pf{transform:translateY(6px);transition:transform .13s cubic-bezier(.7,0,.84,0)}
+#dock .slot.kick .pf{animation:kick .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes kick{0%{transform:translateY(6px)}45%{transform:translateY(-6px)}100%{transform:translateY(0)}}
 #dock .lbl{font:800 9.5px var(--mono);letter-spacing:.06em;margin-top:13px;opacity:.42;transition:opacity .2s}
 #dock .slot.on .lbl{opacity:1}
 #dball{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;pointer-events:none;will-change:transform}
@@ -155,25 +156,28 @@ const courtsCss = homeCss + `
 #fade{transition:opacity .5s}body.dive #fade{opacity:0}
 `;
 const courtsCssExtra = `
-/* Back: a tennis ball streaking left in an ink disc. */
-#home{all:unset;position:fixed;left:12px;top:calc(env(safe-area-inset-top) - 2px);width:52px;height:52px;border-radius:50%;background:var(--ink);box-shadow:0 4px 0 #000,0 8px 14px rgba(22,24,29,.25);pointer-events:auto;z-index:5;transition:transform .32s cubic-bezier(.34,1.56,.64,1),box-shadow .32s}
-#home{overflow:hidden}#home svg{width:52px;height:52px;display:block}
-/* A ball streaking left: the speed lines say which way. Press and it shoots off the left edge, the lines stretching after it. */
-#home .trail path{stroke:#fffdf0;stroke-width:2.4;stroke-linecap:round;fill:none}
-#home .trail{transform-origin:40px 22px;transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s}
-#home{cursor:pointer;touch-action:manipulation}
-#home:focus-visible{outline:2px solid #d7f205;outline-offset:5px}
-#home .ball{animation:backIdle 2.5s ease-in-out infinite;transform-origin:17px 22px;transition:transform .22s cubic-bezier(.34,1.56,.64,1)}
+/* A floating tennis ball on a small paper platform. */
+#home,#ui.dive>#home{all:unset;position:fixed;left:12px;top:calc(env(safe-area-inset-top) + 2px);width:60px;height:56px;pointer-events:auto;z-index:5;cursor:pointer;touch-action:manipulation;transition:transform .2s}
+#home svg{width:60px;height:56px;display:block;overflow:visible}
+#home:focus-visible{outline:2px solid var(--ink);outline-offset:4px;border-radius:12px}
+#home .ball{transform-origin:35px 23px;animation:backIdle 2.1s ease-in-out infinite}
+#home .seam{transform-origin:35px 23px;animation:backRoll 2.1s ease-in-out infinite}
+#home .ball-shadow{transform-origin:35px 41px;animation:backShadow 2.1s ease-in-out infinite}
+#home .trail{opacity:0;transform-origin:30px 28px}
 #home.held{transform:translateY(2px) scale(.95)}
 #home.held .ball{animation:none;transform:translateX(5px) scale(.86,1.1)}
-#home.held .trail{opacity:.5}
-#home.swing .ball{animation:backhand .22s ease-in forwards}
-#home.swing .trail{transform:translateX(-8px) scaleX(1.8);opacity:0;transition-duration:.22s}
-@keyframes backIdle{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
-@keyframes backhand{0%,16%{transform:translateX(5px) scale(.86,1.1)}55%{transform:translate(-9px,-7px) scale(1.2,.88);opacity:1}100%{transform:translateX(-34px);opacity:0}}
-@media(prefers-reduced-motion:reduce){#home,#home .ball,#home .trail{transition:none}#home .ball,#home.swing .ball{animation:none}#home.held,#home.held .ball{animation:none;transform:none}}
-/* Inside a court, the disc takes the court's color so you know this back steps out of the court, not off the screen. */
-#home.out{background:var(--accent,#e2562f)}#home.out .trail path{stroke:#16181d}
+#home.held .seam{animation-play-state:paused}
+#home.swing .ball{animation:backhand .28s ease-in forwards}
+#home.swing .seam{animation:backSpin .28s ease-in forwards}
+#home.swing .trail{animation:backRibbon .28s ease-out forwards}
+#home.swing .ball-shadow{animation:none;opacity:0}
+@keyframes backIdle{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes backRoll{0%,100%{transform:rotate(-18deg)}50%{transform:rotate(24deg)}}
+@keyframes backShadow{0%,100%{opacity:.3;transform:scaleX(1)}50%{opacity:.17;transform:scaleX(.7)}}
+@keyframes backhand{0%,12%{transform:translateX(5px) scale(.86,1.1)}55%{transform:translate(-14px,-10px) scale(1.2,.88);opacity:1}100%{transform:translateX(-48px);opacity:0}}
+@keyframes backSpin{to{transform:rotate(-160deg)}}
+@keyframes backRibbon{0%{opacity:0;transform:scaleX(.7)}45%{opacity:1}100%{opacity:0;transform:translateX(-18px) scaleX(1.3)}}
+@media(prefers-reduced-motion:reduce){#home,#home *{animation:none!important;transition:none!important}#home.held,#home.held .ball{transform:none}}
 /* The song for this court: one quiet line under the facts. The disc toggles sound, the title opens it in Apple Music. */
 #songline{display:flex;align-items:center;gap:7px;min-width:0;flex:1;pointer-events:auto}
 #songline #mute{all:unset;width:24px;height:24px;border-radius:50%;background:var(--accent,#e2562f);color:var(--ink);font:800 12px var(--mono);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 2px 0 rgba(22,24,29,.35)}
@@ -183,7 +187,7 @@ const courtsCssExtra = `
 #ui{padding-top:calc(env(safe-area-inset-top) + 2px)!important}
 `;
 const courtsBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
-<button id="home" aria-label="Back"><svg viewBox="0 0 44 44" aria-hidden="true"><g class="trail"><path d="M28 16.5H35" opacity=".55"/><path d="M28.5 22H38.5"/><path d="M28 27.5H34" opacity=".55"/></g><g class="ball"><circle cx="17" cy="22" r="7.6" fill="#d7f205"/><path d="M11.6 16.6c3.3 2.9 3.3 7.9 0 10.8M22.4 16.6c-3.3 2.9-3.3 7.9 0 10.8" fill="none" stroke="#fffdf0" stroke-width="1.5" stroke-linecap="round"/></g></svg></button><header hidden><h1></h1><p id="sub"></p><div class="meter"><div class="bar"><i id="fill"></i></div><div id="pct"></div></div></header>
+<button id="home" aria-label="Back"><svg viewBox="0 0 60 56" aria-hidden="true"><defs><radialGradient id="back-felt" cx="30%" cy="25%" r="80%"><stop offset="0" stop-color="#f1ff8d"/><stop offset=".55" stop-color="#d7f205"/><stop offset="1" stop-color="#8ca511"/></radialGradient></defs><path d="M8 42Q30 34 52 42L48 48Q30 55 12 48Z" fill="#d5cdbd"/><path d="M8 42Q30 32 52 42Q30 53 8 42" fill="#fffdf0" stroke="#c5bdac"/><path d="M19 40L14 43L19 46M15 43H27" fill="none" stroke="#16181d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><ellipse class="ball-shadow" cx="35.5" cy="41.5" rx="11.5" ry="2.5" fill="#16181d"/><g class="trail" fill="none" stroke-linecap="round"><path d="M9 26C24 2 33 43 55 17" stroke="#e2562f" stroke-width="3"/><path d="M11 30C28 7 35 47 57 23" stroke="#7e91c9" stroke-width="2"/></g><g class="ball"><circle cx="35" cy="23" r="13" fill="url(#back-felt)"/><g class="seam"><path d="M26 13C37 18 37 28 26 33M44 13C33 18 33 28 44 33" fill="none" stroke="#fffdf0" stroke-width="1.8"/></g></g></svg></button><header hidden><h1></h1><p id="sub"></p><div class="meter"><div class="bar"><i id="fill"></i></div><div id="pct"></div></div></header>
 <div class="grow"></div>
 <div id="head"><div id="h1"></div><div id="h2"></div><div id="facts"><span class="fact" id="count"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" rx="1.5" fill="var(--accent,#e2562f)"/><path d="M11 1v12M5.5 3.5v7M16.5 3.5v7M5.5 7h11" stroke="#fffdf0" stroke-width="1.1" fill="none"/></svg><b></b><small>COURTS</small></span><span class="fact" id="lights"><svg viewBox="0 0 22 22" aria-hidden="true"><g class="rays"><path d="M4 9 1 7.5M4 12H1M5 15l-2.5 2" stroke="#e9b535" stroke-width="1.6" stroke-linecap="round"/></g><path d="M12 8v13" stroke="currentColor" stroke-width="1.8"/><rect class="head" x="5" y="3" width="11" height="6" rx="1.5"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b></b></span><button class="fact" id="listen" aria-label="Sound on. Tap to mute."><svg viewBox="0 0 22 22" aria-hidden="true"><path d="M3 8.5h4l5-4v13l-5-4H3z" fill="currentColor"/><g class="waves" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M15 8.2a4 4 0 0 1 0 5.6"/><path d="M17.6 5.8a7.5 7.5 0 0 1 0 10.4"/></g><path class="x" d="M15.5 8.5l5 5M20.5 8.5l-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b id="lstxt">SOUND</b></button></div><div id="blurb"></div></div>
 <div id="enter" role="slider" aria-label="Slide the ball to go in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>
@@ -222,7 +226,7 @@ const fighterCss = homeCss + `
 #stats em{font:800 12.5px var(--mono);font-style:normal;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #stats button.empty em{opacity:.55;font-size:11px;letter-spacing:.06em}
 #tag{margin-bottom:12px}
-#shelf{position:relative;height:136px;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:1fr 1fr;margin-bottom:6px}
+#shelf{position:relative;height:136px;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:1fr 1fr;margin-bottom:6px}
 #drops{display:flex;justify-content:space-between;padding:0 6px;margin:0 0 14px;pointer-events:auto}
 /* Paint drops: a teardrop of glossy color on a little ink saucer when picked. */
 .drop{all:unset;position:relative;width:34px;height:42px;display:flex;align-items:flex-end;justify-content:center}

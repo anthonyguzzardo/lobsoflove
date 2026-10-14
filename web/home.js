@@ -453,8 +453,8 @@ const dock = $('dock');
 dock.insertAdjacentHTML('beforeend', PLACES.map((p, k) => `<button class="slot" data-i="${k + 1}"><span class="pf"></span><span class="lbl">${p.label}</span></button>`).join(''));
 dock.addEventListener('click', (e) => { const b = e.target.closest('.slot'); if (b) goTo(Number(b.dataset.i)); });
 // The dock ball is real physics: gravity, a launch sized to the gap, and bounces that lose 58% each time.
-const dk = { x: 0, y: 0, vx: 0, vy: 0, to: 0, flying: false, squash: 0, rot: 0, at: 0 };
-const G = 2600;
+const dk = { x: 0, y: 0, vx: 0, vy: 0, to: 0, flying: false, squash: 0, rot: 0, at: 0, load: null, queued: null };
+const G = 1500;
 const slotX = (i) => {
   const r = dock.getBoundingClientRect();
   if (!i) return 18; // START: the ball waits at the left end
@@ -468,23 +468,37 @@ const DOCK_READY = null;
 // it flies a true ballistic arc at a fixed 60 degree launch (so a longer gap needs a harder hit, and it gets one),
 // horizontal speed constant in the air, spin from its speed, and it lands dead on the target and bounces out its energy.
 function dockHop(i) {
-  const from = dk.x || slotX(dk.at);
-  const fromSlot = dock.querySelector(`.slot[data-i="${dk.at}"]`);
+  // Wind-up first: the ball sinks into its platform with it for 130 ms, the way a ball loads into the strings, then gets launched.
+  if (dk.flying || dk.load) { dk.queued = i; return; }
+  dk.load = { to: i, t: 0, slot: dock.querySelector(`.slot[data-i="${dk.at}"]`) };
+  if (dk.load.slot) dk.load.slot.classList.add('load');
+  dk.vy = 0;
+}
+function launch(i, from, slot) {
   dk.to = slotX(i); dk.at = i;
   const R = dk.to - from;
-  const T60 = Math.tan(Math.PI / 3);
-  const vy = Math.max(300, Math.sqrt(Math.abs(R) * G * T60 / 2));
+  // A softer, floatier hit than before: lower gravity and a 64 degree launch, so even the long hop takes most of a second.
+  const T = Math.tan((64 * Math.PI) / 180);
+  const vy = Math.max(260, Math.sqrt((Math.abs(R) * G * T) / 2));
   dk.vy = -vy;
   dk.vx = R / ((2 * vy) / G); // lands exactly on the target platform
   dk.x = from;
   dk.flying = true;
-  if (fromSlot) { fromSlot.classList.remove('kick'); void fromSlot.offsetWidth; fromSlot.classList.add('kick'); }
-  post({ type: 'press' }); // the pock of the hit
+  if (slot) { slot.classList.remove('load'); slot.classList.remove('kick'); void slot.offsetWidth; slot.classList.add('kick'); }
+  post({ type: 'press' });
 }
 function dockStep(dt) {
   if (DOCK_READY && !DOCK_READY()) return;
   if (!dk.x) { dk.x = slotX(dk.at); dk.y = restY(); }
   const floor = restY();
+  if (dk.load) {
+    dk.load.t += dt;
+    const k = Math.min(1, dk.load.t / 0.13);
+    dk.y = restY() + 6 * k * k;
+    dk.squash = 0.18 * k;
+    if (k >= 1) { const l = dk.load; dk.load = null; dk.y = restY(); launch(l.to, dk.x || slotX(dk.at), l.slot); }
+    return;
+  }
   if (dk.flying) dk.x += dk.vx * dt;
   dk.rot += (dk.vx * dt) / 12; // rolls through the air at its own speed (radius 12 px)
   dk.vy += G * dt;
@@ -492,7 +506,7 @@ function dockStep(dt) {
   if (dk.y >= floor && dk.vy > 0) {
     const hit = dk.vy;
     dk.y = floor;
-    if (dk.flying) { dk.flying = false; dk.x = dk.to; dk.vx = 0; }
+    if (dk.flying) { dk.flying = false; dk.x = dk.to; dk.vx = 0; if (dk.queued != null) { const q = dk.queued; dk.queued = null; setTimeout(() => dockHop(q), 60); } }
     dk.vy = hit > 140 ? -hit * 0.42 : 0;
     if (hit > 140) {
       dk.squash = Math.min(0.35, hit / 2200);

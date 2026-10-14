@@ -9,12 +9,12 @@ import { WebView } from 'react-native-webview';
 import { BackSwing } from '@/components/back-swing';
 import { FIGHTER_HTML } from '@/generated/fighter-html';
 import { goBack } from '@/lib/nav';
-import { type CastId, type Fighter, saveFighter, useRoster } from '@/lib/roster';
+import { CAST, type CastId, type Fighter, saveFighter, useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 
 type Field = 'name' | 'bio' | 'favoritePro' | 'homeCourt' | 'racket';
 type Msg =
-  | { type: 'ready' | 'press' | 'line' | 'slid' | 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' | 'serve' | 'pock' | 'return' | 'flex' | 'burst' | 'cheer' }
+  | { type: 'ready' | 'press' | 'line' | 'slid' | 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' | 'serve' | 'pock' | 'return' | 'flex' | 'burst' | 'cheer' | 'dash' | 'gulp' | 'crush' | 'ahh' | 'ballbounce' | 'bonk' }
   | { type: 'bloop'; cast: CastId }
   | { type: 'thud'; v: number }
   | { type: 'cast'; cast: CastId }
@@ -76,7 +76,9 @@ export default function MakeYourFighter() {
               ready.current = true;
               run(`window.setFighter(${JSON.stringify(draftRef.current)})`);
               if (params.demo === '1') run('window.demoFighter()');
-              if (params.demo === 'wall') run("setTimeout(() => window.demoStyle('wall'), 900)");
+              // ?demo=<style> switches to that style as if its candy were tapped; ?demo=drink makes the Wall drink right away.
+              if (params.demo && params.demo in CAST) run(`setTimeout(() => window.demoStyle('${params.demo}'), 900)`);
+              if (params.demo === 'drink') run('setTimeout(() => window.demoDrink(), 900)');
               break;
             case 'cast': setDraft((d) => ({ ...d, cast: msg.cast })); break;
             case 'color': setDraft((d) => ({ ...d, color: msg.color })); void Haptics.selectionAsync(); break;
@@ -95,6 +97,12 @@ export default function MakeYourFighter() {
             case 'flex': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('grunt', 0.55); break;
             case 'burst': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('pock', 1); sfx('swish', 0.8); break;
             case 'cheer': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('select', 0.8); break;
+            case 'dash': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('squeak', 0.55); break;
+            case 'gulp': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('bloop', 0.5); break;
+            case 'crush': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('pock', 0.6); break;
+            case 'ahh': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); break;
+            case 'bonk': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('pock', 1); sfx('bounce', 0.7); break;
+            case 'ballbounce': sfx('bounce', 0.45); break;
             case 'serve': sfx('bounce', 0.3); break;
             case 'pock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('pock', 0.7); break;
             case 'return': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('pock', 0.9); break;
