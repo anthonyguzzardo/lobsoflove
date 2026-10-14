@@ -1,0 +1,19 @@
+{
+  "name": "LobsOfLove",
+  "stage": "Art direction concepts; not wired into the app or exported for platform delivery.",
+  "generator": "Built-in image_gen",
+  "assets": {
+    "app-icon-concept.png": {
+      "prompt": "Use case: logo-brand\nAsset type: app icon concept for the tennis game LobsOfLove, square 1024x1024 opaque artwork.\nPrimary request: A striking playful arcade tennis app icon: one oversized optic-yellow tennis ball, its bold ivory curved seams cleverly suggesting a heart, with a single hot-pink swooping lob trail curling behind it. Recognizably a tennis ball first, love/heart detail second. Energetic graphic illustration with restrained tactile screenprint grain, crisp thick shapes, very subtle dimensional shading. Match existing game palette: midnight #0b0f1a background, yellow #d7f205, pink #ff3d7f, warm ivory #f4f1e6. Center composition with generous safe margin, clear silhouette readable at tiny size, ball fills approximately 65 percent of canvas. Background fills entire square. No lettering, no initials, no words, no mockup, no phone, no rounded outer corners, no border, no additional objects, no watermark."
+    },
+    "loading-screen-concept.png": {
+      "prompt": "Use case: stylized-concept\nAsset type: portrait loading/title screen concept illustration for mobile arcade tennis game LobsOfLove, 1024x1536.\nPrimary request: A beautifully art-directed playful arcade tennis night court, dramatic low perspective looking over a net toward an enormous optic-yellow tennis ball soaring in a hot-pink lob arc that subtly curves like a heart. Strong graphic shapes, sporty 1990s arcade poster energy with contemporary restraint, tactile screenprint grain and rich flat shadows, not photorealistic. Existing game palette midnight navy #0b0f1a, optic yellow #d7f205, hot pink #ff3d7f, warm ivory #f4f1e6. Tennis court perspective lines across lower half, simple net, energetic ball centered in middle section, purposeful clean negative space around title at top and bottom 18 percent quiet navy for eventual real loading UI. Exact title text at upper quarter: \"LobsOfLove\" rendered as one word with this exact capitalization in bold custom sporty italic ivory lettering, beautifully legible. Title safely inset from all edges. No additional text, no loading bar, no phone mockup, no characters, no advertisements, no watermark. Full bleed portrait art."
+    }
+  },
+  "palette": {
+    "midnight": "#0b0f1a",
+    "ball": "#d7f205",
+    "pink": "#ff3d7f",
+    "ivory": "#f4f1e6"
+  }
+}

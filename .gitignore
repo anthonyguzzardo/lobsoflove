@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# reference videos (578 MB, too big for GitHub; kept locally)
+docs/mo-design/vids/

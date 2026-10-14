@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Tennis app market and court status</title>
+  <style>
+
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">:root{--bg:#fbfaf7;--fg:#1c1b18;--muted:#6b6760;--accent:#0f6e56;--rule:#e2ded6;--th:#f1efe9;--code:#f3f1ec;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121410;--fg:#ebe8e0;--muted:#a19c92;--accent:#5fd3b0;--rule:#2b2e28;--th:#1c1f1a;--code:#1a1d18}}
+:root[data-theme="dark"]{--bg:#121410;--fg:#ebe8e0;--muted:#a19c92;--accent:#5fd3b0;--rule:#2b2e28;--th:#1c1f1a;--code:#1a1d18}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.6 Georgia,"Iowan Old Style","Times New Roman",serif;padding:0 16px}
+main{max-width:860px;margin:0 auto;padding:40px 0 80px}
+h1{font-size:2.1rem;line-height:1.15;margin:0 0 .3em;letter-spacing:-.01em}
+h2{font-size:1.4rem;margin:2.2em 0 .5em;line-height:1.25;border-top:1px solid var(--rule);padding-top:1em}
+h3{font-size:1.1rem;margin:1.6em 0 .4em}
+p{margin:0 0 1em}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+a:hover{border-bottom-color:var(--accent)}
+.meta{color:var(--muted);font-size:.95rem;margin-bottom:2em;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif}
+table{border-collapse:collapse;width:100%;margin:1em 0 1.5em;font-size:.9rem;line-height:1.4;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;display:block;overflow-x:auto}
+th,td{text-align:left;vertical-align:top;padding:.55em .7em;border-bottom:1px solid var(--rule)}
+th{background:var(--th);font-weight:600;position:sticky;top:0}
+code{background:var(--code);padding:.1em .35em;border-radius:4px;font-size:.88em}
+ul,ol{padding-left:1.4em}
+li{margin:.25em 0}
+blockquote{margin:1em 0;padding:.2em 1em;border-left:3px solid var(--accent);color:var(--muted)}
+hr{border:0;border-top:1px solid var(--rule);margin:2em 0}
+@media (max-width:600px){body{font-size:16px}h1{font-size:1.7rem}main{padding-top:24px}}
+</style>
+</head>
+<body><main>
+<p class="meta">Market research for the Courts idea · October 10, 2026 · built from four research notes in research_notes/Tennis app market and court status/</p><h1 id="build-the-season-first-borrow-the-courts">Build the Season
+First, Borrow the Courts</h1>
+<p>As of October 2026 no app anywhere runs a closed friend-group tennis
+season with character-select avatars, courts as levels with history,
+photo-verified match starts, ATP-style points and play-money markets,
+and the money in racquet sports has gone the other way: into club
+booking software (CourtReserve&#39;s <strong>$54M</strong> growth round,
+Playtomic&#39;s <strong>€65M</strong> raise and its September 2026 TIMP
+acquisition) and into ratings (UTR, DUPR), none of which touches a
+friend group (<a href="https://www.thedinkpickleball.com/pickleball-platform-courtreserve-secures-54m-investment-the-dream-is-to-scale/">The
+Dink</a>; <a href="https://stories.prowly.com/388092-playtomic-raises-70-million-in-funding-accelerating-its-expansion-in-the-us-market">Prowly</a>).
+The nearest competition is a 2025–26 wave of solo-developer &quot;Strava for
+tennis&quot; loggers (Slice, Rackt, Twenty Two, Tennboard, Tengether) that do
+feeds, head-to-heads and match cards, yet <strong>none has crossed 25
+App Store ratings</strong>, which says the slot is open and that logging
+alone does not win it (<a href="https://apps.apple.com/app/id6758102988">Slice</a>; <a href="https://apps.apple.com/us/app/id1246157377">Tennboard</a>). Live
+public-court status is the one part of the plan the evidence argues
+against as a headline: four approaches have been tried since 2017
+(manual reports, geofence check-ins, cameras, camera-AI), every consumer
+attempt sits at <strong>0–2 ratings</strong>, San Diego has no
+reservation feed to piggyback on, and UCSD&#39;s booking portal is sign-in
+only, so presence should be an opt-in signal on court pages among
+friends with a founder-seeded hourly prior, not the product (<a href="https://apps.apple.com/us/app/courtcheck-skip-the-wait/id6759684260">CourtCheck</a>;
+<a href="https://recreation.ucsd.edu/policies/">UCSD policies</a>).
+Golf&#39;s surviving apps all draw the same paywall line (leaderboards and
+friend games free, personal analytics paid at <strong>$30–100 a
+year</strong>), Strava converts roughly <strong>2% of registered
+users</strong>, and Sleeper won fantasy by making league chat and
+per-league identity the product and adding money years later in separate
+tabs, so the tennis app should be free for the group indefinitely and
+treat revenue as a later, analytics-shaped add-on (<a href="https://golfpadgps.com/news/golf-pad-vs-18birdies">Golf Pad</a>;
+<a href="https://sacra.com/c/strava/">Sacra</a>; <a href="https://frontofficesports.com/sleeper-more-than-quadruples-valuation-to-400m/">Front
+Office Sports</a>). The recommended first test is close to the founder&#39;s
+own: roster, photo-verified match log with dual confirmation, one season
+table and a shareable match card, three people, UCSD courts, two weeks,
+with the court recorded from match one and the knock, gear log, markets
+and kit deferred until friends log matches unprompted and post the
+card.</p>
+<h2 id="racquet-capital-bought-clubs-and-ratings-not-friend-groups">Racquet
+capital bought clubs and ratings, not friend groups</h2>
+<p>The incumbents the founder listed from memory are real, but the map
+has shifted in two ways since that doc was written. Playtomic is bigger
+and closer than assumed: <strong>4.7M players, 6,500+ clubs, 66+
+countries</strong>, roughly <strong>€240M in 2024 gross
+bookings</strong>, 102 US padel clubs (26% of the US total, effectively
+tied with Playbypoint), and since March 2026 an official US pickleball
+entry through a DUPR integration that brings its &quot;Open Matches&quot;
+stranger-matchmaking to American pickleball (<a href="https://www.dupr.com/post/playtomic-partners-with-dupr-to-power-the-next-era-of-community-driven-pickleball">DUPR
+blog</a>; <a href="https://www.padelbrowser.com/blog/padel-booking-platforms-us-2026">Padel
+Browser</a>). Yet its product is organised around the club, not the
+player. An October 7, 2026 critique put it precisely: Playtomic &quot;has the
+liquidity… booking and paying just work,&quot; but &quot;using Playtomic feels
+like work. The product is organised around the club, while I arrive with
+a question about me,&quot; with no view of who is attending and no social
+context (<a href="https://guzhikov.substack.com/p/playtomic-has-the-liquidity-but-missing">Guzhikov
+Substack</a>). US App Store reviewers call its level algorithm &quot;the
+worst possible system imaginable&quot; and complain of auto-cancelled open
+plays and 5% fees (<a href="https://apps.apple.com/us/app/playtomic-padel-pickleball/id1242321076?see-all=reviews&amp;platform=ipad">App
+Store</a>). Its 2025–26 acquisitions (Sportclubby, TIMP) are all
+club-side SaaS, so a friend-group season is outside anything it is
+building (<a href="https://www.clusterpadel.com/en/associate-news/20260917/playtomic-acquires-timp-to-support-the-management-of-multi-activity-sports-facilities.aspx">Padel
+Cluster</a>).</p>
+<p>The ratings companies are the second pillar and the same story. UTR
+Sports has about <strong>1.7M activated ratings</strong>, a $11.99/month
+&quot;Power&quot; subscription that reviewers say &quot;does nothing,&quot; Flex Leagues
+that guarantee four matches in five weeks against strangers in a rating
+band, and a December 2024 purchase of PicklePlay (150,000 users, 32,000
+courts) (<a href="https://tennis.com.au/news-and-events/players-and-rankings/universal-tennis-rating">Tennis
+Australia</a>; <a href="https://apps.apple.com/us/app/utr-sports/id1519232627">UTR App
+Store</a>; <a href="https://www.globenewswire.com/news-release/2024/12/04/2991592/0/en/UTR-Sports-Acquires-PicklePlay-to-Enhance-Local-Pickleball-Communities-and-Expand-Player-Engagement.html">GlobeNewswire</a>).
+DUPR, controlled by Agassi, Kass and Raine since January 2024, is the
+official pickleball rating for UPA, USAP, PPA and MLP, and it spent 2025
+absorbing a backlash over &quot;controversial algorithm changes&quot; in which
+players lost points for wins and saw retroactive swings (<a href="https://www.dupr.com/post/andre-agassi-david-kass-and-raine-ventures-acquire-controlling-interest-in-dupr-invest-dollar8m">DUPR
+blog</a>; <a href="https://apps.apple.com/us/app/-/id1567932355">DUPR
+App Store</a>). Two details matter for this plan. DUPR has carried
+Lucra&#39;s real-money SDK since August 2023, letting players compete &quot;for
+real money… or cash alternatives–court time, tickets, merchandise,&quot;
+which is the only live precedent for stakes on rec matches and is
+real-money and venue-oriented, the opposite of play money among friends
+(<a href="https://www.businesswire.com/news/home/20230816419793/en/Lucra-Signs-Landmark-Deal-with-DUPR---The-Global-Rating-System-of-Pickleball-The-Official-Platform-of-Major-League-Pickleball">BusinessWire</a>).
+And both companies are B2B2C, earning from events, leagues and API
+partners, which is why neither has any reason to build a closed-group
+ladder.</p>
+<p>The founder&#39;s prior-art list underweights one company and omits a
+whole tier. Pickleheads is the biggest adjacent risk: <strong>720,000+
+registered players, 24,000+ locations, 1M+ monthly users</strong>, a
+4.9-star rating from 11,000+ reviews, a July 2026 CourtReserve
+integration with direct DUPR score submission, &quot;Court Chat&quot; for players
+who follow a court, and automated check-in &quot;in active development&quot; (<a href="https://www.pickleheads.com/blog/pickleheads-courtreserve-integration-launch">Pickleheads
+blog</a>; <a href="https://www.pickleheads.com/plus-power">Pickleheads
+Plus</a>; <a href="https://pickleballunion.com/connect-with-your-local-pickleball-community-introducing-court-chat-on-the-pickleheads-app/">Pickleball
+Union</a>). It is organiser-led and pickleball-only, but it is one
+product decision away from tennis groups with court check-ins. The
+omitted tier is the indie wave converging on the founder&#39;s own idea:
+Slice (v2.6.8 on September 30, 2026; singles scoring, follow friends, a
+feed with &quot;claps,&quot; head-to-head rivalry and shareable match cards,
+called &quot;the Strava for Tennis&quot; by reviewers), Rackt (rankings, Umpire
+Mode, King of the Court), Twenty Two (groups, skill tiers, released
+February 2026 with zero ratings), Tennboard (club leaderboards of 2–20
+players) and a July 2025 scorekeeper that literally sells &quot;who&#39;s really
+the king of the court between you and your friends&quot; (<a href="https://apps.apple.com/app/id6758102988">Slice</a>; <a href="https://apps.apple.com/app/id6760594670">Rackt</a>; <a href="https://appgoblin.info/apps/6746772806">AppGoblin</a>; <a href="https://apps.apple.com/app/id6748954930">Tennis Scorekeeper</a>).
+Legacy ladder tools are worse: TennisRungs, owned by CourtReserve, has
+not been updated since <strong>January 2020</strong> and holds 3.7 stars
+from 15 ratings (<a href="https://apps.apple.com/us/app/tennisrungs/id1467003617">TennisRungs
+App Store</a>). So the founder&#39;s &quot;nobody found doing&quot; claim survives
+with one correction: head-to-head records, rankings and shareable match
+cards exist in tennis today; avatars, courts with history, ATP-style
+seasons, photo-verified starts, markets and an in-app gear log do not.
+Gear tracking lives only in $2.99 utilities (RacquetTune with 459
+ratings, RacketLog, StringTracker, String Master), none attached to a
+match log (<a href="https://apps.apple.com/us/app/-/id365729342">RacquetTune</a>; <a href="https://www.producthunt.com/products/stringtracker">Product
+Hunt</a>).</p>
+<h2 id="27-million-players-record-retention-and-nobody-logging-a-score">27
+million players, record retention, and nobody logging a score</h2>
+<p>Demand is not the problem. Tennis reached a record <strong>27.3M US
+players in 2025</strong> (+6%), with 14.5M &quot;core&quot; players who play 10+
+times a year and generate 93% of all 616M play occasions, and 80% of
+2024 players played again, a five-year retention high (<a href="https://www.usta.com/content/dam/usta/2026-pdfs/2026-us-tennis-participation-report.pdf">USTA
+2026 report PDF</a>). Pickleball hit <strong>24.3M</strong> (+22.8%),
+with 7.48M core players, and the two sports grew together; USTA calls it
+&quot;a broadening of the landscape rather than a fragmentation&quot; (<a href="https://sfia.org/research/u-s-pickleball-participation/">SFIA</a>;
+<a href="https://www.sgieurope.com/consumer/us-tennis-hits-record-273-million-players/119656.article">SGI
+Europe</a>). The founder&#39;s cohort is over-indexed but not where growth
+came from: 18–34s are about 30% of tennis players (roughly 8.2M), while
+adults 35+ drove nearly 95% of 2025 growth (<a href="https://www.usta.com/content/dam/usta/2026-pdfs/2026-us-tennis-participation-report.pdf">USTA
+PDF p.3, 12</a>). Southern California has the <strong>highest
+participation rate of any USTA section at 11.9%</strong>, and San Diego
+ranks ninth nationally for &quot;tennis&quot; search interest (<a href="https://www.usta.com/content/dam/usta/2026-pdfs/2026-us-tennis-participation-report.pdf">USTA
+PDF p.10, 16–17</a>). Garmin reported racket sports as the largest
+year-over-year increase in recorded activities of any category in 2025,
+up <strong>67%</strong> (<a href="https://www.garmin.com/en-US/newsroom/?p=6010">Garmin</a>).</p>
+<p>What those players do with their matches is the opening. No survey
+exists, but the behavioural evidence is a patchwork: Apple Watch or
+Garmin workouts for hours (Garmin users still rename the &quot;Others&quot;
+activity to get &quot;tennis&quot;), Strava sport types added in January 2023 with
+no court stats, spreadsheets and Notes for scores, and group chats for
+scheduling (<a href="https://forums.garmin.com/sports-fitness/running-multisport/f/forerunner-745/247180/add-tennis-as-an-activity">Garmin
+Forums</a>; <a href="https://stories.strava.com/articles/more-sport-types-added">Strava
+Stories</a>; <a href="https://recace.com/blog/best-app-for-tracking-tennis-match-stats">RecAce</a>).
+The dated asks line up with the plan. A Slice reviewer on August 16,
+2026: &quot;It is an absolute heaven that this app exists, otherwise I would
+not be able to log my practices&quot; (<a href="https://apps.apple.com/app/id6758102988">Slice App Store</a>).
+Tennboard users asked for set-level win/loss tracking in 2020 and
+praised its &quot;charts/stats&quot; in January 2026 (<a href="https://apps.apple.com/us/app/id1246157377">Tennboard</a>). A
+Hacker News commenter in November 2025: &quot;I can&#39;t count the number of
+times they&#39;ve told me about a point or a game that they wish they could
+have shown me… &#39;strava for racket sports&#39; is a great description&quot; (<a href="https://news.ycombinator.com/item?id=45947300">HN</a>). The
+network problem is also documented: a Pickleheads organiser&#39;s &quot;biggest
+difficulty is just getting my fellow players to just put the app on
+their phone,&quot; and a Game Maker reviewer&#39;s group &quot;was split into 4 group
+chats for who could make it each week&quot; (<a href="https://apps.apple.com/us/app/pickleheads-play-pickleball/id6448714446">Pickleheads
+App Store</a>; <a href="https://apps.apple.com/us/app/game-maker-pickleball/id6749895657">Game
+Maker</a>). Because every tennis logger launched in 2025–26 is stuck
+under 100 ratings while Pickleheads has 11,000, distribution rather than
+feature set is the bottleneck, which argues for a product that works for
+one organiser and three friends before it works for anyone else.</p>
+<p>The tennis-or-pickleball question resolves on this evidence: tennis
+first. The pickleball slot is crowded on scheduling and directories
+(Pickleheads, PlayTime Scheduler&#39;s 565,000 players and 2.7M sessions,
+Game Maker, Hey Pickle) and now on level-matchmaking (Playtomic plus
+DUPR), while the tennis social and logging slot has nothing above 80
+ratings (<a href="https://apps.apple.com/us/app/playtime-scheduler/id6504500852">PlayTime
+Scheduler</a>; <a href="https://apps.apple.com/us/app/hitch-player-finder/id6670320911">Hitch</a>).
+The same roster, match and season model extends to pickleball later, and
+the 600-member downtown WhatsApp group and the deputy sheriff&#39;s
+OpenPlayGrid, which the October 9 research identified, remain the warm
+pickleball audience for that step (<a href="https://thesandiegosun.com/finding-places-to-play-pickleball-can-be-frustrating-in-downtown-san-diego/">The
+San Diego Sun</a>). Two side findings support the later layers. Racket
+culture is a large, review-driven niche (Tennisnerd at 58,000 YouTube
+subscribers, Talk Tennis with millions of posts) and a weekly player&#39;s
+hard goods run roughly $400–700 a year once you count a $200–300 frame,
+$20–75 restrings and $136 shoes, so an hours-per-racket log that
+produces a restring reminder is both novel and cheap (<a href="https://shoprestring.com/blogs/news/how-much-does-it-cost-to-string-a-tennis-racket">ShopRestring</a>;
+<a href="https://runrepeat.com/guides/best-cheap-tennis-shoes">RunRepeat</a>;
+<a href="https://www.tennisnerd.net/the-tennisnerd-guide-to-racquets-and-strings/how-often-should-i-restring-my-racquet">Tennisnerd</a>).
+And the &quot;tennis guy&quot; identity now runs in two modes, the tenniscore
+aesthetic (20M+ TikTok views by Wimbledon 2025, Challengers, Sinner for
+Gucci) and the racket-nerd technical mode, which a card showing kit,
+gear and results serves at once (<a href="https://www.hellomagazine.com/hfm/fashion-trends/518248/tenniscore-how-to-get-the-look/">Hello!</a>;
+<a href="https://www.tennis.com/baseline/articles/carlos-alcaraz-jannik-sinner-high-fashion-new-louis-vuitton-gucci-campaigns">Tennis.com</a>).</p>
+<h2 id="live-court-status-has-failed-four-ways-and-san-diego-has-no-feed-to-borrow">Live
+court status has failed four ways, and San Diego has no feed to
+borrow</h2>
+<p>The founder&#39;s doc treats live &quot;who is on it right now&quot; as a feature
+of the court page; the evidence says that is the right altitude and that
+anything more ambitious has repeatedly died. No national &quot;is this court
+open&quot; layer exists. Four approaches are in the field: manual crowd
+reports (CourtCheck, released March 2024, 2 ratings; NearbyCourt,
+claiming 47 metros with no disclosed users; LiveCourt, still a waitlist;
+CourtSeeker, a 404), passive geofence check-ins (PickledIn, &quot;not enough
+ratings&quot;; Paddle Stack, 1 rating at 1.0 stars), live cameras
+(ParkViewLive, 123 privately hosted locations, no ratings), and
+camera-AI for facilities (VisioCourt, one named deployment at Oakwell
+Courts in Cary, North Carolina, sold as a 10-day pilot) (<a href="https://apps.apple.com/us/app/courtcheck-skip-the-wait/id6759684260">CourtCheck</a>;
+<a href="https://nearbycourt.com/">NearbyCourt</a>; <a href="https://apps.apple.com/mx/app/pickledin/id1664217147">PickledIn</a>;
+<a href="https://apps.apple.com/us/app/paddle-stack-app/id6760633451">Paddle
+Stack</a>; <a href="https://parkviewlive.com/">ParkViewLive</a>; <a href="https://visiocourt.com/">VisioCourt</a>). Basketball ran this
+experiment first: Hoop Maps jumped from 1,000 to 21,000 users in weeks
+after ESPN coverage in March 2017 and left no business, and Fullcourt
+still ships &quot;Live Court Traffic&quot; over 60,000 courts on a September 2024
+build with 185 ratings and reviewers noting empty data (<a href="https://techcrunch.com/2017/03/22/no-sweat-hoop-maps-makes-finding-a-game-of-pickup-basketball-as-easy-as-a-tap">TechCrunch</a>;
+<a href="https://apps.apple.com/us/app/fullcourt-pickup-basketball/id1083156787">Fullcourt</a>).
+Each failed on the same thing: a per-venue density problem in which
+manual reports have nobody to report, geofences only count app users,
+and cameras need hardware and a host. The durable status products all
+paired a passive signal with a non-status business: Waze&#39;s GPS traces
+and ads, Google&#39;s opted-in Location History with a privacy threshold
+that small courts rarely cross, Surfline&#39;s 500 cameras behind a $119.99
+subscription, and Waitz/Occuspace&#39;s Bluetooth and Wi-Fi sensors at
+roughly <strong>$600 a year</strong> per small site, sold to
+universities (<a href="https://blog.google/products/maps/maps101-popular-times-and-live-busyness-information/">Google
+Maps 101</a>; <a href="https://breakfinder.surf/en/blog/is-surfline-worth-it">Breakfinder</a>;
+<a href="https://reporter.mcgill.ca/know-before-you-go-with-waitz/">McGill
+Reporter</a>).</p>
+<p>The only availability data that scales is reservations, and San Diego
+has none to borrow. San Francisco&#39;s Rec.us exposes an unauthenticated
+API with per-court RESERVABLE/RESERVATION/OPEN slots, but even there 38
+of 66 locations are walk-up, and bookings measure intent, not presence:
+SF replaced Spotery in 2024 precisely because it &quot;was unable to provide
+a real-time check-in system&quot; to catch no-shows (<a href="https://www.browse.sh/skills/rec.us/sf-court-booking-c8l5z9">browse.sh</a>;
+<a href="https://www.tenniscoalitionsf.org/?p=5804">Tennis Coalition
+SF</a>; <a href="https://ktvu.com/news/pickleball-could-cost-you-5-at-these-san-francisco-courts">KTVU</a>).
+In San Diego, public tennis is largely run by nonprofit clubs on city
+land under Special Use Permits (Balboa, La Jolla, Peninsula, Barnes),
+booking through CourtReserve or phone behind member logins, while city
+pickleball is free, first-come &quot;open play&quot; with fixed weekly hours
+published as a PDF; the 2022 city inventory counted <strong>143 tennis
+and 111 pickleball courts</strong> on park land (<a href="https://www.sandiego.gov/sites/default/files/standleyreport20220324.pdf">City
+Report No. 202</a>; <a href="https://www.ljtc.org/">La Jolla Tennis
+Club</a>; <a href="https://www.sandiego.gov/sites/default/files/pballlocations.pdf">City
+pickleball PDF</a>). Pacific Beach Rec&#39;s eight courts are &quot;first-come,
+first-served,&quot; &quot;always busy,&quot; and the advice is &quot;arrive early if you
+actually want to play&quot; (<a href="https://clubrecess.com/blogs/pickleball/where-to-play-pickleball-in-san-diego-the-2026-edit">Club
+Recess</a>). UCSD, the founder&#39;s home court, has 13 tennis and 8
+pickleball courts across Muir, Warren, Coast and North Campus, bookable
+only by members in one-hour slots that open <strong>three days ahead at
+midnight</strong>, one per member per day with one free guest, through a
+sign-in portal that displayed &quot;Bookings Suspended&quot; when fetched and
+publishes no schedule (<a href="https://recreation.ucsd.edu/facilities/outdoor-courts-and-sporting-sites/">UCSD
+outdoor courts</a>; <a href="https://recreation.ucsd.edu/policies/">UCSD
+policies</a>; <a href="https://rec.ucsd.edu/booking">rec.ucsd.edu/booking</a>).</p>
+<p>So is a live public-court layer viable? As a headline product, no; as
+three cheaper things, yes. First, opt-in &quot;I&#39;m here&quot; on a court page
+among friends costs nothing and has value even at three users because
+the audience is the roster, not the public, which sidesteps the density
+trap entirely. Second, a founder-seeded hourly prior (a &quot;Popular Times&quot;
+for roughly ten San Diego hubs: Pacific Beach Rec, Robb Field, Lake
+Murray, Morley Field, Waterfront Park, UCSD Muir and North Campus) built
+from a few weeks of physical logging is useful before any live report
+exists and is exactly what sank the earlier apps&#39; cold start. Third, a
+single Occuspace-style sensor at one hub is a $600 experiment that
+produces a real passive signal, pending the permission questions nobody
+has researched (<a href="https://campustechnology.com/articles/2022/11/17/occuspace-expands-occupancy-monitoring-to-more-colleges-and-universities.aspx">Campus
+Technology</a>). The policy angle is a bonus: San Diego&#39;s pickleball
+advocates &quot;hired drones to surveil the courts and took screenshots of
+court logs to prove many courts went unused,&quot; which shows that impartial
+occupancy data is contested and valuable to the city, not only to
+players (<a href="https://voiceofsandiego.org/2023/11/30/tennis-vs-pickleball-the-rivalry-that-shook-san-diegos-courts/">Voice
+of San Diego</a>). A global layer is out of reach for a solo founder and
+unnecessary for the product; Pickleheads, Playtomic and CourtReserve&#39;s
+Florida &quot;Network&quot; beta are all circling discovery and will add check-ins
+before an outsider can map the country (<a href="https://courtreserve.com/ai-info/">CourtReserve</a>).</p>
+<h2 id="golf-keeps-social-free-sleeper-made-chat-and-identity-the-product">Golf
+keeps social free; Sleeper made chat and identity the product</h2>
+<p>Golf is the best-documented analog because six apps with the same
+audience shape have converged on one business model. Across 18Birdies
+($99.99/yr), Golfshot ($79.99/yr), Hole19 (€99.99/yr), Golf Pad
+($29.99–49.99/yr) and TheGrint, GPS, scorecards, live leaderboards,
+friend games and year-in-review summaries are free, and what sits behind
+the paywall is personal performance: shot tracking, strokes gained, AI
+caddie, handicap benchmarks, green maps (<a href="https://golfpadgps.com/news/golf-pad-vs-18birdies">Golf Pad vs
+18Birdies</a>; <a href="https://www.hole19golf.com/hole19">Hole19</a>;
+<a href="https://18birdies.com/clubhouse/community/teeing-up-for-2025-reflect-celebrate-and-plan-with-18-birdies">18Birdies
+Clubhouse</a>). Things about <em>us</em> retain; things about
+<em>me</em> get paid for. Arccos shows golfers will pay about $200 a
+year when hardware removes the logging burden, and SwingVision shows the
+tennis equivalent: <strong>20,000+ paying subscribers and $4M+
+ARR</strong> at $96–300 a year for video-derived stats, still only 0.1%
+of US core tennis players (<a href="https://www.arccosgolf.com/products/air">Arccos Air</a>; <a href="https://kingscrowd.com/swingvision-on-wefunder-2025/">Kingscrowd</a>).
+No golf app discloses conversion or retention, so the evidence is
+structural, not measured. What died is instructive: GolfMatch, a
+social-network-first app with no utility hook, pivoted to an
+Instagram-for-golf feed and vanished after 2017; Zepp died with its
+sensor; Zwift raised prices 33% in May 2024, lost concurrent users and
+laid off staff twice (<a href="https://golfwrx.com/298675/golfmatch-expands-its-vision-revamps-its-app/">GolfWRX</a>;
+<a href="https://the5krunner.com/2026/01/23/peak-zwift-2026-indoor-cycling-trends/">the5krunner</a>).
+The exits were all tuck-ins into B2B platforms (Golf Genius now powers
+~11,000 facilities after buying Golfshot and SwingU; Lightspeed bought
+Chronogolf for ~$10M), which mirrors racquet sports&#39; CourtReserve and
+Playtomic and warns that a consumer tennis app is not on its own a
+venture outcome (<a href="https://www.golfretailing.com/news/golf-genius-acquires-swing-by-swing-golf/">Golf
+Retailing</a>; <a href="https://pitchbook.com/profiles/company/65055-61">PitchBook</a>).</p>
+<p>Golf also answers the markets question. The dominant side-game
+pattern is &quot;scorekeeper, not bookmaker&quot;: Skins App computes 13 games and
+hands settlement to Venmo or Zelle, as do Press, Beezer and Unknown
+Golf, so the app never touches money (<a href="https://golf.com/lifestyle/skins-app-money-games-breeze/">Golf.com</a>;
+<a href="https://pressgolfapp.com/">Press Golf</a>). That model rides on
+users quietly violating Venmo&#39;s terms, which prohibit &quot;transactions
+involving gambling, gaming and/or any other activity with an entry fee
+and a prize, including games of skill&quot; (<a href="https://venmo.com/legal/us-helpful-information">Venmo legal</a>).
+The real-money alternatives are a legal patchwork: TheGrint&#39;s Calcutta
+partner wagers in USDC through smart contracts, Sleeper&#39;s pick&#39;em was
+legal in only 26 states as of May 2026 and was pulled from New York, and
+Sleeper&#39;s Kalshi-powered markets launched February 2026 under CFTC rules
+with deposit caps (<a href="https://thegrint.com/range/post/real-money-wagers-on-live-rounds-on-thegrint">TheGrint</a>;
+<a href="https://rotogrinders.com/fantasy/sleeper-promo-code/legal-states">RotoGrinders</a>;
+<a href="https://www.legalsportsreport.com/144962/pickem-sleeper-pulls-games-as-ny-fantasy-sports-rules-take-effect/">Legal
+Sports Report</a>). Nobody has shipped a compelling points-only side-bet
+layer in any sport; the market solved for real money instead, which
+leaves the founder&#39;s play-money &quot;who wins Friday&quot; with zero regulatory
+load and no incumbent. The October 9 research reached the same
+conclusion from the prediction-market side: closed-group play money with
+charity as the only outbound path is the shape Manifold proved and
+Meta&#39;s reported &quot;Arena&quot; does not target, though no lawyer has reviewed a
+charity pot in California (<a href="https://en.wikipedia.org/wiki/Manifold_(prediction_market)">Wikipedia:
+Manifold</a>; <a href="https://www.npr.org/2026/06/24/nx-s1-5869486/meta-prediction-market-app-ai">NPR</a>).</p>
+<p>Sleeper is the analog for the roster and the season. It raised $40M
+at a $400M valuation in September 2021 with 3M users and reached
+<strong>10M users by February 2026</strong> by making the league chat
+the product: &quot;Run Your League Free Forever,&quot; GIFs, reactions and DMs
+inside the league, a different avatar per league so one person can be a
+different character in each friend circle, and collectible animated
+mascots (<a href="https://frontofficesports.com/sleeper-more-than-quadruples-valuation-to-400m/">Front
+Office Sports</a>; <a href="https://sbcamericas.com/2026/02/06/sleeper-prediction-markets-kalshi/">SBC
+Americas</a>; <a href="https://sleeper.com/blog/sleepers-fantasy-football-enhancements-upgrades/">Sleeper
+2020 recap</a>). Users spend 20–35 minutes per gameday, which came from
+live scoring plus chat during the event, the direct analog of match-day
+scoring plus a court-side thread. Two Sleeper lessons cut against parts
+of the founder&#39;s doc. Mascots originally fought on the matchup screen
+and Sleeper removed that in August 2023 &quot;to reduce clutter,&quot; keeping
+mascots as avatars: identity stayed, animation went, so the Smash-style
+character select should be a profile and a card, not an effect on the
+score screen (<a href="https://x.com/SleeperHQ/status/1690042206965444625">Sleeper on
+X</a>). And money products arrived years after the social graph locked
+in, in separate tabs sharing one wallet, which is the order the six
+layers should follow. Strava confirms the retention side of
+venue-as-level: Local Legends (most completions of a segment in 90 days)
+launched free in 2020 while KOM leaderboards went behind the paywall,
+clubs nearly quadrupled to 1M in 2025, and Gen Z says it will use Strava
+more and Instagram and TikTok the same or less (<a href="https://dcrainmaker.com/2020/06/strava-legends-feature.html">DC
+Rainmaker</a>; <a href="https://runninglookout.com/news/strava-2026-community-report-running-clubs-3-5x-growth-gen-z/">Running
+Lookout</a>). TheGrint&#39;s &quot;King of the Course&quot; weekly per-course
+leaderboard and the USGA&#39;s October 2026 GHIN Challenges (750+ per-course
+net leaderboards, 30,000+ golfers in year one) show venue leaderboards
+retain when they are historical and asynchronous, exactly where
+basketball&#39;s live check-ins failed (<a href="https://www.thegrint.com/range/post/2025-state-of-the-union">TheGrint</a>;
+<a href="https://www.firstcallgolf.com/industry-news/release/2026-10-05/usga-unveils-upgraded-ghin-mobile-app-offers-easier-to-use-interface-and-innovative-features">First
+Call Golf</a>).</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>The research changes the plan in three ways. The season, not the
+court map, is the defensible asset: court geometry is free
+(OpenStreetMap already holds 500,000+ tennis court polygons, Phoenix and
+Colorado publish GIS inventories), directories are owned by Pickleheads,
+and booking belongs to clubs, so the only thing nobody can copy is the
+history a specific friend group writes onto a specific court (<a href="https://opentennismap.org/">OpenTennisMap</a>; <a href="https://phoenixopendata.com/dataset/tennis-courts-and-pickleball">Phoenix
+Open Data</a>). Live presence flips from a feature the founder was
+unsure how to scale to a feature that should never try to scale beyond
+the roster, with a seeded prior and perhaps one sensor as the San
+Diego-specific bets. And the indie wave means the two-week test is also
+a race: a dozen tennis loggers shipped in 2025–26 and none has found
+distribution, so the test is not whether the features can be built but
+whether three people at UCSD will log matches and post the card without
+being asked.</p>
+<p>The other shift is in what &quot;winning&quot; looks like. Racquet-sport money
+sits with clubs and ratings bodies, golf&#39;s consumer apps exited as
+tuck-ins, and Strava needed ~195M registered users to reach a 2% paid
+base. A friend-group tennis app is therefore best understood as the
+October 9 report&#39;s &quot;closed group + ritual + play stakes&quot; shape with a
+real-world activity underneath, where the first prize is a group that
+keeps playing and logging through a whole season, the second is the San
+Diego pickleball crowd on the same engine, and revenue, if it comes, is
+a small analytics tier or a sponsor-funded charity pot rather than a
+reason to build.</p>
+<h2 id="feature-verdict-table">Feature verdict table</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Best incumbent</th>
+<th>Done well / badly / absent</th>
+<th>Implication</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Character-select roster with joke avatars, per-group identity</td>
+<td>Sleeper (per-league avatars, mascots; fantasy, not tennis); Tennis
+Clash (game only)</td>
+<td>Absent in every racquet app</td>
+<td>Build. Keep avatars as identity on profiles and cards, never
+animation on the score screen (Sleeper cut mascot fights in 2023).</td>
+</tr>
+<tr>
+<td>Courts as &quot;levels&quot; with history (matches here, court king, record on
+this court)</td>
+<td>Strava segments and Local Legends; TheGrint King of the Course; GHIN
+Challenges (all golf or running); Pickleheads and Rally are static
+directories</td>
+<td>Absent in tennis; proven elsewhere</td>
+<td>Build. Court is a required field from match one so history accrues;
+seed geometry from OSM and keep match data in a separate DB keyed to OSM
+IDs.</td>
+</tr>
+<tr>
+<td>Live opt-in check-in (&quot;who&#39;s here&quot;)</td>
+<td>PickledIn, Paddle Stack, CourtCheck, NearbyCourt, Fullcourt</td>
+<td>Done badly: 0–2 ratings each; density trap</td>
+<td>Build only as an opt-in signal visible to the roster on the court
+page; never the headline.</td>
+</tr>
+<tr>
+<td>Phone-knock match start with required photo</td>
+<td>None; DUPR verifies scores; Slice ships match cards; TheGrint
+&quot;Scorephotos&quot;</td>
+<td>Absent (photo cards partial)</td>
+<td>Build photo + both-confirm first; the &quot;knock&quot; is a flourish to test
+later (no third-party NFC on iOS; MultipeerConnectivity or same-minute
+taps).</td>
+</tr>
+<tr>
+<td>Match log with dual confirmation</td>
+<td>DUPR (verified scores), Slice, Rackt, Tennboard</td>
+<td>Done adequately by indies, none above 25 ratings</td>
+<td>Table stakes; build but do not try to differentiate here.</td>
+</tr>
+<tr>
+<td>ATP-style friend-group season with points, trophy, rivalries</td>
+<td>UTR Flex Leagues (stranger pools), TennisRungs (stale since Jan
+2020), Global Tennis Network (web-era), Pickleheads organiser ladders,
+Tennboard club leaderboards</td>
+<td>Done badly</td>
+<td>Core differentiator. Build the season table, head-to-head records
+and season replay card.</td>
+</tr>
+<tr>
+<td>Skill rating / level</td>
+<td>UTR, DUPR, Playtomic 0–7 with reliability score</td>
+<td>Done well, though contested (DUPR 2025 backlash)</td>
+<td>Integrate later; if an internal level is needed, copy Playtomic&#39;s
+&quot;only competitive matches move it&quot; design.</td>
+</tr>
+<tr>
+<td>Match-day chat / thread</td>
+<td>Sleeper league chat; Pickleheads Court Chat</td>
+<td>Absent in tennis</td>
+<td>Build a light per-match thread with reactions, or let the group chat
+be the chat and feed it cards.</td>
+</tr>
+<tr>
+<td>Gear log with AI racket ID and restring reminders</td>
+<td>RacquetTune ($2.99, 459 ratings), RacketLog, StringTracker, String
+Master</td>
+<td>Done as isolated utilities; absent inside any social or match
+app</td>
+<td>Build light, after the season: hours-per-racket from logged matches
+gives the restring reminder for free; AI ID is one vision call.</td>
+</tr>
+<tr>
+<td>Play-money markets on friends&#39; matches</td>
+<td>Lucra SDK in DUPR (real money), golf Skins + Venmo settlement,
+Manifold (public play money)</td>
+<td>Absent as play money anywhere</td>
+<td>Build after the season has data; play money only, never cash in or
+out, no self-betting.</td>
+</tr>
+<tr>
+<td>Charity pot as season prize</td>
+<td>Manifold&#39;s Mana-to-charity</td>
+<td>Absent</td>
+<td>Later; sponsor-funded; needs a California legal review before
+launch.</td>
+</tr>
+<tr>
+<td>Pickleball overlap</td>
+<td>Pickleheads (720K registered, 1M monthly), PlayTime Scheduler, Game
+Maker, Playtomic + DUPR matchmaking</td>
+<td>Done well (scheduling, directory, matchmaking)</td>
+<td>Do not compete on scheduling. Reuse the roster/match/season model
+for pickleball groups later; downtown WhatsApp group is the warm
+audience.</td>
+</tr>
+<tr>
+<td>Group kit ordering</td>
+<td>Tennis Warehouse Team program (6-item minimum, $50 setup),
+CustomInk, Bonfire</td>
+<td>Done for teams; absent for 4–8-person friend groups</td>
+<td>Integrate a print-on-demand group store link per roster; do not
+build commerce.</td>
+</tr>
+<tr>
+<td>Public or global live court-status layer</td>
+<td>NearbyCourt, VisioCourt (one site), ParkViewLive, Rec.us (SF
+bookings only)</td>
+<td>Absent at scale; failed repeatedly since 2017</td>
+<td>Not viable as a headline. San Diego-first hourly prior seeded by
+founder visits; optional one-sensor pilot.</td>
+</tr>
+<tr>
+<td>AI video stats, line calling, serve speed</td>
+<td>SwingVision (ITF-approved, 20K+ paying subs)</td>
+<td>Done well</td>
+<td>Integrate, never rebuild.</td>
+</tr>
+<tr>
+<td>Court booking</td>
+<td>Playtomic, CourtReserve, Playbypoint, UCSD rec portal</td>
+<td>Done well for clubs</td>
+<td>Link out to the venue&#39;s booking page.</td>
+</tr>
+<tr>
+<td>Shareable match card and season replay</td>
+<td>Slice match cards; 18Birdies year-in-review; TheGrint Season
+Replay</td>
+<td>Done well in golf, partial in tennis</td>
+<td>Build; it is the distribution mechanism (the Strava post, the Wordle
+grid).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="recommended-build-order-and-smallest-first-test">Recommended
+build order and smallest first test</h2>
+<p>The founder&#39;s &quot;smallest credible version&quot; is confirmed by the
+evidence with four adjustments. First, record the court from the very
+first match even though there is no courts screen yet, because court
+history is the asset and it cannot be backfilled. Second, drop the
+roster&#39;s video clips and opt-in stats from the first build; Sleeper&#39;s
+lesson is that identity (name, avatar, card) retains and animation is
+clutter, and storage cost is real. Third, replace the phone knock with
+photo plus dual confirmation, which is the anti-cheat and the memory;
+the knock can come when there is a fourth player to delight. Fourth, add
+a per-match thread or, simpler, make the match card so good that the
+existing group chat becomes the thread.</p>
+<p><strong>Build order.</strong> (1) Roster: name, fighter avatar, card
+back with favourite court; local-first, Expo. (2) Match: challenge,
+required photo at start, score by sets, both confirm, court required;
+shareable card. (3) Season: ATP-style points table for the group,
+head-to-head records, &quot;court king&quot; per court, season replay card at the
+end of the quarter. (4) Courts as levels: swipe-through court pages
+built from OSM geometry with the history already accrued, opt-in &quot;I&#39;m
+here&quot; visible to the roster, founder-seeded hourly prior for roughly ten
+San Diego hubs. (5) Gear log: hours per racket from logged matches,
+restring reminder, AI photo identification. (6) Markets: play-money &quot;who
+wins Friday&quot; and &quot;finishes #1,&quot; subjects opt in, no betting on your own
+match, charity pot only after legal review. Pickleball groups and the
+kit-store link slot in after (4), when a second group exists.</p>
+<p><strong>Smallest first test.</strong> Founder plus two friends, UCSD
+Muir or North Campus courts, two weeks, local-first build with a shared
+season table. Count four things: matches logged without the founder
+asking (target: every match the three actually play, at least six over
+two weeks), share of matches confirmed by the opponent within 24 hours
+(target: all), match cards posted to the group chat by someone other
+than the founder (target: at least half), and whether anyone opens the
+standings on a non-match day (the Sleeper &quot;between gamedays&quot; signal). A
+fourth person asking to be added is the pass signal for building the
+courts layer; three people who stop logging after week one is the fail
+signal, and the fix is the card and the season, not more features.</p>
+<h2 id="monetization-note">Monetization note</h2>
+<p>The golf and Strava evidence says the same thing twice: keep
+everything about <em>us</em> free forever and sell, much later, things
+about <em>me</em>. Six golf apps keep GPS, scorecards, live
+leaderboards, friend games and year-in-review free and charge $30–50
+(Golf Pad) to $80–100 (Golfshot, 18Birdies, Hole19) a year for shot
+tracking, strokes gained, AI coaching and benchmark analytics (<a href="https://golfpadgps.com/news/golf-pad-vs-18birdies">Golf Pad vs
+18Birdies</a>). Strava earns an estimated $490M at $79.99 a year, about
+90% from subscriptions, with paid penetration near <strong>2% of
+registered users</strong>; the indie tennis loggers charge $12–50 a year
+and have no evidence of conversion, and even at Pickleheads&#39; roughly 1M
+monthly users a 2% conversion at $20 a year yields only about $400,000
+(<a href="https://sacra.com/c/strava/">Sacra</a>; <a href="https://apps.apple.com/us/app/pickleheads-play-pickleball/id6448714446">Pickleheads
+App Store</a>). SwingVision is the one proof that rec tennis players pay
+($96–300 a year, 20,000+ subscribers), and it is for video-derived
+insight, which argues for integrating SwingVision rather than competing
+with it (<a href="https://swing.vision/subscribe">SwingVision
+subscribe</a>). Zwift&#39;s 2024 price hike and user loss is the caution
+against charging a small community early (<a href="https://the5krunner.com/2026/01/23/peak-zwift-2026-indoor-cycling-trends/">the5krunner</a>).
+For this app the realistic sequence is: free with no paywall through the
+first several seasons; later a $20–40-a-year personal tier (win rate by
+court and surface, hours by racket, season exports, SwingVision-linked
+stats); a sponsor-funded charity pot modelled on Strava&#39;s sponsored
+challenges rather than player payments; and, if groups outgrow friends,
+an organiser tier like Pickleheads Pro ($249.99/yr) or DartConnect&#39;s $6
+per player per season paid by the league. Real money of any kind should
+stay off the platform: Venmo bans gambling settlement, pick&#39;em is legal
+in only 26 states, and the DUPR–Lucra deal shows the real-money lane is
+already taken by better-capitalised players.</p>
+<h2 id="avoid-or-integrate-rather-than-build">Avoid or integrate rather
+than build</h2>
+<p>Avoid building a rating authority; integrate UTR or DUPR later and,
+if a level is needed internally, copy Playtomic&#39;s
+competitive-matches-only design with a reliability score. Avoid
+rebuilding AI video or line calling; SwingVision is ITF-approved and
+already does Apple Watch challenges and auto highlights. Avoid building
+a court directory; use OpenStreetMap (500,000+ tennis courts, ODbL, so
+keep match history in a separate database keyed to OSM IDs) plus city
+GIS layers, and accept that Pickleheads&#39; data is proprietary. Avoid
+building booking; link to CourtReserve pages, club portals and
+rec.ucsd.edu. Avoid a public or global live court-status product, camera
+networks and anything that requires per-court hardware; if you want a
+passive signal, one Bluetooth density sensor at one hub after checking
+permissions. Avoid making live presence the headline; make history the
+headline and presence an opt-in among friends. Avoid real-money markets,
+Venmo-settled side bets and crypto rails; keep play money with no cash
+in or out, and get a lawyer&#39;s view on the charity pot before it ships.
+Avoid pickleball scheduling and open-play organising; Pickleheads,
+PlayTime Scheduler and Game Maker own it, and the DUPR–Playtomic
+integration now owns level matchmaking. Avoid building kit commerce;
+give each roster a Bonfire or CustomInk-style store link, since friend
+groups fall below the six-item retailer minimums. Avoid a public feed,
+gamified animation on the score screen, video-clip storage on day one,
+hardware dependence, and any paywall before the second season. Avoid
+betting the match-start flow on phone-to-phone NFC, which iOS does not
+expose to third-party apps; photo plus dual confirmation is
+sufficient.</p>
+<h2 id="evidence-gaps">Evidence gaps</h2>
+<p>Reddit (r/10s, r/Pickleball, r/sandiego, r/padel, r/UCSD), X, TikTok,
+Nextdoor and the Strava Community Hub were unreachable to every
+researcher, so all player quotes come from App Store reviews
+(self-selected, mostly satisfied users), Hacker News, Garmin forums,
+Product Hunt and local news; there are zero first-hand &quot;I wish an app
+did this&quot; posts from San Diego players in 2025–26. Pages returning 403
+or errors included GlobeNewswire, Crowdcube, Pickleheads&#39; pricing and
+San Diego court pages, BusinessWire, Break Sports, Forbes (DUPR
+algorithm interview), Kingscrowd (SwingVision subscriber figures), NYC
+Parks, LA Parks, Fox5, Axios, West Seattle Blog and RealClearPolitics;
+figures from those sources are from search snippets or secondary reports
+and are flagged in the notes. No app in either sport discloses retention
+or free-to-paid conversion, so the monetization note rests on pricing
+structure, not measured behaviour. Strava&#39;s paid subscriber estimates
+conflict (3.1M versus 6M+); SwingVision&#39;s &quot;150,000 active subscribers&quot;
+claim is unverified against its own 20,000-payer disclosure; Playtomic&#39;s
+US Premium price is known only from a Trustpilot reviewer. The San Diego
+city pickleball PDF retrieved carried AI-generation metadata and one
+page, so its court counts should be re-verified on the city site. UCSD&#39;s
+walk-on policy for unbooked courts, the reason its portal showed
+&quot;Bookings Suspended,&quot; and whether Recreation would permit a campus pilot
+or share booking data are all unknown. No source gives willingness to
+pay for court status, how many rec players log matches or restring at
+all, how many friend groups buy matching kit, or the legal status of a
+charity-funded play-money pot in California; the two-week test and a
+one-hour legal consultation are the cheapest ways to close the first and
+last of those.</p>
+</main></body>
+</html>

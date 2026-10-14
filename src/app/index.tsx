@@ -1,98 +1,90 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+import { type Href, router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useRef } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { WebView } from 'react-native-webview';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { HOME_HTML } from '@/generated/home-html';
+import { computeSeason, scoreLine, useMatches, winnerOf } from '@/lib/matches';
+import { useRoster } from '@/lib/roster';
+import { sfx } from '@/lib/sfx';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+type Msg = { type: 'ready' } | { type: 'press' } | { type: 'line' } | { type: 'slid' } | { type: 'hop' } | { type: 'land' } | { type: 'go'; to: 'play' | 'courts' | 'standings' | 'fighter' } | { type: 'error'; message: string; at?: string };
+
+const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter', Href> = { play: '/case', courts: '/courts', standings: '/standings', fighter: '/fighter' };
+
+/** Home: a diorama drawn by three.js in a WebView (web/home.js). Your fighter hops between tiles; each tile is a place in the app. */
+export default function Home() {
+  const params = useLocalSearchParams<{ demo?: string }>();
+  const roster = useRoster();
+  const matches = useMatches();
+  const web = useRef<WebView>(null);
+  const ready = useRef(false);
+
+  const you = roster.find((f) => f.isYou) ?? roster[0];
+  const { rows } = computeSeason(roster, matches);
+  const row = rows.find((r) => r.id === you.id);
+  const played = (row?.wins ?? 0) + (row?.losses ?? 0);
+  const last = [...matches].sort((a, b) => b.playedAt - a.playedAt)[0];
+  const name = (id: string) => roster.find((f) => f.id === id)?.name ?? '?';
+  const lastWinner = last ? winnerOf(last) : null;
+  const data = JSON.stringify({
+    name: you.name,
+    color: you.color,
+    record: played ? `you: ${row?.wins}–${row?.losses}, ${row?.points} points` : '',
+    place: played ? rows.findIndex((r) => r.id === you.id) + 1 : 0,
+    last: last && lastWinner ? `${name(lastWinner)} beat ${name(lastWinner === last.p1 ? last.p2 : last.p1)} ${scoreLine(last.sets)}` : null,
+  });
+
+  const run = (js: string) => web.current?.injectJavaScript(`${js};true;`);
+  useEffect(() => { if (ready.current) run(`window.setHome(${data})`); }, [data]);
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
-
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+    <View style={styles.root}>
+      <StatusBar style="dark" />
+      <WebView
+        ref={web}
+        source={{ html: HOME_HTML }}
+        originWhitelist={['*']}
+        style={styles.web}
+        scrollEnabled={false}
+        bounces={false}
+        overScrollMode="never"
+        contentInsetAdjustmentBehavior="never"
+        javaScriptEnabled
+        onMessage={(e) => {
+          const msg = JSON.parse(e.nativeEvent.data) as Msg;
+          if (msg.type === 'ready') {
+            ready.current = true;
+            run(`window.setHome(${data})`);
+            if (params.demo === '1') run('window.demoHome()');
+            if (params.demo === '2') run('window.demoHomeSlide()');
+          } else if (msg.type === 'press') {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            sfx('tick', 0.7);
+          } else if (msg.type === 'line') {
+            void Haptics.selectionAsync();
+          } else if (msg.type === 'slid') {
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            sfx('swish', 0.8);
+          } else if (msg.type === 'hop') {
+            void Haptics.selectionAsync();
+            sfx('tick', 0.6);
+          } else if (msg.type === 'land') {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            sfx('slam', 0.35);
+          } else if (msg.type === 'go') {
+            sfx('go', 0.8);
+            router.push(ROUTES[msg.to]);
+          } else console.warn('home scene:', msg.message, msg.at ?? '');
+        }}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+  root: { flex: 1, backgroundColor: '#efece5' },
+  web: { flex: 1, backgroundColor: '#efece5' },
 });

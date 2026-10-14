@@ -1,0 +1,9 @@
+{
+  "previewRoute": "/splash",
+  "screenshots": ["splash-phone.png", "splash-small-phone.png", "splash-entrance.png"],
+  "browser": "Playwright Chromium",
+  "viewports": ["390x844", "320x568"],
+  "passed": ["automatic startup handoff", "preview replay and enter", "small phone controls fit", "reduced motion", "deep-link destination preserved", "artwork failure does not block startup", "no browser runtime errors", "lint", "TypeScript"],
+  "limitations": ["Native launch-screen configuration requires a new native build and device validation.", "Animation transforms the flat artwork; case lid and tennis ball do not animate independently."],
+  "webCompatibility": "Added stage-fx.web.tsx as an SVG fallback for the existing native Skia shader, which crashed web server rendering before CanvasKit initialization."
+}

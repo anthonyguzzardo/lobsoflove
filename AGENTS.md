@@ -1,3 +1,7 @@
+## OVERRIDING RULE: NO EMOJIS
+
+No emojis anywhere: not in UI text, labels, buttons, code, comments, commit messages, docs, or chat replies. This overrides every other instruction and default. Use words, drawn shapes, or real icons/art instead.
+
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
 ## Expo has changed — do not trust your training data

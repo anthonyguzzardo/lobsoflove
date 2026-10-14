@@ -1,0 +1,18 @@
+{
+  "generator": "Built-in image_gen",
+  "status": "Concept exploration; not installed as production app icons",
+  "concepts": [
+    {
+      "file": "tennis-machine.png",
+      "prompt": "Use case: stylized-concept. Create a new evolution of the referenced Lobs of Love tennis machine, keeping its hand-painted indie-game charm, indigo shell, amber controls, miniature green tennis court and floating yellow tennis ball. Make this a more distinctive compact rounded portable tennis arcade: shorter thick smoky blue translucent open lid with a bold amber circular inset, chunky sculpted hinges, curved front panel with only two amber square buttons and one circular knob, small speaker slots, tiny grassy edges inside. The actual court must remain legible with white tennis lines and net. Ball suspended over court with a restrained painted swoosh suggesting a lob. Strong confident dark contours, broad gouache texture, cel-painted planes, warm peach edge light, deep violet shadows. Three-quarter isometric view. More intentional and whimsical toy proportions, less generic laptop. One beautiful complete object, comfortably framed with 12 percent clear margins on all sides. Transparent background. No text, letters, numbers, emojis, watermarks, photo materials or photorealism. This is a new concept variation, not a replacement."
+    },
+    {
+      "file": "console-icon.png",
+      "prompt": "Use case: logo-brand. Asset: square mobile app icon exploration for Lobs of Love, a playful tennis app. Use referenced artwork only as style and palette reference. Distill its miniature tennis console into a very bold simple iconic illustration, NOT a full detailed scene: chunky squat indigo open clamshell machine viewed three-quarter isometric, tiny emerald court indicated with only 3 ivory lines and one simple net bar, ONE very large ochre-yellow tennis ball hovering in front of blue lid, TWO large amber buttons on front. Device fills central 75 percent, generous safe margins. Broad dark outlines, three-tone cel-painted shading, subtly handmade edges, minimal gouache texture, warm peach highlights. The ball must be the main visual anchor. Full bleed opaque solid deep indigo #171d30 square background, no rounded outer mask. Recognizable at small phone icon sizes. No typography, no letters, no numbers, no flowers, no tiny detail, no emojis, no photo rendering, no mockup or presentation layout. One polished icon."
+    },
+    {
+      "file": "lob-mark.png",
+      "prompt": "Use case: logo-brand. Create one striking simple app logo concept for Lobs of Love, playful tennis app with an indigo and warm amber miniature arcade identity. Square full-bleed opaque deep indigo #171d30 background. Center a single bold warm golden-yellow tennis ball, drawn as a flat circular silhouette with two thick ivory curving tennis seams. One elegant thick amber orbital lob trail sweeps below and around the ball, ending upward to suggest a playful returning shot; together ball and trajectory feel like a distinctive compact emblem. A subtle heart-like turn in the negative space of the seam may suggest love, but keep ball perfectly circular and immediately identifiable as tennis. Absolutely minimal composition, 3 flat colors, no court, no console, no racket, no text or lettering. Very subtle hand-drawn edge character connects it to an illustrated indie game, but no busy painterly texture. Bold graphic logo with generous 20 percent safe margins, legible at 32px. No bevel, no gradients, no glow, no shadow, no 3D, no mockup, no rounded-square outer mask, no emojis. Professional ownable graphic symbol, one icon only."
+    }
+  ]
+}
