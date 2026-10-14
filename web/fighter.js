@@ -54,7 +54,7 @@ const LABEL = {
   bot: ['SERVE BOT', 'Ace or double fault. No third option.'], goblin: ['DROPSHOT GOBLIN', 'You will run. You will not get there.'],
   grunter: ['THE GRUNTER', 'Heard from three courts away.'], junk: ['JUNKBALLER', 'No pace, no spin, no rhythm, no mercy.'],
   comet: ['NET RUSHER', 'Chip, charge, pray.'], ghost: ['THE NO-SHOW', '"Running five late."'],
-  lobber: ['THE LOBBER', 'Over your head. Again. And again.'], rabbit: ['THE JACKRABBIT', 'Gets to everything. Leaves a rainbow.'],
+  lobber: ['GOT YOU, BITCH', "Come to the net. I dare you."], rabbit: ['THE JACKRABBIT', 'Faster than a certain blue hedgehog.'],
 };
 const COLORS = ['#d7f205', '#ff3d7f', '#35d6ff', '#ff8a1f', '#9b6bff', '#2fe08a', '#ff5252', '#f4f1e6'];
 
@@ -876,8 +876,9 @@ function drinkStep(dt) {
   fx.sipUntil = t > 0.35 && t < 1.4 ? clock + 0.05 : fx.sipUntil;
   liquid.scale.y = Math.max(0.02, 1 - Math.max(0, t - 0.45) / 0.9);
   bottle.rotation.z = Math.PI / 2 + THREE.MathUtils.degToRad(th);
-  bottle.position.set(0.02 + 0.5 * off - 1.4 * fly, -0.2 - 0.5 * off + 2.6 * fly - 6 * fly * fly, 0.13);
-  bottle.scale.set(1 - 0.6 * crush, 1 - 0.3 * crush, 1 - 0.6 * crush);
+  bottle.position.set(0.02 + 0.8 * off - 1.4 * fly, -0.2 - 0.8 * off + 2.6 * fly - 6 * fly * fly, 0.22);
+  const BS = 2.2; // bottle size against the Wall's face
+  bottle.scale.set(BS * (1 - 0.6 * crush), BS * (1 - 0.3 * crush), BS * (1 - 0.6 * crush));
   while (drink.fired < DRINK_EVENTS.length && t >= DRINK_EVENTS[drink.fired][0]) {
     const ev = DRINK_EVENTS[drink.fired][1];
     drink.fired += 1;
@@ -975,13 +976,31 @@ shelfScene.environmentIntensity = 0.8;
 shelfScene.add(new THREE.HemisphereLight(0xffffff, 0xe6dfd2, 1.2));
 { const k2 = new THREE.DirectionalLight(0xfff4e8, 2.2); k2.position.set(-3, 6, 8); shelfScene.add(k2); }
 const shelfCam = new THREE.OrthographicCamera(0, 1, 0, -1, -100, 100);
+const miniEyeGeo = new THREE.SphereGeometry(0.1, 16, 12);
+const miniPupilGeo = new THREE.SphereGeometry(0.05, 12, 10);
+const miniSmileGeo = new THREE.TorusGeometry(0.11, 0.026, 8, 20, Math.PI);
 const padGeo = new RoundedBoxGeometry(40, 7, 14, 2, 2.5);
 const minis = CASTS.map((cast, i) => {
   const g = bodyGeometry(cast, false);
+  g.userData.halfH = g.boundingBox.max.y / 2;
   g.translate(0, -g.boundingBox.max.y / 2, 0);
   g.computeBoundingBox();
   const mat = new THREE.MeshPhysicalMaterial({ color: COLORS[0], roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08, sheen: 0.4 });
   const m = new THREE.Mesh(g, mat);
+  // A little face on the front of every candy, at the same spot as the big one's, so none of them read as lying face-down.
+  {
+    const [ox, oy, oz] = g.userData.off;
+    const [fx, fy] = v(...FACE[cast]);
+    const fz = EXTRUDE.depth + EXTRUDE.bevelThickness + oz + 0.02;
+    const fyy = fy + oy - g.userData.halfH;
+    for (const sx of [-1, 1]) {
+      const w = new THREE.Mesh(miniEyeGeo, eyeMat); w.scale.set(0.9, 1.25, 0.45); w.position.set(fx + ox + sx * 0.1, fyy + 0.03, fz);
+      const pu = new THREE.Mesh(miniPupilGeo, inkMat); pu.scale.set(1, 1.35, 0.5); pu.position.set(fx + ox + sx * 0.1, fyy + 0.03, fz + 0.04);
+      m.add(w, pu);
+    }
+    const sm = new THREE.Mesh(miniSmileGeo, inkMat); sm.rotation.z = Math.PI; sm.position.set(fx + ox, fyy - 0.15, fz);
+    m.add(sm);
+  }
   // Each candy stands on its own little platform, drawn in the same 3D pass so the candy sits on it, never behind it.
   const pad = new THREE.Mesh(padGeo, new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.8 }));
   shelfScene.add(pad);

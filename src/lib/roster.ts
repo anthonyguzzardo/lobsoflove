@@ -26,8 +26,8 @@ export const CAST: Record<CastId, { label: string; tagline: string }> = {
   junk: { label: 'Junkballer', tagline: 'No pace, no spin, no rhythm, no mercy.' },
   comet: { label: 'Net Rusher', tagline: 'Chip, charge, pray.' },
   ghost: { label: 'The No-Show', tagline: '"Running five late."' },
-  lobber: { label: 'The Lobber', tagline: 'Over your head. Again. And again.' },
-  rabbit: { label: 'The Jackrabbit', tagline: 'Gets to everything. Leaves a rainbow.' },
+  lobber: { label: 'Got You, Bitch', tagline: "Come to the net. I dare you." },
+  rabbit: { label: 'The Jackrabbit', tagline: 'Faster than a certain blue hedgehog.' },
 };
 
 export const CAST_IDS = Object.keys(CAST) as CastId[];

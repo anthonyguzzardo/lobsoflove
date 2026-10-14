@@ -122,6 +122,11 @@ for (const [name, group] of byName) {
     c.name = `${name} · ${dir}${n > 1 ? ` ${n}` : ''}`;
   }
 }
+// Venues OSM maps without any tennis pitches, so the clustering above never sees them.
+const MISSING = [
+  { id: 'c327534_1172349', name: 'Barnes Tennis Center', area: 'Ocean Beach', lat: 32.75338, lng: -117.23485, count: 25, surface: 'hard', lit: true },
+];
+for (const m of MISSING) if (!out.some((c) => c.id === m.id)) out.push(m);
 out.sort((a, b) => b.count - a.count);
 writeFileSync(new URL('../src/data/courts.json', import.meta.url), JSON.stringify(out));
 console.log(`${pitches.length} courts -> ${out.length} venues`);

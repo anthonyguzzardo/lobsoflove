@@ -10,6 +10,8 @@
 //   two-finger tap                read now (on a card: save)
 //   three fast circles            leave (so do a swipe in from the left edge and a two-finger swipe down)
 
+import { drawBrush, paperGrain } from './lib/brush.js';
+
 const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
 window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
 
@@ -245,114 +247,10 @@ window.clearAll = () => { S.line = ''; S.pending = 0; S.group = []; S.card = nul
 
 // ─── Drawing ───────────────────────────────────────────────────────────────────
 
-function strokePath(pts) {
-  g.beginPath();
-  g.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length - 1; i++) {
-    const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2;
-    g.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
-  }
-  const l = pts[pts.length - 1];
-  g.lineTo(l[0], l[1]);
-}
-// The brush, after the drawing in docs/mo-design/vids/pretty-fire-fuckign-art.mov: fat rounded tubes, each stroke its own
-// color and pattern, picked in turn. Patterns are laid out by distance along the stroke, so they stay put as it grows.
-const BRUSHES = [
-  { color: '#e8432a', pattern: 'dots', mark: '#fff6ec' },
-  { color: '#2a63d8', to: '#35c4f0', pattern: 'stripes', mark: '#122a6b' },
-  { color: '#f39a2b', pattern: 'speckle', mark: '#1b1408' },
-  { color: '#9a4fd6', to: '#d64fb8', pattern: 'dash', mark: '#f3d9ff' },
-  { color: '#2f9e5a', pattern: 'plain' },
-  { color: '#1f6fe8', pattern: 'plain' },
-];
-let brushTurn = 0;
-const WIDTH = 21;
-
-/** Points every `step` px along the smoothed stroke, with the direction there. */
-function along(pts, step) {
-  const out = [];
-  let carry = 0;
-  for (let i = 1; i < pts.length; i++) {
-    const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
-    const d = Math.hypot(bx - ax, by - ay);
-    if (!d) continue;
-    const ux = (bx - ax) / d, uy = (by - ay) / d;
-    let t = step - carry;
-    while (t <= d) { out.push([ax + ux * t, ay + uy * t, ux, uy]); t += step; }
-    carry = d - (t - step);
-  }
-  return out;
-}
-const mix = (a, b, k) => {
-  const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-  const [x, y] = [p(a), p(b)];
-  return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * k)).join(',')})`;
-};
-/** Fixed jitter per mark, so speckles do not shimmer from frame to frame. */
-const jit = (i, salt) => { const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453; return x - Math.floor(x); };
-
-function drawInk(strokes, alpha = 1, width = WIDTH) {
-  g.save();
-  g.globalAlpha = alpha;
-  g.lineCap = 'round'; g.lineJoin = 'round';
-  for (const s of strokes) {
-    if (!s.brush) s.brush = BRUSHES[brushTurn++ % BRUSHES.length];
-    const b = s.brush;
-    const pts = s.pts;
-    // A soft contact shadow, down and right, so the tube sits on the paper.
-    g.strokeStyle = 'rgba(60,45,30,0.13)'; g.lineWidth = width;
-    g.save(); g.translate(1.5, 2.5); strokePath(pts); g.stroke(); g.restore();
-    // The body: one color, or a run from one color to the next along its length.
-    g.lineWidth = width;
-    if (b.to && pts.length > 2) {
-      const n = pts.length - 1;
-      for (let i = 1; i <= n; i++) {
-        g.strokeStyle = mix(b.color, b.to, i / n);
-        g.beginPath(); g.moveTo(pts[i - 1][0], pts[i - 1][1]); g.lineTo(pts[i][0], pts[i][1]); g.stroke();
-      }
-    } else { g.strokeStyle = b.color; strokePath(pts); g.stroke(); }
-    const r = width / 2;
-    if (b.pattern === 'dots') {
-      g.fillStyle = b.mark;
-      for (const [x, y] of along(pts, width * 1.15)) { g.beginPath(); g.arc(x, y, r * 0.3, 0, Math.PI * 2); g.fill(); }
-    } else if (b.pattern === 'stripes') {
-      g.strokeStyle = b.mark; g.lineWidth = Math.max(1.4, width * 0.16); g.lineCap = 'butt';
-      for (const [x, y, ux, uy] of along(pts, width * 0.5)) { g.beginPath(); g.moveTo(x - uy * r * 0.92, y + ux * r * 0.92); g.lineTo(x + uy * r * 0.92, y - ux * r * 0.92); g.stroke(); }
-      g.lineCap = 'round';
-    } else if (b.pattern === 'speckle') {
-      g.fillStyle = b.mark;
-      along(pts, width * 0.28).forEach(([x, y, ux, uy], i) => {
-        const o = (jit(i, 1) - 0.5) * r * 1.3;
-        g.beginPath(); g.arc(x - uy * o, y + ux * o, r * (0.1 + 0.07 * jit(i, 2)), 0, Math.PI * 2); g.fill();
-      });
-    } else if (b.pattern === 'dash') {
-      g.strokeStyle = b.mark; g.lineWidth = Math.max(1.6, width * 0.2); g.globalAlpha = alpha * 0.85;
-      along(pts, width * 0.55).forEach(([x, y, ux, uy], i) => {
-        if (i % 2) return;
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + ux * width * 0.4, y + uy * width * 0.4); g.stroke();
-      });
-      g.globalAlpha = alpha;
-    }
-    // A thin highlight along the top edge makes it read as round.
-    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = Math.max(1, width * 0.14);
-    g.save(); g.translate(-r * 0.32, -r * 0.42); strokePath(pts); g.stroke(); g.restore();
-  }
-  g.restore();
-}
-
+// The brush is shared: src/lib/brush.ts holds the look, web/lib/brush.js draws it on a canvas.
+const drawInk = (strokes, alpha = 1) => drawBrush(g, strokes, alpha);
 // Paper grain: one noise tile, laid over the whole page at low strength.
-const grain = (() => {
-  const c = document.createElement('canvas');
-  c.width = c.height = 160;
-  const x = c.getContext('2d');
-  const img = x.createImageData(160, 160);
-  for (let i = 0; i < img.data.length; i += 4) {
-    const v = 120 + Math.random() * 100;
-    img.data[i] = v; img.data[i + 1] = v * 0.97; img.data[i + 2] = v * 0.92; img.data[i + 3] = 22;
-  }
-  x.putImageData(img, 0, 0);
-  return g.createPattern(c, 'repeat');
-})();
+const grain = paperGrain(g);
 
 const LINE_Y = () => Math.max(TOP, 20) + 54;
 const LINE_FONT = `700 32px ${HAND}`;

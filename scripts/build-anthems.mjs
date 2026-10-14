@@ -3,14 +3,14 @@
 // Only Apple's public 30-second previews are used; the app links each one back to Apple Music.
 import { writeFileSync } from 'node:fs';
 
-/** One song per court stage (theme ids from src/lib/themes.ts). The first five are the founder's picks. */
+/** One song per court stage (theme ids from src/lib/themes.ts). The first five, plus ob (Barnes), are the founder's picks. */
 const PICKS = {
   ucsd: ['Bitter Sweet Symphony', 'The Verve'],
   balboa: ['Still Into You', 'Paramore'],
   zoo: ['Song 2', 'Blur'],
   cove: ['I Miss You', 'blink-182'],
   downtown: ['Memories', 'YUNGBLUD'],
-  ob: ['Santeria', 'Sublime'],
+  ob: ['Los Angeles', 'The Midnight'], // Barnes Tennis Center (the Night Habits remaster is not on Apple Music; this is the 2014 original)
   beach: ["What's My Age Again?", 'blink-182'],
   coronado: ['Superman', 'Goldfinger'],
   bay: ['No Cigar', 'Millencolin'],

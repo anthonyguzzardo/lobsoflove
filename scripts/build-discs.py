@@ -12,7 +12,7 @@ CAST = {
     "goblin": ("DROPSHOT GOBLIN", "#2fe08a"), "bot": ("SERVE BOT", "#35d6ff"), "moon": ("MOONBALLER", "#9b6bff"),
     "grunter": ("THE GRUNTER", "#ff5252"), "junk": ("JUNKBALLER", "#ff8a1f"), "comet": ("NET RUSHER", "#ff3d7f"),
     "wall": ("THE WALL", "#d7f205"), "ghost": ("THE NO-SHOW", "#f4f1e6"),
-    "lobber": ("THE LOBBER", "#35d6ff"), "rabbit": ("THE JACKRABBIT", "#ff8a1f"),
+    "lobber": ("GOT YOU, BITCH", "#35d6ff"), "rabbit": ("THE JACKRABBIT", "#ff8a1f"),
 }
 FACE = {"wall": (100, 92), "moon": (78, 96), "bot": (100, 78), "goblin": (100, 100), "grunter": (100, 86), "junk": (100, 108), "comet": (112, 104), "ghost": (100, 88), "lobber": (100, 64), "rabbit": (100, 120)}
 
