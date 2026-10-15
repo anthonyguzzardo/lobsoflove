@@ -14,6 +14,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 import { post } from './lib/bridge.js';
 import { brushUnderline } from './lib/brush.js';
+import { mountMark } from './lib/mark.js';
 import { createDock } from './lib/dock.js';
 import { createHero, STYLES } from './lib/hero.js';
 import { createSlide } from './lib/slide.js';
@@ -24,7 +25,7 @@ const PAPER = 0xefece5;
 const CLAY = 0xe2562f; // the one accent
 const rad = THREE.MathUtils.degToRad;
 const $ = (id) => document.getElementById(id);
-$('mark').addEventListener('click', () => post({ type: 'go', to: 'intro' }));
+mountMark($('mark'), { onTap: () => { post({ type: 'press' }); post({ type: 'go', to: 'intro' }); } });
 
 const PLACES = [
   { key: 'play', label: 'PLAY', head: ['PLAY A MATCH.', 'PICK YOUR OPPONENT.'], blurb: 'pick an opponent, pick a court, log the score' },

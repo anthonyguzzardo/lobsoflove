@@ -49,7 +49,13 @@ export function createHero(scene, { scale = 0.42, unit = 2 } = {}) {
     lobber: () => { hero.mood.sly = 1.4; },
     wall: () => hero.poke(hero.com().add(new THREE.Vector3(0, 0.8, 0)), new THREE.Vector3(0, -1, 0), 1.4, 0.7),
   };
-  const carrier = { p: new THREE.Vector3(), v: new THREE.Vector3(), ready: false, idleAt: 4 };
+  const carrier = { p: new THREE.Vector3(), v: new THREE.Vector3(), ready: false, idleAt: 4, squash: 0 };
+  /** How far the jelly's rest center sits above its feet (its own units): what a full squash would lift the feet by. */
+  const restDrop = () => {
+    let cy = 0; let lo = Infinity;
+    for (let m = 0; m < hero.r.length / 3; m += 1) { const y = hero.r[m * 3 + 1]; cy += y; lo = Math.min(lo, y); }
+    return cy / (hero.r.length / 3) - lo;
+  };
 
   const style = () => STYLES[hero.cast] || STYLES.wall;
   let plan = null; // the jump in progress
@@ -128,8 +134,16 @@ export function createHero(scene, { scale = 0.42, unit = 2 } = {}) {
       const local = acc.applyQuaternion(mascot.quaternion.clone().invert()).multiplyScalar(0.6 / scale / mascot.scale.x);
       const dv = local.multiplyScalar(dt).clampLength(0, 5);
       hero.kick(-dv.x, -dv.y, -dv.z);
-      const pre = plan && hopT != null && hopT < plan.pre ? hopT / plan.pre : 0;
-      hero.squash = Math.max(pre * (plan ? plan.load : 0), 0.7 * charge); // the crouch before a jump, or pulling the ball loads the fighter
+      // The crouch: down to full depth in the first 65% of the wind-up, held at the bottom, released at launch. Pulling the slide
+      // ball loads it the same way.
+      const u = plan && hopT != null && hopT < plan.pre ? Math.min(1, hopT / (0.65 * plan.pre)) : 0;
+      const squash = Math.max(plan ? plan.load * u * u * (3 - 2 * u) : 0, 0.7 * charge);
+      // The jelly squashes about its middle, which would lift its feet off the ground. Move it down by exactly what the bottom
+      // rises (and back up as it extends), so the feet stay planted: it crouches onto them and pushes off from them.
+      const dsq = squash - carrier.squash;
+      carrier.squash = squash;
+      if (dsq) { const dy = -0.3 * restDrop() * dsq; for (let m = 0; m < hero.x.length / 3; m += 1) hero.x[m * 3 + 1] = Math.max(0, hero.x[m * 3 + 1] + dy); }
+      hero.squash = squash;
       hero.simulate(dt, clock);
       if (hopT == null && clock > carrier.idleAt) { carrier.idleAt = clock + 4.5 + Math.random(); (IDLE[hero.cast] || (() => {}))(); }
     },

@@ -94,11 +94,14 @@ const homeTopCss = `
 /* The top of the screen is paper. Only the mark sits in the corner; news belongs in the scene, on the standings tile. */
 #fade{background:linear-gradient(180deg,rgba(239,236,229,.9) 0%,rgba(239,236,229,.6) 6%,rgba(239,236,229,0) 12%,rgba(239,236,229,0) 60%,rgba(239,236,229,.9) 74%,rgba(239,236,229,.97) 100%)}
 #top{display:flex;align-items:center;height:44px}
-#mark{appearance:none;border:0;padding:0;background:none;cursor:pointer;pointer-events:auto;flex:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center}
-#mark img{width:40px;height:40px;display:block}#mark:focus-visible{outline:2px solid #e8664f;outline-offset:3px}
+/* The mark: drawn by an unseen pen, over and over (web/lib/mark.js). A tap finishes it with a pop and opens the artwork. */
+#mark{appearance:none;border:0;padding:0;background:none;cursor:pointer;pointer-events:auto;flex:none;width:68px;height:68px;margin:-6px 0 0 -9px;display:flex;align-items:center;justify-content:center}
+#mark svg{width:100%;height:100%;display:block;overflow:visible}#mark:focus-visible{outline:2px solid #e8664f;outline-offset:3px}
+#mark .pop{animation:markpop .34s cubic-bezier(.34,1.56,.64,1);transform-box:fill-box;transform-origin:center}
+@keyframes markpop{0%{transform:scale(1)}35%{transform:scale(1.16,.86)}70%{transform:scale(.96,1.05)}100%{transform:scale(1)}}
 `;
 const homeBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
-<div id="top"><button id="mark" aria-label="View Lobs of Love artwork" title="View artwork"><img alt="" src="data:image/png;base64,${readFileSync(`${root}assets/images/ball-mark-v1.png`).toString('base64')}"></button></div>
+<div id="top"><button id="mark" aria-label="LobsOfLove. Tap to see the artwork." title="LobsOfLove"></button></div>
 <div class="grow"></div>
 <div id="head"><div id="h1"></div><div id="h2"></div><div id="blurb"></div></div>
 <div id="enter" role="slider" aria-label="Slide the ball to go in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>

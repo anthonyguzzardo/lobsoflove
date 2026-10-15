@@ -10,7 +10,7 @@ const sample=(fn,n=220)=>Array.from({length:n+1},(_,i)=>fn(i/n));
 const colors=['#e8664f','#508cc3','#e9ac45','#a27ac5','#439779'];
 const curls=colors.map((color,i)=>{
  const start=i*Math.PI*2/5-1.8;
- return {color,pts:sample(u=>{const a=start+u*4.8,r=340-175*u+28*Math.sin(u*6+i)+12*Math.sin(u*17+i*.7);return [450+Math.cos(a)*r,445+Math.sin(a)*r*.88];}),delay:i*.45,width:16+(i%3)*3};
+ return {color:i===4?'#c4476b':color,pattern:i===4?0:i%3,pts:sample(u=>{const a=start+u*4.8,r=340-175*u+28*Math.sin(u*6+i)+12*Math.sin(u*17+i*.7);return [450+Math.cos(a)*r,445+Math.sin(a)*r*.88];}),delay:i*.45,width:16+(i%3)*3};
 });
 function stroke(pts,progress,color,width,pattern=0,alpha=1,t=0){
  if(progress<=0)return;const end=Math.min(pts.length-1,progress*(pts.length-1));
@@ -22,7 +22,7 @@ const circle=sample(u=>{const a=-Math.PI/2+u*Math.PI*2,r=169+Math.sin(a*3)*2+Mat
 const seams=[-1,1].map(side=>sample(u=>{const y=-137+274*u;return [450+side*(99-66*Math.sin(Math.PI*u)),445+y];}));
 
 const line=(a,b,n=35)=>sample(u=>[mix(a[0],b[0],u),mix(a[1],b[1],u)],n);
-const letter=side=>{const x=450+side*255;return [...line([x,239],[x+side*3,646],80),...sample(u=>[x+side*3-side*113*u,646+Math.sin(u*Math.PI)*3],45)];};
+const letter=side=>{const x=450+side*255;return [...line([x,239],[x+side*3,646],80),...sample(u=>[x+side*3-side*155*u,646+Math.sin(u*Math.PI)*3],45)];};
 // Silhouettes follow FighterAvatar: a single goblin body and the compact Serve Bot.
 function friend(kind,x,y,t,active,side,celebrate,effort=0,scale=.56){
  const hop=active?Math.max(0,Math.sin(t*6+side))*9:celebrate?Math.max(0,Math.sin(t*8))*15:0;
@@ -50,12 +50,12 @@ function friend(kind,x,y,t,active,side,celebrate,effort=0,scale=.56){
 }
 const glyphs={L:[[[0,0],[0,1],[.65,1]]],O:[sample(u=>[.35+Math.cos(-Math.PI/2+u*6.283)*.35,.5+Math.sin(-Math.PI/2+u*6.283)*.5],65)],B:[[[0,1],[0,0]],sample(u=>[Math.sin(u*Math.PI)*.6,u*.48],30),sample(u=>[Math.sin(u*Math.PI)*.7,.48+u*.52],30)],S:[[[.65,.07],[.48,0],[.22,.01],[.05,.12],[.02,.27],[.12,.39],[.52,.55],[.65,.68],[.65,.83],[.5,.97],[.22,1],[.02,.92]]],F:[[[.65,0],[0,0],[0,1]],[[0,.46],[.52,.46]]],V:[[[0,0],[.35,1],[.7,0]]],E:[[[.65,0],[0,0],[0,1],[.65,1]],[[0,.48],[.5,.48]]]};
 // Each letter follows the arch's tangent, preserving the hand-drawn strokes.
-const titlePaths=[];let pen=165;
+const titlePaths=[],titleColors=[];let pen=165,word=0;
 for(const char of 'LOBS OF LOVE'){
- if(char===' '){pen+=20;continue;}
+ if(char===' '){pen+=20;word++;continue;}
  const cx=pen+19,base=112+.00112*(cx-450)**2,angle=Math.atan(.00224*(cx-450));
  const place=p=>{const x=(p[0]-.35)*54,y=(p[1]-1)*58;return [cx+x*Math.cos(angle)-y*Math.sin(angle),base+x*Math.sin(angle)+y*Math.cos(angle)];};
- for(const path of glyphs[char])titlePaths.push(path.flatMap((point,i)=>i?line(place(path[i-1]),place(point),8):[]));
+ for(const path of glyphs[char]){titleColors.push(word===0?'#c4476b':colors[Math.floor(titlePaths.length/3)%5]);titlePaths.push(path.flatMap((point,i)=>i?line(place(path[i-1]),place(point),8):[]));}
  pen+=53;
 }
 const teams=[['goblin','grunter','rabbit'],['bot','wall','ghost']];
@@ -80,7 +80,7 @@ function assemble(t,fade,titleTime=t){
  }
  }
  crew.sort((a,b)=>a.y-b.y).forEach(c=>{ctx.save();ctx.globalAlpha=fade*c.visible;friend(c.kind,c.x,c.y,t+c.i*.22,c.active,-c.side,c.celebrate,(c.side>0&&t>20&&t<22.3?.85:0)+Math.sin(clamp((t-12.4-(c.side>0?.7:0))/4.3)*Math.PI),c.scale);ctx.restore();});
- titlePaths.forEach((p,i)=>stroke(p,ease((titleTime-23-i*.12)/.65),colors[Math.floor(i/3)%5],9,2,fade,t));
+ titlePaths.forEach((p,i)=>stroke(p,ease((titleTime-23-i*.12)/.65),titleColors[i],9,2,fade,t));
  state={time:t,leftPlaced:t>=18.5,rightPlaced:t>=19.2,titleComplete:titleTime>=26,crew:crew.map(c=>({kind:c.kind,x:c.x,y:c.y})),poses:[teamPose(-1,t),teamPose(1,t)]};
 }
 function draw(t,options={}){
@@ -89,7 +89,7 @@ function draw(t,options={}){
  const fade=1-ease((t-34)/2),arrive=ease((t-5)/3);
  ctx.save();ctx.globalAlpha=fade;
  // Broad colored gestures arrive first, then leave room for the ball.
- for(let i=0;i<curls.length;i++){const s=curls[i];stroke(s.pts,ease((t-s.delay)/3.7),s.color,s.width,i%3,(1-arrive*.82)*fade,t);}
+ for(let i=0;i<curls.length;i++){const s=curls[i];stroke(s.pts,ease((t-s.delay)/3.7),s.color,s.width,s.pattern,(1-arrive*.82)*fade,t);}
  const bounce=t>10?Math.sin((t-10)*2.3)*Math.exp(-(t-10)*.45)*13:0;
  ctx.save();ctx.translate(0,-bounce);
  ctx.globalAlpha=fade*arrive;ctx.fillStyle='#c7d96c';ctx.beginPath();circle.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();ctx.fill();ctx.globalAlpha=fade;

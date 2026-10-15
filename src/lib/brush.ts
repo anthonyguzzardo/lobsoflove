@@ -14,6 +14,7 @@ export const BRUSHES: readonly Brush[] = [
   { color: '#9a4fd6', to: '#d64fb8', pattern: 'dash', mark: '#f3d9ff' },
   { color: '#2f9e5a', pattern: 'plain' },
   { color: '#1f6fe8', pattern: 'plain' },
+  { color: '#c4476b', pattern: 'dots', mark: '#fff6ec' },
 ];
 
 /** Default tube thickness in points. */

@@ -1330,7 +1330,10 @@ function advance(dt) {
   for (const g of islands) {
     const u = g.userData;
     spring(u.dip, 0, dt, 2.6, 0.5);
-    spring(u.size, u.i === (st.hop ? st.hop.to : st.at) ? 1 : AWAY, dt, 1.6, 0.8); // the arena you are on is full size, the rest shrink back
+    // The arena you are headed for grows to full size; the one you are leaving stays full size under your feet until you have
+    // pushed off it, then shrinks back with the rest.
+    const under = u.i === st.at && !(st.hop && st.hop.pushed);
+    spring(u.size, under || u.i === (st.hop ? st.hop.to : st.at) ? 1 : AWAY, dt, 1.6, 0.8);
     spring(u.rise, u.i === (st.hop ? st.hop.to : st.at) ? 1 : 0, dt, 0.9, 1); // the ground of where you are rises; the last one falls away
     spring(u.sink, st.diving && u.i !== st.at ? 1 : 0, dt, 1.4, 0.9);
     for (const tex of u.boards) tex.offset.x += dt * 0.07 * tex.repeat.x;
