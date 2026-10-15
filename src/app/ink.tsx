@@ -3,8 +3,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { WebView } from 'react-native-webview';
 
+import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
 import { INK_HTML } from '@/generated/ink-html';
 import { courtById, usePickedCourt } from '@/lib/courts';
 import { addGear } from '@/lib/gear';
@@ -16,11 +16,10 @@ import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 
 type Msg =
-  | { type: 'ready' } | { type: 'space' } | { type: 'erase' } | { type: 'read' } | { type: 'readNow' }
+  | { type: 'space' } | { type: 'erase' } | { type: 'read' } | { type: 'readNow' }
   | { type: 'save' } | { type: 'nope' } | { type: 'toss' } | { type: 'more' } | { type: 'exit' }
   | { type: 'char'; strokes: Stroke[]; w: number; h: number }
-  | { type: 'choose'; field: 'opp'; value: string }
-  | { type: 'error'; message: string; at?: string };
+  | { type: 'choose'; field: 'opp'; value: string };
 
 /** A written character waiting on (or done with) the recognizer. */
 type Entry = { space: true } | { space?: false; cands: string[] | null };
@@ -34,8 +33,8 @@ export default function Ink() {
   const roster = useRoster();
   const matches = useMatches();
   const picked = usePickedCourt();
-  const web = useRef<WebView>(null);
-  const run = (js: string) => web.current?.injectJavaScript(`${js};true;`);
+  const scene = useScene();
+  const { run } = scene;
 
   const entries = useRef<Entry[]>([]);
   const inflight = useRef(new Set<Promise<void>>());
@@ -88,14 +87,15 @@ export default function Ink() {
     }
   };
 
-  const onMessage = (raw: string) => {
-    const msg = JSON.parse(raw) as Msg;
+  const onReady = () => {
+    pushLine();
+    if (params.demo === 'loops') run('window.demoLoops()');
+    else if (params.demo) run(`window.demoInk(${params.demo === '1' ? '' : JSON.stringify(params.demo)})`);
+  };
+
+  const onMessage = (m: SceneMsg) => {
+    const msg = m as Msg;
     switch (msg.type) {
-      case 'ready':
-        pushLine();
-        if (params.demo === 'loops') run('window.demoLoops()');
-        else if (params.demo) run(`window.demoInk(${params.demo === '1' ? '' : JSON.stringify(params.demo)})`);
-        break;
       case 'char': {
         const entry: Entry = { cands: null };
         entries.current.push(entry);
@@ -145,31 +145,17 @@ export default function Ink() {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         goBack();
         break;
-      default:
-        console.warn('ink page:', msg.message, msg.at ?? '');
     }
   };
 
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
-      <WebView
-        ref={web}
-        source={{ html: INK_HTML }}
-        originWhitelist={['*']}
-        style={styles.web}
-        scrollEnabled={false}
-        bounces={false}
-        overScrollMode="never"
-        contentInsetAdjustmentBehavior="never"
-        javaScriptEnabled
-        onMessage={(e) => onMessage(e.nativeEvent.data)}
-      />
+      <SceneView scene={scene} html={INK_HTML} name="ink" onReady={onReady} onMessage={onMessage} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
-  web: { flex: 1, backgroundColor: '#efece5' },
 });

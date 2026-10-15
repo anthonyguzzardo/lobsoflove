@@ -4,11 +4,11 @@
     "slug": "lobsoflove",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/app-icon-v1.png",
+    "icon": "./assets/images/app-icon-v2.png",
     "scheme": "lobsoflove",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/app-icon-v1.png",
+      "icon": "./assets/images/app-icon-v2.png",
       "bundleIdentifier": "com.mrfox.lobsoflove",
       "buildNumber": "1",
       "supportsTablet": false,
@@ -18,12 +18,12 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#171d30",
-        "foregroundImage": "./assets/images/android-icon-v1.png"
+        "backgroundColor": "#eee9df",
+        "foregroundImage": "./assets/images/android-icon-v2.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.mrfox.lobsoflove",
-      "icon": "./assets/images/app-icon-v1.png",
+      "icon": "./assets/images/app-icon-v2.png",
       "permissions": [
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
@@ -32,16 +32,16 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon-v1.png"
+      "favicon": "./assets/images/favicon-v2.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#171d30",
-          "image": "./assets/images/lol-splash/tennis-world-painted.png",
-          "imageWidth": 220
+          "backgroundColor": "#eee9df",
+          "image": "./assets/images/app-icon-v2.png",
+          "imageWidth": 260
         }
       ],
       "expo-sharing",

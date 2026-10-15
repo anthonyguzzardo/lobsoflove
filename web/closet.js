@@ -15,11 +15,10 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
+import { post } from './lib/bridge.js';
 import { brushUnderline } from './lib/brush.js';
-
-const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
-window.addEventListener('unhandledrejection', (e) => post({ type: 'error', message: String(e.reason) }));
+import { createSlide } from './lib/slide.js';
+import { spring } from './lib/spring.js';
 
 const INK = 0x16181d;
 const PAPER = 0xefece5;
@@ -745,7 +744,7 @@ function paint() {
     $('h2').textContent = due.length ? `${due.length} THING${due.length > 1 ? 'S' : ''} DUE.` : 'ALL GOOD.';
     $('due').innerHTML = due.slice(0, 3).map((d) => `<li>${esc(d)}</li>`).join('') || '<li class="ok">nothing worn out yet</li>';
     $('hint').textContent = st.racks.size || st.pairs.size ? 'tap anything to look closer. grab a racket and swing it.' : 'tap a dashed outline to add your racket or shoes.';
-    setKey('', '', '');
+    slide.setKey('', '', '');
     canGhost.visible = false; rollGhost.visible = false;
     return;
   }
@@ -762,9 +761,9 @@ function paint() {
   } else if (!it.photo) html += '<p class="how">tap the tag to add a photo.</p>';
   $('rows').innerHTML = html;
   const row = rows.find((r) => r.s === st.row);
-  if (it.kind === 'balls') setKey(it.stock > 0 ? '01' : '', 'CRACK A NEW CAN', 'SLIDE TO OPEN ONE');
-  else if (row) setKey('01', row.verb, 'SLIDE WHEN IT IS DONE');
-  else setKey('', '', '');
+  if (it.kind === 'balls') slide.setKey(it.stock > 0 ? '01' : '', 'CRACK A NEW CAN', 'SLIDE TO OPEN ONE');
+  else if (row) slide.setKey('01', row.verb, 'SLIDE WHEN IT IS DONE');
+  else slide.setKey('', '', '');
   canGhost.visible = it.kind === 'balls' && shelf.wantCans < SHOW_CANS;
   rollGhost.visible = it.kind === 'grips';
 }
@@ -795,98 +794,8 @@ function unfocus() {
 window.unfocus = unfocus;
 window.focusItem = focus;
 
-// ---------- Slide strip (same control as home) ----------
-const key = $('enter');
-const sl = { x: 0, v: 0, max: 1, held: false, finishing: false, done: false, grab: 0, lastX: 0, lastT: 0, flick: 0, puffAt: 0, zone: 0 };
-const BALL = 50;
-function setKey(num, labelText, sub) {
-  const next = num ? `${num}|${labelText}|${sub}` : '';
-  if (key.dataset.k === next) return;
-  key.dataset.k = next;
-  key.classList.toggle('show', !!num);
-  Object.assign(sl, { x: 0, v: 0, held: false, finishing: false, done: false, zone: 0 });
-  if (!num) return;
-  $('klbl').textContent = labelText;
-  $('ksub').textContent = sub;
-  key.classList.remove('swap');
-  void key.offsetWidth;
-  key.classList.add('swap');
-}
-key.addEventListener('pointerdown', (e) => {
-  if (sl.done || sl.finishing) return;
-  const r = key.getBoundingClientRect();
-  sl.max = Math.max(1, r.width - BALL - 16);
-  sl.grab = clamp(e.clientX - r.left - 8 - sl.x, 0, BALL);
-  sl.held = true; sl.v = 0; sl.flick = 0; sl.lastX = e.clientX; sl.lastT = performance.now();
-  key.setPointerCapture(e.pointerId);
-  key.classList.add('held');
-  post({ type: 'press' });
-});
-key.addEventListener('pointermove', (e) => {
-  if (!sl.held) return;
-  const r = key.getBoundingClientRect();
-  const now = performance.now();
-  sl.x = clamp(e.clientX - r.left - 8 - sl.grab, 0, sl.max);
-  sl.flick = 0.6 * ((e.clientX - sl.lastX) / Math.max(1, now - sl.lastT)) * 1000 + 0.4 * sl.flick;
-  sl.lastX = e.clientX; sl.lastT = now;
-});
-const letGo = () => {
-  if (!sl.held) return;
-  sl.held = false;
-  key.classList.remove('held');
-  const p = sl.x / sl.max;
-  if (p > 0.78 || (sl.flick > 900 && p > 0.4)) { sl.finishing = true; sl.v = Math.max(sl.flick, 600); } else sl.v = Math.min(0, sl.flick);
-};
-key.addEventListener('pointerup', letGo);
-key.addEventListener('pointercancel', letGo);
-window.demoSlide = (to) => {
-  sl.max = Math.max(1, key.getBoundingClientRect().width - BALL - 16);
-  sl.held = true;
-  const t0 = performance.now();
-  const id = setInterval(() => {
-    const k = Math.min(1, (performance.now() - t0) / 800);
-    sl.x = sl.max * to * (1 - Math.pow(1 - k, 3));
-    if (k >= 1) { clearInterval(id); sl.flick = 0; letGo(); }
-  }, 16);
-};
-function puff(x) {
-  const d = document.createElement('i');
-  d.style.left = `${x + 8 + Math.random() * 14}px`;
-  d.style.setProperty('--dx', `${-10 - Math.random() * 22}px`);
-  d.style.setProperty('--dy', `${-8 - Math.random() * 16}px`);
-  d.style.setProperty('--s', String(0.6 + Math.random() * 0.9));
-  $('dust').appendChild(d);
-  setTimeout(() => d.remove(), 540);
-}
-function slideStep(dt) {
-  if (!sl.held && !sl.done) {
-    const hz = sl.finishing ? 5 : 2.4;
-    const ratio = sl.finishing ? 1 : 0.5;
-    const target = sl.finishing ? sl.max : 0;
-    const w = hz * Math.PI * 2;
-    sl.v += (-w * w * (sl.x - target) - 2 * ratio * w * sl.v) * dt;
-    sl.x += sl.v * dt;
-    if (sl.x < 0) { sl.x = 0; sl.v = Math.abs(sl.v) * 0.3; }
-    if (sl.finishing && sl.x > sl.max - 1.5) {
-      sl.x = sl.max; sl.done = true; sl.finishing = false;
-      key.classList.add('hit');
-      for (let k = 0; k < 7; k += 1) puff(sl.max + 10);
-      onSlid();
-      setTimeout(() => { Object.assign(sl, { x: 0, v: 0, done: false, zone: 0 }); key.classList.remove('hit'); }, 1400);
-    }
-  }
-  if (Math.abs(sl.x - sl.puffAt) > 14 && sl.x > 4) { sl.puffAt = sl.x; puff(sl.x); }
-  const zone = Math.floor((sl.x / sl.max) * 3 + 0.0001);
-  if (zone !== sl.zone && sl.x > 2 && !sl.done) { sl.zone = zone; post({ type: 'line' }); }
-}
-function slideRender(t) {
-  const u = (t % 2.4) / 0.5;
-  const idle = !sl.held && !sl.finishing && !sl.done && sl.x < 1 && u < 1 ? 9 * Math.sin(Math.PI * u) : 0;
-  const x = sl.x + idle;
-  $('ballw').style.transform = `translate3d(${x}px,0,0)`;
-  $('ball').style.transform = `rotate(${x / (BALL / 2)}rad)`;
-  $('skid').style.width = `${sl.x > 2 ? sl.x + BALL / 2 + 6 : 0}px`;
-}
+// ---------- Slide strip (web/lib/slide.js, shared with home, courts and fighter) ----------
+const slide = createSlide({ post, onSlid: () => onSlid() });
 /** The ball reached the baseline: do the thing on the object right away, then tell the app. */
 function onSlid() {
   const it = byId(st.focus);
@@ -972,11 +881,6 @@ canvas.addEventListener('pointerup', release);
 canvas.addEventListener('pointercancel', release);
 
 // ---------- Simulation ----------
-function spring(s, target, dt, hz, ratio) {
-  const w = hz * Math.PI * 2;
-  s.v += (-w * w * (s.x - target) - 2 * ratio * w * s.v) * dt;
-  s.x += s.v * dt;
-}
 const sprV = (x, v, target, dt, hz, ratio) => {
   const w = hz * Math.PI * 2;
   v.addScaledVector(x.clone().sub(target), -w * w * dt).addScaledVector(v, -2 * ratio * w * dt);
@@ -990,7 +894,7 @@ function clack(v) {
 }
 function step(dt) {
   st.clock += dt;
-  slideStep(dt);
+  slide.step(dt);
   for (let k = fx.length - 1; k >= 0; k -= 1) {
     const f = fx[k];
     f.t += dt * 1000;
@@ -1124,7 +1028,7 @@ function pose() {
   const sway = 0.06 * Math.sin(st.clock * 2.1);
   lowSign.rotation.z = sway; binLow.rotation.z = -sway;
   for (const p of st.pairs.values()) p.sign.rotation.z = sway;
-  slideRender(st.clock);
+  slide.render(st.clock);
   camera.position.copy(st.cam.pos);
   camera.lookAt(st.cam.look);
   camera.setViewOffset(window.innerWidth, window.innerHeight, 0, st.offset || 0, window.innerWidth, window.innerHeight);

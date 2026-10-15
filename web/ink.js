@@ -10,11 +10,9 @@
 //   two-finger tap                read now (on a card: save)
 //   three fast circles            leave (so do a swipe in from the left edge and a two-finger swipe down)
 
-import { drawBrush, paperGrain } from './lib/brush.js';
 import { DRAW_MS, drawEase, wobbleLine } from '../src/lib/brush.ts';
-
-const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
+import { post } from './lib/bridge.js';
+import { drawBrush, paperGrain } from './lib/brush.js';
 
 const PAPER = '#efece5';
 const INK = '#16181d';

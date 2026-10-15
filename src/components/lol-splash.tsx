@@ -5,10 +5,10 @@ import Svg, { Path } from 'react-native-svg';
 import { EnterServe } from './enter-serve';
 import { LoadingScene } from './loading-scene';
 
-export const SPLASH_BACKGROUND = '#171d30';
+export const SPLASH_BACKGROUND = '#eee9df';
 const native = Platform.OS !== 'web';
 
-/** Offline six-pose entrance; only the pastel backing has a trembling texture. */
+/** Offline team entrance with a short, skippable canvas animation. */
 export function LolSplash({ onFinish, onReady, preview = false }: {
   onFinish: () => void;
   onReady?: () => void;
@@ -33,7 +33,7 @@ export function LolSplash({ onFinish, onReady, preview = false }: {
       .start(({ finished: done }) => { if (done) callbacks.current.onFinish(); });
   }, [opacity, reduced]);
   const ready = useCallback(() => callbacks.current.onReady?.(), []);
-  const complete = useCallback(() => { if (!preview) finish(); }, [finish, preview]);
+  const complete = useCallback(() => { if (!preview && replay === 0) finish(); }, [finish, preview, replay]);
 
   useEffect(() => {
     let mounted = true;
@@ -44,24 +44,24 @@ export function LolSplash({ onFinish, onReady, preview = false }: {
   }, []);
 
   useEffect(() => {
-    if (preview || !active) return;
+    if (preview || replay > 0 || !active) return;
     const timeout = setTimeout(finish, 10000);
     return () => clearTimeout(timeout);
-  }, [active, finish, preview]);
+  }, [active, finish, preview, replay]);
   useEffect(() => () => { opacity.stopAnimation(); }, [opacity]);
 
   return <Animated.View testID="lol-splash" accessibilityViewIsModal style={[styles.root, { opacity, paddingTop: insets.top + 18, paddingBottom: Math.max(insets.bottom, 18) }]}>
     <View style={styles.composition}>
-      <View style={{ width: size, height: size }}>
-        {reduced !== null && <LoadingScene key={`${replay}-${reduced}`} reduced={reduced} preview={preview} active={active}
+      <View style={native ? { width: size, height: size } : { width: '100%', height: '100%', maxWidth: 660, maxHeight: 660 }}>
+        {reduced !== null && <LoadingScene key={`${replay}-${reduced}`} reduced={reduced} preview={preview} fullReplay={replay > 0} active={active}
           onReady={ready} onComplete={complete} onError={finish} />}
       </View>
     </View>
     <View style={styles.actions}>
-      {preview && <Pressable accessibilityRole="button" accessibilityLabel="Replay intro" onPress={() => setReplay(value => value + 1)} style={styles.control}>
+      {<Pressable accessibilityRole="button" accessibilityLabel="Replay intro" onPress={() => setReplay(value => value + 1)} style={styles.control}>
         <Svg width={22} height={22} viewBox="0 0 24 24"><Path d="M4 10a8 8 0 1 1 0 6M4 4v6h6" fill="none" stroke="#eab26b" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></Svg>
       </Pressable>}
-      <EnterServe label={preview ? 'Enter game' : 'Skip intro'} onEnter={finish} />
+      <EnterServe label={preview || replay > 0 ? 'Enter game' : 'Skip intro'} onEnter={finish} />
     </View>
   </Animated.View>;
 }

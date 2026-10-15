@@ -91,32 +91,14 @@ background:var(--accent,var(--clay));box-shadow:0 10px 20px rgba(22,24,29,.2),0 
 `;
 // Home's top row only (courts shares homeCss but has no top row).
 const homeTopCss = `
-/* The paper fade only needs to cover one row. */
-#fade{background:linear-gradient(180deg,rgba(239,236,229,.97) 0%,rgba(239,236,229,.88) 9%,rgba(239,236,229,0) 18%,rgba(239,236,229,0) 60%,rgba(239,236,229,.9) 74%,rgba(239,236,229,.97) 100%)}
-#top{display:flex;align-items:center;height:50px}
-/* The board: a stadium split-flap. Ink housing; the mark (L, a ball for the O, a backwards L) is bolted on its left end; a lamp that
-   pulses red while a match is live; a colored tag flap; letter flaps. */
-#board{flex:1;min-width:0;display:flex;align-items:center;gap:6px;height:46px;padding:0 8px 0 0;background:var(--ink);border-radius:6px;box-shadow:0 4px 0 #000,inset 0 1px 0 rgba(255,255,255,.08)}
-#mark{flex:none;height:46px;width:84px;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(255,253,240,.18);margin-right:2px}
-#mark svg{width:70px;height:28px;display:block}
-#mark .ball{transform-box:fill-box;transform-origin:center}
-#board.live #mark .ball{animation:spin 1.3s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-#lamp{width:8px;height:8px;flex:none;border-radius:50%;background:#3a3d45;box-shadow:inset 0 0 0 1px rgba(0,0,0,.4)}
-#board.live #lamp{background:#ff4d3a;box-shadow:0 0 6px #ff4d3a,0 0 12px rgba(255,77,58,.6);animation:lamp 1.1s ease-in-out infinite}
-@keyframes lamp{50%{opacity:.35;box-shadow:none}}
-#btag{flex:none;font:800 12px var(--mono);letter-spacing:.1em;padding:7px 7px 6px;border-radius:2px;background:#3a3d45;color:#fffdf0;position:relative}
-#btag.you{background:#d7f205;color:var(--ink)}#btag.live{background:var(--clay);color:#fff}#btag.tour{background:#fffdf0;color:var(--ink)}
-#btag.pro{background:#35d6ff;color:var(--ink)}#btag.won{background:#2fe08a;color:var(--ink)}
-#flaps{flex:1;min-width:0;display:flex;gap:1px;overflow:hidden}
-#flaps i{position:relative;flex:none;width:16px;height:30px;border-radius:2px;background:linear-gradient(180deg,#2b2e36 0 50%,#23262d 50% 100%);color:#fffdf0;font:800 17px/30px var(--mono);font-style:normal;text-align:center;transform-origin:50% 50%}
-#flaps i:after,#btag:after{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(0,0,0,.55)}
-#flaps i.f,#btag.f{animation:flap 70ms ease-in-out}
-@keyframes flap{50%{transform:scaleY(.08);filter:brightness(.55)}}
-@media(prefers-reduced-motion:reduce){#board.live #lamp,#board.live #mark .ball{animation:none}}
+/* The top of the screen is paper. Only the mark sits in the corner; news belongs in the scene, on the standings tile. */
+#fade{background:linear-gradient(180deg,rgba(239,236,229,.9) 0%,rgba(239,236,229,.6) 6%,rgba(239,236,229,0) 12%,rgba(239,236,229,0) 60%,rgba(239,236,229,.9) 74%,rgba(239,236,229,.97) 100%)}
+#top{display:flex;align-items:center;height:44px}
+#mark{appearance:none;border:0;padding:0;background:none;cursor:pointer;pointer-events:auto;flex:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center}
+#mark img{width:40px;height:40px;display:block}#mark:focus-visible{outline:2px solid #e8664f;outline-offset:3px}
 `;
 const homeBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
-<div id="top"><div id="board" aria-live="polite"><div id="mark" role="img" aria-label="LobsOfLove"><svg viewBox="0 0 66 26"><path d="M5 2v21h14" fill="none" stroke="#fffdf0" stroke-width="5.5" stroke-linejoin="miter"/><g class="ball"><circle cx="33" cy="13" r="10.2" fill="#d7f205" stroke="#fffdf0" stroke-width="1.6"/><path d="M26.2 6c4.8 3.6 4.8 10.4 0 14M39.8 6c-4.8 3.6-4.8 10.4 0 14" fill="none" stroke="#16181d" stroke-width="2.1"/></g><path d="M61 2v21H47" fill="none" stroke="#fffdf0" stroke-width="5.5" stroke-linejoin="miter"/></svg></div><i id="lamp"></i><b id="btag"></b><div id="flaps"></div></div></div>
+<div id="top"><button id="mark" aria-label="View Lobs of Love artwork" title="View artwork"><img alt="" src="data:image/png;base64,${readFileSync(`${root}assets/images/ball-mark-v1.png`).toString('base64')}"></button></div>
 <div class="grow"></div>
 <div id="head"><div id="h1"></div><div id="h2"></div><div id="blurb"></div></div>
 <div id="enter" role="slider" aria-label="Slide the ball to go in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>

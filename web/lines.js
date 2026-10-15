@@ -10,10 +10,8 @@
 // - Finish: 520 ms glitch (slices shifted up to 60 px, red/blue/ink blocks, RGB split), 140 ms red frame, then the clean map.
 // - At rest it is never frozen: the hand breathes 1.2% on a 3.4 s sine and the paper grain shifts every 2 frames.
 
-const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
-
 const canvas = document.getElementById('c');
+import { post } from './lib/bridge.js';
 const g = canvas.getContext('2d');
 const PAPER = '#ebe8e2';
 const INK = '#16181d';

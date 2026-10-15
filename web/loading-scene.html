@@ -1,20 +1,26 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#171d30}body{display:grid;place-items:center}.scene{position:relative;width:min(100vw,100vh);aspect-ratio:1;isolation:isolate}.chalk{position:absolute;inset:0;background:center/contain no-repeat;opacity:.42;filter:url(#boil)}.machine{position:absolute;inset:9%;background-size:300% 200%;background-repeat:no-repeat}
-</style></head><body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><filter id="boil" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB"><feTurbulence id="grain" type="fractalNoise" baseFrequency=".021 .033" numOctaves="2" seed="3" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="6" xChannelSelector="R" yChannelSelector="G" result="ink"/><feColorMatrix id="pigment" in="ink" type="hueRotate" values="0"/></filter></defs></svg>
-<div class="scene" role="img" aria-label="A miniature tennis court comes to life inside an indigo console, with pastel chalk behind it"><div class="chalk"></div><div class="machine"></div></div>
-<script>
-const config=__CONFIG__, frames=__FRAMES__, chalk=__CHALK__;
-const machine=document.querySelector('.machine'),halo=document.querySelector('.chalk');
-const durations=[650,450,650,650,650,1400],seeds=[3,7,4,9,5,8,4,6];
-let frame=config.reduced?5:0,step=0,timer,boilTimer,loaded=false,active=config.active,complete=false;
-function tell(type){const data=JSON.stringify({source:'lol-loading',type});if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(data);else window.parent.postMessage(data,'*')}
-function show(){machine.style.backgroundPosition=((frame%3)*50)+'% '+(Math.floor(frame/3)*100)+'%'}
-function stop(){clearTimeout(timer);clearTimeout(boilTimer)}
-function boil(){if(!active||config.reduced||complete)return;boilTimer=setTimeout(()=>{step++;document.getElementById('grain').setAttribute('seed',seeds[step%seeds.length]);document.getElementById('pigment').setAttribute('values',String(7*Math.sin(step/28)));boil()},180)}
-function tick(){if(!loaded||!active||complete)return;timer=setTimeout(()=>{if(frame===5){if(config.preview&&!config.reduced){frame=0;show();tick()}else{complete=true;stop();tell('complete')}}else{frame++;show();tick()}},config.reduced?450:durations[frame])}
-window.setLoadingActive=value=>{active=value;stop();if(active&&loaded){tick();boil()}};
-window.addEventListener('message',e=>{if(e.source!==window.parent)return;try{const m=JSON.parse(e.data);if(m.source==='lol-loading-control')window.setLoadingActive(m.active)}catch{}});
-document.addEventListener('visibilitychange',()=>window.setLoadingActive(!document.hidden));
-Promise.all([frames,chalk].map(src=>new Promise((resolve,reject)=>{const im=new Image();im.onload=resolve;im.onerror=reject;im.src=src}))).then(()=>{machine.style.backgroundImage='url('+frames+')';halo.style.backgroundImage='url('+chalk+')';show();loaded=true;tell('ready');tick();boil()}).catch(()=>tell('error'));
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#eee9df}body{display:grid;place-items:center}canvas{display:block;width:min(100vw,100vh);height:min(100vw,100vh)}
+</style></head><body><canvas role="img" aria-label="Lobs of Love artwork with a handwritten name. Replay shows the fighters assembling the logo."></canvas>
+<script>__DRAWING__</script><script>
+'use strict';
+const config=__CONFIG__;
+const scene=createLoveIntro(document.querySelector('canvas'));
+const fullReplay=config.fullReplay===true;
+const duration=config.reduced?.15:fullReplay?22:4.2;
+let elapsed=0,last=null,raf=0,hostActive=config.active!==false,complete=false;
+function tell(type){const data=JSON.stringify({source:'lol-loading',type});if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(data);else window.parent.postMessage(data,'*');}
+function render(){
+ const canvas=document.querySelector('canvas');
+ canvas.style.opacity=config.reduced||fullReplay?'1':String(Math.min(1,elapsed/.65));
+ if(config.reduced)scene.draw(30);
+ else if(fullReplay)scene.draw(Math.min(30,elapsed*1.5));
+ else scene.draw(30,{titleTime:23+elapsed});
+}
+function tick(now){raf=0;if(!hostActive||document.hidden||complete)return;if(last!==null)elapsed+=Math.min((now-last)/1000,.1);last=now;try{render();if(elapsed>=duration){complete=true;scene.draw(30);tell('complete');return;}raf=requestAnimationFrame(tick);}catch{complete=true;tell('error');}}
+function schedule(){cancelAnimationFrame(raf);raf=0;last=null;if(hostActive&&!document.hidden&&!complete)raf=requestAnimationFrame(tick);}
+window.setLoadingActive=value=>{hostActive=Boolean(value);schedule();};
+window.addEventListener('message',e=>{if(e.source!==window.parent)return;try{const m=JSON.parse(e.data);if(m.source==='lol-loading-control')window.setLoadingActive(m.active);}catch{}});
+document.addEventListener('visibilitychange',schedule);
+window.addEventListener('pagehide',()=>{cancelAnimationFrame(raf);});
+try{render();tell('ready');schedule();}catch{tell('error');}
 </script></body></html>

@@ -23,10 +23,9 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { bodyGeometry, clamp, det3, ENTER, EXIT, EXTRUDE, extractRotation, FACE, FEEL, inv3, makeClusters, NL, NN, nid, POP, quatMat, v, weightsFor } from './jelly-core.js';
-
-const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
-window.addEventListener('unhandledrejection', (e) => post({ type: 'error', message: String(e.reason) }));
+import { post } from './lib/bridge.js';
+import { createSlide } from './lib/slide.js';
+import { spring as springTo } from './lib/spring.js';
 
 const PAPER = 0xefece5;
 const INK = 0x16181d;
@@ -917,11 +916,6 @@ function shelfStep(dt) {
     if (u.paint && clock >= u.paintAt) { m.material.color.set(u.paint); u.paint = null; u.hop.v = 3.5; }
   }
 }
-function springTo(s, target, dt, hz, ratio) {
-  const w = hz * Math.PI * 2;
-  s.v += (-w * w * (s.x - target) - 2 * ratio * w * s.v) * dt;
-  s.x += s.v * dt;
-}
 
 // Pointer: grab the jelly, tap it, or tap a candy on the shelf.
 const ndc = new THREE.Vector2();
@@ -1038,81 +1032,13 @@ window.setFighter = (f) => {
   }
 };
 
-// The slide-to-lock-in strip, same control as home and courts: roll the ball down the court.
-const keyEl = $('enter');
-const sl = { x: 0, v: 0, max: 1, held: false, finishing: false, done: false, grab: 0, lastX: 0, lastT: 0, flick: 0, puffAt: 0, zone: 0 };
-const BALL = 50;
-$('klbl').textContent = 'LOCK IN';
-$('ksub').textContent = 'SLIDE TO SAVE';
-keyEl.classList.add('show');
-keyEl.addEventListener('pointerdown', (e) => {
-  if (sl.done || sl.finishing) return;
-  const r = keyEl.getBoundingClientRect();
-  sl.max = Math.max(1, r.width - BALL - 16);
-  sl.grab = clamp(e.clientX - r.left - 8 - sl.x, 0, BALL);
-  sl.held = true; sl.v = 0; sl.flick = 0; sl.lastX = e.clientX; sl.lastT = performance.now();
-  keyEl.setPointerCapture(e.pointerId);
-  keyEl.classList.add('held');
-  post({ type: 'press' });
+// The slide-to-lock-in strip (web/lib/slide.js, shared with home, courts and the closet): roll the ball down the court.
+const slide = createSlide({
+  post,
+  // The fighter jumps for joy, then we save.
+  onSlid: () => { kick(0, 7, 0); post({ type: 'slid' }); setTimeout(() => post({ type: 'save' }), 520); },
 });
-keyEl.addEventListener('pointermove', (e) => {
-  if (!sl.held) return;
-  const r = keyEl.getBoundingClientRect();
-  const now = performance.now();
-  sl.x = clamp(e.clientX - r.left - 8 - sl.grab, 0, sl.max);
-  sl.flick = 0.6 * ((e.clientX - sl.lastX) / Math.max(1, now - sl.lastT)) * 1000 + 0.4 * sl.flick;
-  sl.lastX = e.clientX; sl.lastT = now;
-});
-const letGo = () => {
-  if (!sl.held) return;
-  sl.held = false;
-  keyEl.classList.remove('held');
-  const p = sl.x / sl.max;
-  if (p > 0.78 || (sl.flick > 900 && p > 0.4)) { sl.finishing = true; sl.v = Math.max(sl.flick, 600); } else sl.v = Math.min(0, sl.flick);
-};
-keyEl.addEventListener('pointerup', letGo);
-keyEl.addEventListener('pointercancel', letGo);
-function puff(x) {
-  const d = document.createElement('i');
-  d.style.left = `${x + 8 + Math.random() * 14}px`;
-  d.style.setProperty('--dx', `${-10 - Math.random() * 22}px`);
-  d.style.setProperty('--dy', `${-8 - Math.random() * 16}px`);
-  d.style.setProperty('--s', String(0.6 + Math.random() * 0.9));
-  $('dust').appendChild(d);
-  setTimeout(() => d.remove(), 540);
-}
-function slideStep(dt) {
-  if (!sl.held && !sl.done) {
-    const hz = sl.finishing ? 5 : 2.4;
-    const ratio = sl.finishing ? 1 : 0.5;
-    const target = sl.finishing ? sl.max : 0;
-    const w = hz * Math.PI * 2;
-    sl.v += (-w * w * (sl.x - target) - 2 * ratio * w * sl.v) * dt;
-    sl.x += sl.v * dt;
-    if (sl.x < 0) { sl.x = 0; sl.v = Math.abs(sl.v) * 0.3; }
-    if (sl.finishing && sl.x > sl.max - 1.5) {
-      sl.x = sl.max; sl.done = true; sl.finishing = false;
-      keyEl.classList.add('hit');
-      for (let k = 0; k < 7; k += 1) puff(sl.max + 10);
-      // The fighter jumps for joy, then we save.
-      kick(0, 7, 0);
-      post({ type: 'slid' });
-      setTimeout(() => post({ type: 'save' }), 520);
-      setTimeout(() => { Object.assign(sl, { x: 0, v: 0, done: false, zone: 0 }); keyEl.classList.remove('hit'); }, 1400);
-    }
-  }
-  if (Math.abs(sl.x - sl.puffAt) > 14 && sl.x > 4) { sl.puffAt = sl.x; puff(sl.x); }
-  const zone = Math.floor((sl.x / sl.max) * 3 + 0.0001);
-  if (zone !== sl.zone && sl.x > 2 && !sl.done) { sl.zone = zone; post({ type: 'line' }); }
-}
-function slideRender(t) {
-  const u = (t % 2.4) / 0.5;
-  const idle = !sl.held && !sl.finishing && !sl.done && sl.x < 1 && u < 1 ? 9 * Math.sin(Math.PI * u) : 0;
-  const x = sl.x + idle;
-  $('ballw').style.transform = `translate3d(${x}px,0,0)`;
-  $('ball').style.transform = `rotate(${x / (BALL / 2)}rad)`;
-  $('skid').style.width = `${sl.x > 2 ? sl.x + BALL / 2 + 6 : 0}px`;
-}
+slide.setKey('1', 'LOCK IN', 'SLIDE TO SAVE');
 
 // Layout: aim the camera so the body sits in the gap between the header and the shelf.
 function resize() {
@@ -1186,7 +1112,7 @@ function advance(dt) {
   ballsStep(dt);
   drinkStep(dt);
   lureStep(dt);
-  slideStep(dt);
+  slide.step(dt);
   shelfStep(dt);
 }
 let last = performance.now();
@@ -1247,7 +1173,7 @@ function frame(now) {
   const st = $('stage').getBoundingClientRect();
   const cx = st.left + st.width / 2;
   camera.setViewOffset(w, h, w / 2 - cx, h / 2 - (st.top + st.height * 0.5), w, h);
-  slideRender(clock);
+  slide.render(clock);
   renderer.setViewport(0, 0, w, h);
   renderer.setScissorTest(false);
   renderer.clear();

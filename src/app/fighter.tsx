@@ -3,9 +3,9 @@ import { useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { WebView } from 'react-native-webview';
 
 import { BackSwing } from '@/components/back-swing';
+import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
 import { FIGHTER_HTML } from '@/generated/fighter-html';
 import { goBack } from '@/lib/nav';
 import { CAST, type CastId, type Fighter, saveFighter, useRoster } from '@/lib/roster';
@@ -13,13 +13,12 @@ import { sfx } from '@/lib/sfx';
 
 type Field = 'name' | 'bio' | 'favoritePro' | 'homeCourt' | 'racket';
 type Msg =
-  | { type: 'ready' | 'press' | 'line' | 'slid' | 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' | 'serve' | 'pock' | 'return' | 'flex' | 'burst' | 'cheer' | 'dash' | 'gulp' | 'crush' | 'ahh' | 'ballbounce' | 'gotyou' }
+  | { type: 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' | 'serve' | 'pock' | 'return' | 'flex' | 'burst' | 'cheer' | 'dash' | 'gulp' | 'crush' | 'ahh' | 'ballbounce' | 'gotyou' }
   | { type: 'bloop'; cast: CastId }
   | { type: 'thud'; v: number }
   | { type: 'cast'; cast: CastId }
   | { type: 'color'; color: string }
-  | { type: 'edit'; field: Field }
-  | { type: 'error'; message: string; at?: string };
+  | { type: 'edit'; field: Field };
 
 const FIELDS: Record<Field, { label: string; max: number; placeholder: string }> = {
   name: { label: 'FIGHTER NAME', max: 16, placeholder: 'BASELINE BANDIT' },
@@ -37,14 +36,13 @@ export default function MakeYourFighter() {
   const [draft, setDraft] = useState<Fighter>(you);
   const [editing, setEditing] = useState<Field | null>(null);
   const [text, setText] = useState('');
-  const web = useRef<WebView>(null);
-  const ready = useRef(false);
+  const scene = useScene();
+  const { run } = scene;
   const draftRef = useRef(draft);
   useEffect(() => { draftRef.current = draft; }, [draft]);
 
-  const run = (js: string) => web.current?.injectJavaScript(`${js};true;`);
   const payload = JSON.stringify({ name: draft.name, bio: draft.bio, favoritePro: draft.favoritePro, homeCourt: draft.homeCourt, racket: draft.racket, cast: draft.cast, color: draft.color });
-  useEffect(() => { if (ready.current) run(`window.setFighter(${payload})`); }, [payload]);
+  useEffect(() => { run(`window.setFighter(${payload})`); }, [run, payload]);
 
   const commit = () => {
     if (!editing) return;
@@ -57,27 +55,20 @@ export default function MakeYourFighter() {
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
-      <WebView
-        ref={web}
-        source={{ html: FIGHTER_HTML }}
-        originWhitelist={['*']}
-        style={styles.web}
-        scrollEnabled={false}
-        bounces={false}
-        overScrollMode="never"
-        contentInsetAdjustmentBehavior="never"
-        javaScriptEnabled
-        onMessage={(e) => {
-          const msg = JSON.parse(e.nativeEvent.data) as Msg;
+      <SceneView
+        scene={scene}
+        html={FIGHTER_HTML}
+        name="fighter"
+        cues={{ slid: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('win', 0.7); } }}
+        onReady={() => {
+          if (params.demo === '1') run('window.demoFighter()');
+          // ?demo=<style> switches to that style as if its candy were tapped; ?demo=drink makes the Wall drink right away.
+          if (params.demo && params.demo in CAST) run(`setTimeout(() => window.demoStyle('${params.demo}'), 900)`);
+          if (params.demo === 'drink') run('setTimeout(() => window.demoDrink(), 900)');
+        }}
+        onMessage={(m: SceneMsg) => {
+          const msg = m as Msg;
           switch (msg.type) {
-            case 'ready':
-              ready.current = true;
-              run(`window.setFighter(${JSON.stringify(draftRef.current)})`);
-              if (params.demo === '1') run('window.demoFighter()');
-              // ?demo=<style> switches to that style as if its candy were tapped; ?demo=drink makes the Wall drink right away.
-              if (params.demo && params.demo in CAST) run(`setTimeout(() => window.demoStyle('${params.demo}'), 900)`);
-              if (params.demo === 'drink') run('setTimeout(() => window.demoDrink(), 900)');
-              break;
             case 'cast': setDraft((d) => ({ ...d, cast: msg.cast })); break;
             case 'color': setDraft((d) => ({ ...d, color: msg.color })); void Haptics.selectionAsync(); break;
             case 'edit': setText(draftRef.current[msg.field] === 'YOU' && msg.field === 'name' ? '' : draftRef.current[msg.field]); setEditing(msg.field); break;
@@ -104,11 +95,7 @@ export default function MakeYourFighter() {
             case 'serve': sfx('bounce', 0.3); break;
             case 'pock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('pock', 0.7); break;
             case 'return': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('pock', 0.9); break;
-            case 'press': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('tick', 0.7); break;
-            case 'line': void Haptics.selectionAsync(); break;
-            case 'slid': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('win', 0.7); break;
             case 'save': saveFighter(draftRef.current); goBack(); break;
-            case 'error': console.warn('fighter scene:', msg.message, msg.at ?? ''); break;
           }
         }}
       />
@@ -150,7 +137,6 @@ const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
-  web: { flex: 1, backgroundColor: '#efece5' },
   sheet: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(239,236,229,0.92)', justifyContent: 'flex-end', paddingHorizontal: 16 },
   card: { backgroundColor: '#fffdf8', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#16181d', shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 5 } },
   label: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: '#e2562f' },

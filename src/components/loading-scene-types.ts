@@ -1,6 +1,7 @@
 export type LoadingSceneProps = {
   reduced: boolean;
   preview: boolean;
+  fullReplay: boolean;
   active: boolean;
   onReady: () => void;
   onComplete: () => void;

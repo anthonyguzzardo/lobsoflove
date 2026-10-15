@@ -4,8 +4,8 @@
 // Same paper, ink and clay language as web/home.js, after docs/mo-design/vids/claude-bot-jumper-video.mov.
 //
 // Motion spec. Springs are damped oscillators integrated at 1/120 s.
-// - Hop: 620 ms island to island (they are far apart). 90 ms anticipation squash to 0.78, a parabola 2.2 high,
-//   landing squash 0.72 recovering at 3.2 Hz, ratio 0.45. The landed tile dips 0.07 and returns at 2.6 Hz, ratio 0.5.
+// - Hop: your fighter hops island to island in its own play style (web/lib/hero.js), stretched for the distance.
+//   The landed tile dips 0.07 and returns at 2.6 Hz, ratio 0.5.
 // - Dive: the other arenas sink 7 units (1.4 Hz, ratio 0.9), the mascot hops onto the baseline and shrinks to player size, and the camera
 //   comes down from 17.5 back and steep to 5 back and low at 1.0 Hz, ratio 1. The page reports the pick 1.5 s in.
 // - Wall boards scroll 0.07 of their length a second.
@@ -13,9 +13,11 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
-const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
-window.addEventListener('unhandledrejection', (e) => post({ type: 'error', message: String(e.reason) }));
+import { post } from './lib/bridge.js';
+import { createDock } from './lib/dock.js';
+import { createHero } from './lib/hero.js';
+import { createSlide } from './lib/slide.js';
+import { sp, spring } from './lib/spring.js';
 
 const INK = 0x16181d;
 const PAPER = 0xefece5;
@@ -39,7 +41,6 @@ scene.add(sun);
 const FWD = new THREE.Vector3(-1, 0, -1).normalize();
 const RIGHT = new THREE.Vector3(1, 0, -1).normalize();
 const STEP = 4.7;
-const MASCOT = 0.95;
 const SIDE = 3.5; // every arena sits on the same size tile; the venue's surroundings live in its world below
 const COURT_L = 1.5; // a court is drawn 1.5 units long, so one unit is about 15.8 m
 const M = 23.77 / COURT_L;
@@ -85,20 +86,9 @@ const blob = (size, opacity) => {
   return m;
 };
 
-// Mascot.
-const mascot = new THREE.Group();
-const skin = mat(0xd7f205, { roughness: 0.6 });
-mascot.add(at(rbox(0.62, 0.56, 0.62, 0.09, skin), 0, 0.4, 0));
-for (const [x, z] of [[-0.19, -0.19], [0.19, -0.19], [-0.19, 0.19], [0.19, 0.19]]) mascot.add(at(rbox(0.16, 0.16, 0.16, 0.04, skin), x, 0.08, z));
-const eyes = [];
-for (const sgn of [-1, 1]) {
-  const e = new THREE.Mesh(new THREE.PlaneGeometry(0.095, 0.16), new THREE.MeshBasicMaterial({ color: INK }));
-  e.position.set(sgn * 0.13, 0.45, 0.312);
-  mascot.add(e);
-  eyes.push(e);
-}
-mascot.rotation.y = rad(45);
-scene.add(mascot);
+// Your fighter (web/lib/hero.js): the same jelly as home and the fighter screen. The arenas are far apart, so its hops reach further.
+const H = createHero(scene, { scale: 0.42, unit: STEP });
+const { mascot } = H;
 const footShadow = blob(1.0, 0.75);
 scene.add(footShadow);
 
@@ -109,17 +99,11 @@ const dustGeo = new THREE.BufferGeometry();
 dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
 scene.add(new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.045, transparent: true, opacity: 0.85, depthWrite: false })));
 
-const spring = (s, target, dt, hz, ratio) => {
-  const w = hz * Math.PI * 2;
-  s.v += (-w * w * (s.x - target) - 2 * ratio * w * s.v) * dt;
-  s.x += s.v * dt;
-};
-const sp = (x = 0) => ({ x, v: 0 });
 
 
 let venues = [];
 const islands = [];
-const st = { at: 0, target: 0, hop: null, squash: sp(), clock: 0, muted: false, cam: { x: sp(), y: sp(), z: sp() }, diving: false, dive: sp(), jump: null };
+const st = { at: 0, target: 0, hop: null, clock: 0, muted: false, cam: { x: sp(), y: sp(), z: sp() }, diving: false, dive: sp(), jump: null };
 
 const line = new THREE.MeshBasicMaterial({ color: 0xfffdf0 });
 const SURROUND = mat(0x3f8f5a);
@@ -1091,7 +1075,7 @@ const WORLD = {
 };
 
 function build(data) {
-  skin.color.set(data.color);
+  H.set(data);
   venues = window.VENUES.map((v) => ({ ...v, ...(data.venues.find((d) => d.id === v.id) || {}) }));
   const L = COURT_L;
   const W = COURT_L * (10.97 / 23.77);
@@ -1186,120 +1170,14 @@ function build(data) {
   }
   const s0 = islands[0].userData.base;
   st.cam.x.x = s0.x; st.cam.y.x = s0.y; st.cam.z.x = s0.z;
-  initDock();
+  dock = createDock({ slots: venues.map((v, k) => ({ i: k, label: DOCK_LABEL[v.key] || v.short, color: v.accent })), onPick: (k) => go(k), post, at: st.target });
   paint();
   post({ type: 'stage', id: venues[0].id, anthem: venues[0].anthem });
 }
 
 
-// The one control on the page: a strip of court with a ball on it. You slide the ball down the strip to go in.
-// Motion spec:
-// - The ball rolls without slipping: it turns distance / radius, so the seam moves exactly as a real ball's would.
-// - It leaves a skid mark as wide as the ball and throws a dust puff every 14 px of travel (each lives 520 ms).
-// - Crossing a court line (at 1/3 and 2/3 of the strip) ticks. Pulling loads the fighter: it squashes up to 22% with the pull.
-// - Release short of 78% and the ball rolls home on a spring at 2.4 Hz, damping ratio 0.5 (one overshoot).
-//   Release past 78%, or flick faster than 900 px/s from past 40%, and it runs out to the baseline at 5 Hz, ratio 1; the fighter springs.
-// - At rest it is never frozen: every 2.4 s the ball rocks 9 px forward and settles back, the way you bounce one before a serve.
-const key = $('enter');
-const sl = { x: 0, v: 0, max: 1, held: false, finishing: false, done: false, grab: 0, lastX: 0, lastT: 0, flick: 0, puffAt: 0, zone: 0 };
-const BALL = 50;
-let charge = 0;
-function setKey(num, labelText, sub) {
-  const next = num ? `${num}|${labelText}|${sub}` : '';
-  if (key.dataset.k === next) return;
-  key.dataset.k = next;
-  key.classList.toggle('show', !!num);
-  Object.assign(sl, { x: 0, v: 0, held: false, finishing: false, done: false, zone: 0 });
-  if (!num) return;
-  $('klbl').textContent = labelText;
-  $('ksub').textContent = sub;
-  key.classList.remove('swap');
-  void key.offsetWidth; // restart the pop
-  key.classList.add('swap');
-}
-key.addEventListener('pointerdown', (e) => {
-  if (sl.done || sl.finishing) return;
-  const r = key.getBoundingClientRect();
-  sl.max = Math.max(1, r.width - BALL - 16);
-  // Grab the ball where it is; a touch elsewhere on the strip does not teleport it.
-  sl.grab = THREE.MathUtils.clamp(e.clientX - r.left - 8 - sl.x, 0, BALL);
-  sl.held = true; sl.v = 0; sl.flick = 0; sl.lastX = e.clientX; sl.lastT = performance.now();
-  key.setPointerCapture(e.pointerId);
-  key.classList.add('held');
-  post({ type: 'press' });
-});
-key.addEventListener('pointermove', (e) => {
-  if (!sl.held) return;
-  const r = key.getBoundingClientRect();
-  const now = performance.now();
-  sl.x = THREE.MathUtils.clamp(e.clientX - r.left - 8 - sl.grab, 0, sl.max);
-  sl.flick = 0.6 * ((e.clientX - sl.lastX) / Math.max(1, now - sl.lastT)) * 1000 + 0.4 * sl.flick;
-  sl.lastX = e.clientX; sl.lastT = now;
-});
-const letGo = () => {
-  if (!sl.held) return;
-  sl.held = false;
-  key.classList.remove('held');
-  const p = sl.x / sl.max;
-  if (p > 0.78 || (sl.flick > 900 && p > 0.4)) { sl.finishing = true; sl.v = Math.max(sl.flick, 600); } else sl.v = Math.min(0, sl.flick);
-};
-key.addEventListener('pointerup', letGo);
-key.addEventListener('pointercancel', letGo);
-
-/** Test hook: pull the ball to a fraction of the strip over 800 ms and let go, as a finger would. */
-window.demoSlide = (to) => {
-  sl.max = Math.max(1, key.getBoundingClientRect().width - BALL - 16);
-  sl.held = true;
-  const t0 = performance.now();
-  const id = setInterval(() => {
-    const k = Math.min(1, (performance.now() - t0) / 800);
-    sl.x = sl.max * to * (1 - Math.pow(1 - k, 3));
-    if (k >= 1) { clearInterval(id); sl.flick = 0; letGo(); }
-  }, 16);
-};
-
-function puff(x) {
-  const d = document.createElement('i');
-  d.style.left = `${x + 8 + Math.random() * 14}px`;
-  d.style.setProperty('--dx', `${-10 - Math.random() * 22}px`);
-  d.style.setProperty('--dy', `${-8 - Math.random() * 16}px`);
-  d.style.setProperty('--s', String(0.6 + Math.random() * 0.9));
-  $('dust').appendChild(d);
-  setTimeout(() => d.remove(), 540);
-}
-function slideStep(dt) {
-  if (!sl.held && !sl.done) {
-    const hz = sl.finishing ? 5 : 2.4;
-    const ratio = sl.finishing ? 1 : 0.5;
-    const target = sl.finishing ? sl.max : 0;
-    const w = hz * Math.PI * 2;
-    sl.v += (-w * w * (sl.x - target) - 2 * ratio * w * sl.v) * dt;
-    sl.x += sl.v * dt;
-    if (sl.x < 0) { sl.x = 0; sl.v = Math.abs(sl.v) * 0.3; }
-    if (sl.finishing && sl.x > sl.max - 1.5) {
-      sl.x = sl.max; sl.done = true; sl.finishing = false;
-      key.classList.add('hit');
-      for (let k = 0; k < 7; k += 1) puff(sl.max + 10);
-      onSlid();
-      // Back from the next screen the strip should be ready again.
-      setTimeout(() => { Object.assign(sl, { x: 0, v: 0, done: false, zone: 0 }); key.classList.remove('hit'); }, 1400);
-    }
-  }
-  if (Math.abs(sl.x - sl.puffAt) > 14 && sl.x > 4) { sl.puffAt = sl.x; puff(sl.x); }
-  const zone = Math.floor((sl.x / sl.max) * 3 + 0.0001);
-  if (zone !== sl.zone && sl.x > 2 && !sl.done) { sl.zone = zone; post({ type: 'line' }); }
-  charge = sl.done ? 0 : sl.x / sl.max;
-}
-function slideRender(t) {
-  const u = (t % 2.4) / 0.5;
-  const idle = !sl.held && !sl.finishing && !sl.done && sl.x < 1 && u < 1 ? 9 * Math.sin(Math.PI * u) : 0;
-  const x = sl.x + idle;
-  $('ballw').style.transform = `translate3d(${x}px,0,0)`;
-  $('ball').style.transform = `rotate(${x / (BALL / 2)}rad)`;
-  $('skid').style.width = `${sl.x > 2 ? sl.x + BALL / 2 + 6 : 0}px`;
-}
-/** The ball reached the baseline: the fighter springs, then the court is picked. */
-function onSlid() { st.squash.x = -0.3; st.squash.v = 0; post({ type: 'slid' }); setTimeout(enter, 260); }
+// The one control on the page is the slide strip (web/lib/slide.js): slide the ball down the court to jump in.
+const slide = createSlide({ post, onSlid: () => { H.cheer(); post({ type: 'slid' }); setTimeout(enter, 260); } });
 
 function paint() {
   const v = venues[st.target];
@@ -1315,90 +1193,20 @@ function paint() {
   $('count').querySelector('b').textContent = String(v.courts.length);
   // Stats only once there is something to say; an empty record is noise.
   $('blurb').textContent = v.played ? [`${v.played} played here`, v.king ? `king: ${v.king}` : null, `you ${v.rec}`].filter(Boolean).join(' · ') : '';
-  setKey(String(st.target + 1), 'JUMP IN', 'SLIDE TO PLAY HERE');
+  slide.setKey(String(st.target + 1), 'JUMP IN', 'SLIDE TO PLAY HERE');
+  dock?.mark(st.target);
   const sub = $('sub'); if (sub) sub.textContent = 'your six. the song is on the wall.';
 }
 
 // The dock: one floating platform per venue in its own color. A real ball hops to the one you pick, with your fighter.
-const dock = $('dock');
 const DOCK_LABEL = { ucsd: 'UCSD', lindavista: 'L. VISTA', balboa: 'BALBOA', roosevelt: 'ROOSEVELT', northpark: 'N. PARK', barnes: 'BARNES' };
-const dk = { x: 0, y: 0, vx: 0, vy: 0, to: 0, flying: false, squash: 0, rot: 0, at: 0, load: null, queued: null };
-const G = 1500;
-function initDock() {
-  dock.insertAdjacentHTML('beforeend', venues.map((v, k) => `<button class="slot" data-i="${k}" style="--pc:${v.accent}"><span class="pf"></span><span class="lbl">${DOCK_LABEL[v.key] || v.short}</span></button>`).join(''));
-  dock.addEventListener('click', (e) => { const b = e.target.closest('.slot'); if (b) go(Number(b.dataset.i)); });
-  dk.at = st.target;
-}
-const slotX = (i) => { const r = dock.getBoundingClientRect(); const b = dock.children[2 + i].getBoundingClientRect(); return b.left + b.width / 2 - r.left; };
-const restY = () => dock.clientHeight - 49;
-const DOCK_READY = () => venues.length > 0;
-// The dock ball moves like a ball that got hit, not one that wants to go somewhere: the platform it sits on kicks it,
-// it flies a true ballistic arc at a fixed 60 degree launch (so a longer gap needs a harder hit, and it gets one),
-// horizontal speed constant in the air, spin from its speed, and it lands dead on the target and bounces out its energy.
-function dockHop(i) {
-  // Wind-up first: the ball sinks into its platform with it for 130 ms, the way a ball loads into the strings, then gets launched.
-  if (dk.flying || dk.load) { dk.queued = i; return; }
-  dk.load = { to: i, t: 0, slot: dock.querySelector(`.slot[data-i="${dk.at}"]`) };
-  if (dk.load.slot) dk.load.slot.classList.add('load');
-  dk.vy = 0;
-}
-function launch(i, from, slot) {
-  dk.to = slotX(i); dk.at = i;
-  const R = dk.to - from;
-  // A softer, floatier hit than before: lower gravity and a 64 degree launch, so even the long hop takes most of a second.
-  const T = Math.tan((64 * Math.PI) / 180);
-  const vy = Math.max(260, Math.sqrt((Math.abs(R) * G * T) / 2));
-  dk.vy = -vy;
-  dk.vx = R / ((2 * vy) / G); // lands exactly on the target platform
-  dk.x = from;
-  dk.flying = true;
-  if (slot) { slot.classList.remove('load'); slot.classList.remove('kick'); void slot.offsetWidth; slot.classList.add('kick'); }
-  post({ type: 'press' });
-}
-function dockStep(dt) {
-  if (DOCK_READY && !DOCK_READY()) return;
-  if (!dk.x) { dk.x = slotX(dk.at); dk.y = restY(); }
-  const floor = restY();
-  if (dk.load) {
-    dk.load.t += dt;
-    const k = Math.min(1, dk.load.t / 0.13);
-    dk.y = restY() + 6 * k * k;
-    dk.squash = 0.18 * k;
-    if (k >= 1) { const l = dk.load; dk.load = null; dk.y = restY(); launch(l.to, dk.x || slotX(dk.at), l.slot); }
-    return;
-  }
-  if (dk.flying) dk.x += dk.vx * dt;
-  dk.rot += (dk.vx * dt) / 12; // rolls through the air at its own speed (radius 12 px)
-  dk.vy += G * dt;
-  dk.y += dk.vy * dt;
-  if (dk.y >= floor && dk.vy > 0) {
-    const hit = dk.vy;
-    dk.y = floor;
-    if (dk.flying) { dk.flying = false; dk.x = dk.to; dk.vx = 0; if (dk.queued != null) { const q = dk.queued; dk.queued = null; setTimeout(() => dockHop(q), 60); } }
-    dk.vy = hit > 140 ? -hit * 0.42 : 0;
-    if (hit > 140) {
-      dk.squash = Math.min(0.35, hit / 2200);
-      const s = dock.querySelector(`.slot[data-i="${dk.at}"]`);
-      if (s) { s.classList.add('land'); setTimeout(() => s.classList.remove('land'), 110); }
-    }
-  }
-  dk.squash *= Math.exp(-dt * 14);
-}
-function dockRender() {
-  if (!venues.length) return;
-  $('dball').style.transform = `translate3d(${dk.x}px,${dk.y}px,0) scale(${1 + dk.squash},${1 - dk.squash})`;
-  $('dball').firstElementChild.style.transform = `rotate(${dk.rot}rad)`;
-  const lift = Math.min(1, (restY() - dk.y) / 90);
-  $('dshadow').style.transform = `translateX(${dk.x}px) scale(${1 - 0.5 * lift})`;
-  $('dshadow').style.opacity = String(1 - 0.6 * lift);
-  [...dock.querySelectorAll('.slot')].forEach((b) => b.classList.toggle('on', Number(b.dataset.i) === st.target));
-}
+let dock = null; // the dock (web/lib/dock.js), built once the venues arrive
 
 function go(i) {
   i = Math.max(0, Math.min(venues.length - 1, i));
   if (i === st.target) return;
   st.target = i;
-  dockHop(i);
+  dock.hop(i);
   paint();
 }
 function enter() {
@@ -1466,21 +1274,49 @@ window.addEventListener('resize', resize);
 resize();
 
 const standOn = (i) => islands[i].position.clone().add(islands[i].userData.stand.clone().multiplyScalar(islands[i].userData.size.x));
-const HOP = 0.62;
+
+/** Where the fighter is: resting on its arena, partway through a hop, or jumping down into the court (shrinking to player size). */
+function fighterAt() {
+  if (st.hop) {
+    const { from, b } = st.hop;
+    const k = THREE.MathUtils.clamp((st.hop.t - H.crouch()) / (st.hop.dur - H.crouch()), 0, 1);
+    // Between arenas there is nothing under it to shade.
+    return { p: H.along(st.hop.t), size: 1, shadow: k < 0.12 || k > 0.88 ? from.clone().lerp(b, k).setY(THREE.MathUtils.lerp(from.y, b.y, k) + 0.04) : null };
+  }
+  if (st.jump) {
+    const k = THREE.MathUtils.clamp((st.jump.t - 0.09) / 0.5, 0, 1);
+    const to = islands[st.at].position.clone().add(islands[st.at].userData.spot.clone().multiplyScalar(islands[st.at].userData.size.x));
+    const p = st.jump.from.clone().lerp(to, k);
+    p.y += 0.9 * 4 * k * (1 - k);
+    return { p, size: THREE.MathUtils.lerp(1, 0.36, k * k * (3 - 2 * k)), shadow: k >= 1 ? to.clone().setY(to.y + 0.01) : null };
+  }
+  const p = standOn(st.at);
+  return { p, size: 1, shadow: p.clone().setY(p.y + 0.04) };
+}
 
 function advance(dt) {
   st.clock += dt;
-  slideStep(dt);
-  dockStep(dt);
+  slide.step(dt);
+  dock?.step(dt);
   if (!venues.length) return;
-  if (!st.hop && st.at !== st.target) { st.hop = { from: standOn(st.at), to: st.at + Math.sign(st.target - st.at), t: 0 }; post({ type: 'hop' }); }
+  // One jump straight to the arena you picked, sized to the gap: UCSD to Barnes crouches deep and launches high.
+  if (!st.hop && st.at !== st.target) {
+    const to = st.target;
+    const from = standOn(st.at);
+    const b = islands[to].userData.base.clone().add(islands[to].userData.stand); // where it will stand once that arena is full size
+    st.hop = { from, b, to, t: 0, pushed: false, dur: H.jump(from, b) };
+    post({ type: 'hop' });
+  }
   if (st.hop) {
     st.hop.t += dt;
-    if (st.hop.t >= 0.09 + HOP) {
+    const power = H.power();
+    // The arena it pushes off sinks with the push.
+    if (!st.hop.pushed && st.hop.t >= H.crouch()) { st.hop.pushed = true; const u = islands[st.at].userData; u.dip.x = 0.04 + 0.03 * power; u.dip.v = 0; }
+    if (st.hop.t >= st.hop.dur) {
       st.at = st.hop.to;
       st.hop = null;
-      st.squash.x = 0.28; st.squash.v = 0;
-      islands[st.at].userData.dip.x = 0.07;
+      islands[st.at].userData.dip.x = Math.min(0.3, 0.05 * (0.6 + 0.4 * power));
+      H.landed(st.clock);
       post({ type: 'land' });
       if (st.at === st.target) {
         post({ type: 'stage', id: venues[st.at].id, anthem: venues[st.at].anthem });
@@ -1488,9 +1324,9 @@ function advance(dt) {
       }
     }
   }
-  spring(st.squash, 0, dt, 3.2, 0.45);
   spring(st.dive, st.diving ? 1 : 0, dt, 1.0, 1);
   if (st.jump) st.jump.t += dt;
+  H.step(dt, st.clock, fighterAt().p, st.hop ? st.hop.t : null, slide.charge); // carry the jelly along its path
   for (const g of islands) {
     const u = g.userData;
     spring(u.dip, 0, dt, 2.6, 0.5);
@@ -1500,10 +1336,18 @@ function advance(dt) {
     for (const tex of u.boards) tex.offset.x += dt * 0.07 * tex.repeat.x;
     u.glow += ((u.i === st.target ? 1 : 0) - u.glow) * Math.min(1, dt / 0.08);
   }
-  const focus = islands[st.hop ? st.hop.to : st.at].position;
-  spring(st.cam.x, focus.x, dt, 1.3, 1);
-  spring(st.cam.y, focus.y, dt, 1.3, 1);
-  spring(st.cam.z, focus.z, dt, 1.3, 1);
+  // The camera rides along with a jump (and rises with it, so a big one stays in frame); at rest it sits on the arena.
+  let focus = islands[st.at].position;
+  if (st.hop) {
+    const f = fighterAt().p;
+    const k = THREE.MathUtils.clamp((st.hop.t - H.crouch()) / (st.hop.dur - H.crouch()), 0, 1);
+    const ground = THREE.MathUtils.lerp(islands[st.at].position.y, islands[st.hop.to].position.y, k);
+    focus = new THREE.Vector3().lerpVectors(islands[st.at].position, islands[st.hop.to].position, k).setY(ground + 0.7 * Math.max(0, f.y - ground));
+  }
+  const camHz = st.hop ? 2.4 : 1.3; // keeps up with a jump, settles softly after
+  spring(st.cam.x, focus.x, dt, camHz, 1);
+  spring(st.cam.y, focus.y, dt, camHz, 1);
+  spring(st.cam.z, focus.z, dt, camHz, 1);
   for (let k = 0; k < DUST; k += 1) {
     dustPos[k * 3 + 1] += (0.05 + ((k * 0.73) % 1) * 0.07) * dt;
     if (dustPos[k * 3 + 1] > 4.6) dustPos[k * 3 + 1] = -0.6;
@@ -1529,42 +1373,15 @@ function pose() {
     if (u.labelMat.map !== u.faces[lit]) { u.labelMat.map = u.faces[lit]; u.labelMat.needsUpdate = true; }
     u.shadow.position.set(g.position.x + 0.5, WORLD_Y + 0.12, g.position.z + 0.5);
   }
-  let stretch = 1 + 0.025 * Math.sin((t * Math.PI * 2) / 2.2);
-  let size = MASCOT;
-  if (st.hop) {
-    const b = standOn(st.hop.to);
-    const pre = Math.min(1, st.hop.t / 0.09);
-    const k = THREE.MathUtils.clamp((st.hop.t - 0.09) / HOP, 0, 1);
-    mascot.position.lerpVectors(st.hop.from, b, k);
-    const rise = 2.2 * 4 * k * (1 - k);
-    mascot.position.y += rise;
-    stretch = k <= 0 ? 1 - 0.22 * pre : 1 + 0.14 * Math.sin(Math.PI * k);
-    footShadow.position.set(mascot.position.x, THREE.MathUtils.lerp(st.hop.from.y, b.y, k) + 0.04, mascot.position.z);
-    footShadow.visible = k < 0.12 || k > 0.88; // between islands there is nothing under it to shade
-    footShadow.material.opacity = 0.7;
-  } else if (st.jump) {
-    // Into the court: one hop from the tile's corner to the baseline, landing at player size.
-    const k = THREE.MathUtils.clamp((st.jump.t - 0.09) / 0.5, 0, 1);
-    const to = islands[st.at].position.clone().add(islands[st.at].userData.spot.clone().multiplyScalar(islands[st.at].userData.size.x));
-    mascot.position.lerpVectors(st.jump.from, to, k);
-    mascot.position.y += 0.9 * 4 * k * (1 - k);
-    stretch = k <= 0 ? 1 - 0.22 * Math.min(1, st.jump.t / 0.09) : k < 1 ? 1 + 0.14 * Math.sin(Math.PI * k) : stretch;
-    size = THREE.MathUtils.lerp(MASCOT, 0.34, k * k * (3 - 2 * k));
-    footShadow.visible = k >= 1;
-    footShadow.position.set(to.x, to.y + 0.01, to.z);
-  } else {
-    mascot.position.copy(standOn(st.at));
-    footShadow.visible = true;
-    footShadow.position.set(mascot.position.x, mascot.position.y + 0.04, mascot.position.z);
-    footShadow.material.opacity = 0.75;
-  }
-  footShadow.scale.setScalar(size);
-  stretch -= st.squash.x + 0.22 * charge; // pulling the ball loads the fighter
-  mascot.scale.set(size / Math.sqrt(stretch), size * stretch, size / Math.sqrt(stretch));
-  slideRender(t);
-  dockRender();
-  const blink = (t % 3.1) < 0.11 ? 0.12 : 1;
-  for (const e of eyes) e.scale.y = blink;
+  const f = fighterAt();
+  mascot.scale.setScalar(f.size);
+  H.render(t, f.p, st.hop ? st.hop.t : null);
+  footShadow.visible = f.shadow != null;
+  if (f.shadow) footShadow.position.copy(f.shadow);
+  footShadow.scale.setScalar(f.size * 0.75);
+  footShadow.material.opacity = 0.7;
+  slide.render(t);
+  dock?.render();
   dustGeo.attributes.position.needsUpdate = true;
 
   // Camera. Outside: high and back, so the path of arenas reads. Inside (z = 1): low and close over the baseline, slowly circling the court.

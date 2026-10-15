@@ -4,10 +4,10 @@ import { WebView } from 'react-native-webview';
 import { LOADING_SCENE_HTML } from '@/generated/loading-scene-html';
 import type { LoadingSceneProps } from './loading-scene-types';
 
-export function LoadingScene({ reduced, preview, active, onReady, onComplete, onError }: LoadingSceneProps) {
+export function LoadingScene({ reduced, preview, fullReplay, active, onReady, onComplete, onError }: LoadingSceneProps) {
   const web = useRef<WebView>(null);
   const ready = useRef(false);
-  const html = useMemo(() => LOADING_SCENE_HTML.replace('__CONFIG__', JSON.stringify({ reduced, preview, active: true })), [reduced, preview]);
+  const html = useMemo(() => LOADING_SCENE_HTML.replace('__CONFIG__', JSON.stringify({ reduced, preview, fullReplay, active: true })), [reduced, preview, fullReplay]);
   const syncActive = () => web.current?.injectJavaScript(`window.setLoadingActive?.(${JSON.stringify(active)});true;`);
   useEffect(() => { if (ready.current) web.current?.injectJavaScript(`window.setLoadingActive?.(${JSON.stringify(active)});true;`); }, [active]);
   return <WebView ref={web} source={{ html }} originWhitelist={['*']} style={styles.web}
@@ -23,4 +23,4 @@ export function LoadingScene({ reduced, preview, active, onReady, onComplete, on
       } catch { onError(); }
     }} />;
 }
-const styles = StyleSheet.create({ web: { flex: 1, backgroundColor: '#171d30' } });
+const styles = StyleSheet.create({ web: { flex: 1, backgroundColor: '#eee9df' } });

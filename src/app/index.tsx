@@ -1,10 +1,9 @@
-import * as Haptics from 'expo-haptics';
 import { type Href, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { WebView } from 'react-native-webview';
 
+import { SceneView, useScene } from '@/components/scene-view';
 import { HOME_HTML } from '@/generated/home-html';
 import { dueList, useCloset } from '@/lib/gear';
 import { computeSeason, scoreLine, useMatches, winnerOf } from '@/lib/matches';
@@ -12,9 +11,7 @@ import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 import { featured, findPro, proLine, proMatch, tourLine, useTour } from '@/lib/tour';
 
-type Msg = { type: 'ready' } | { type: 'press' } | { type: 'line' } | { type: 'slid' } | { type: 'hop' } | { type: 'land' } | { type: 'flap' } | { type: 'go'; to: keyof typeof ROUTES } | { type: 'error'; message: string; at?: string };
-
-const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter' | 'write' | 'gear', Href> = { play: '/case', courts: '/courts', standings: '/standings', fighter: '/fighter', write: '/ink', gear: '/gear' };
+const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter' | 'write' | 'gear' | 'intro', Href> = { play: '/case', courts: '/courts', standings: '/standings', fighter: '/fighter', write: '/ink', gear: '/gear', intro: '/splash' };
 
 /** Home: a diorama drawn by three.js in a WebView (web/home.js). Your fighter hops between tiles; each tile is a place in the app. */
 export default function Home() {
@@ -23,8 +20,8 @@ export default function Home() {
   const closet = useCloset();
   const matches = useMatches();
   const tour = useTour();
-  const web = useRef<WebView>(null);
-  const ready = useRef(false);
+  const scene = useScene();
+  const { run } = scene;
 
   const you = roster.find((f) => f.isYou) ?? roster[0];
   const { rows } = computeSeason(roster, matches);
@@ -50,49 +47,21 @@ export default function Home() {
     last: last && lastWinner ? `${name(lastWinner)} beat ${name(lastWinner === last.p1 ? last.p2 : last.p1)} ${scoreLine(last.sets)}` : null,
   });
 
-  const run = (js: string) => web.current?.injectJavaScript(`${js};true;`);
-  useEffect(() => { if (ready.current) run(`window.setHome(${data})`); }, [data]);
+  useEffect(() => { run(`window.setHome(${data})`); }, [run, data]);
 
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
-      <WebView
-        ref={web}
-        source={{ html: HOME_HTML }}
-        originWhitelist={['*']}
-        style={styles.web}
-        scrollEnabled={false}
-        bounces={false}
-        overScrollMode="never"
-        contentInsetAdjustmentBehavior="never"
-        javaScriptEnabled
-        onMessage={(e) => {
-          const msg = JSON.parse(e.nativeEvent.data) as Msg;
-          if (msg.type === 'ready') {
-            ready.current = true;
-            run(`window.setHome(${data})`);
-            if (params.demo === '1') run('window.demoHome()');
-            if (params.demo === '2') run('window.demoHomeSlide()');
-          } else if (msg.type === 'press') {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            sfx('tick', 0.7);
-          } else if (msg.type === 'line') {
-            void Haptics.selectionAsync();
-          } else if (msg.type === 'slid') {
-            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            sfx('swish', 0.8);
-          } else if (msg.type === 'hop') {
-            void Haptics.selectionAsync();
-            sfx('tick', 0.6);
-          } else if (msg.type === 'flap') {
-            sfx('tick', 0.3); // the board clacks over to the next line; no haptic, it runs every few seconds
-          } else if (msg.type === 'land') {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            sfx('slam', 0.35);
-          } else if (msg.type === 'go') {
-            sfx('go', 0.8);
-            router.push(ROUTES[msg.to]);
-          } else console.warn('home scene:', msg.message, msg.at ?? '');
+      <SceneView
+        scene={scene}
+        html={HOME_HTML}
+        name="home"
+        onReady={() => {
+          if (params.demo === '1') run('window.demoHome()');
+          if (params.demo === '2') run('window.demoHomeSlide()');
+        }}
+        onMessage={(msg) => {
+          if (msg.type === 'go') { sfx('go', 0.8); router.push(ROUTES[msg.to as keyof typeof ROUTES]); }
         }}
       />
     </View>
@@ -121,5 +90,4 @@ function seasonLine(rows: ReturnType<typeof computeSeason>['rows'], youId: strin
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
-  web: { flex: 1, backgroundColor: '#efece5' },
 });

@@ -21,11 +21,8 @@
 import * as THREE from 'three';
 
 import { FACE, FEEL, SHAPES, SoftBody } from './jelly-core.js';
+import { post } from './lib/bridge.js';
 import { Debris } from './standings-debris.js';
-
-const post = (msg) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-window.addEventListener('error', (e) => post({ type: 'error', message: String(e.message), at: `${e.lineno}:${e.colno}` }));
-window.addEventListener('unhandledrejection', (e) => post({ type: 'error', message: String(e.reason) }));
 
 const $ = (id) => document.getElementById(id);
 const VOID = 0x050507;

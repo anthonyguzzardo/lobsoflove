@@ -6,9 +6,9 @@ import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { WebView } from 'react-native-webview';
 
 import { BackSwing } from '@/components/back-swing';
+import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
 import { CLOSET_HTML } from '@/generated/closet-html';
 import {
   type GearItem, type GearKind, LIFE, type Service, SERVICES,
@@ -19,15 +19,14 @@ import { goBack } from '@/lib/nav';
 import { sfx } from '@/lib/sfx';
 
 type Msg =
-  | { type: 'ready' | 'doors' | 'knock' | 'grab' | 'fling' | 'press' | 'line' | 'slid' | 'tick' | 'ping' | 'wrap' | 'kick' | 'pop' | 'land' | 'thud' | 'squeak' | 'crack' }
+  | { type: 'doors' | 'knock' | 'grab' | 'fling' | 'tick' | 'ping' | 'wrap' | 'kick' | 'pop' | 'land' | 'thud' | 'squeak' | 'crack' }
   | { type: 'clack' | 'pock'; v: number }
   | { type: 'focus'; id: string | null }
   | { type: 'add'; kind: 'racket' | 'shoes' }
   | { type: 'restock'; kind: 'balls' | 'grips' }
   | { type: 'service'; id: string; s: Service }
   | { type: 'photo' | 'edit' | 'remove'; id: string }
-  | { type: 'order'; kind: GearKind }
-  | { type: 'error'; message: string; at?: string };
+  | { type: 'order'; kind: GearKind };
 
 const DEFAULT_NAME: Record<GearKind, string> = { racket: 'RACKET', shoes: 'COURT SHOES', balls: 'BALLS', grips: 'OVERGRIPS' };
 const PLACEHOLDER: Record<GearKind, string> = { racket: 'PURE AERO', shoes: 'GEL RESOLUTION', balls: 'PENN CHAMPIONSHIP', grips: 'TOURNA GRIP' };
@@ -108,8 +107,8 @@ export default function Closet() {
   const [demo] = useState(() => demoCloset(Date.now()));
   const items = params.demo === '1' ? demo : saved;
   const matches = useMatches();
-  const web = useRef<WebView>(null);
-  const ready = useRef(false);
+  const scene = useScene();
+  const { run } = scene;
   const focused = useRef<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [text, setText] = useState('');
@@ -117,8 +116,7 @@ export default function Closet() {
   useEffect(() => { itemsRef.current = items; }, [items]);
 
   const data = useMemo(() => JSON.stringify(payloadOf(items, matches)), [items, matches]);
-  const run = (js: string) => web.current?.injectJavaScript(`${js};true;`);
-  useEffect(() => { if (ready.current) run(`window.setCloset(${data})`); }, [data]);
+  useEffect(() => { run(`window.setCloset(${data})`); }, [run, data]);
 
   const byId = (id: string) => itemsRef.current.find((i) => i.id === id);
   const startEdit = (id: string) => { const it = byId(id); if (!it) return; setText(it.name === DEFAULT_NAME[it.kind] ? '' : it.name); setEditing(id); };
@@ -143,24 +141,15 @@ export default function Closet() {
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
-      <WebView
-        ref={web}
-        source={{ html: CLOSET_HTML }}
-        originWhitelist={['*']}
-        style={styles.web}
-        scrollEnabled={false}
-        bounces={false}
-        overScrollMode="never"
-        contentInsetAdjustmentBehavior="never"
-        javaScriptEnabled
-        onMessage={(e) => {
-          const msg = JSON.parse(e.nativeEvent.data) as Msg;
+      <SceneView
+        scene={scene}
+        html={CLOSET_HTML}
+        name="closet"
+        cues={{ land: null, slid: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } }}
+        onReady={() => { if (params.demo === '1') run('window.demoCloset()'); }}
+        onMessage={(m: SceneMsg) => {
+          const msg = m as Msg;
           switch (msg.type) {
-            case 'ready':
-              ready.current = true;
-              run(`window.setCloset(${data})`);
-              if (params.demo === '1') run('window.demoCloset()');
-              break;
             case 'doors': sfx('swish', 0.35); break;
             case 'knock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('clack', 0.35); break;
             case 'grab': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); break;
@@ -175,9 +164,6 @@ export default function Closet() {
             case 'pop': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('can', 0.8); break;
             case 'land': sfx('pock', 0.4); break;
             case 'tick': void Haptics.selectionAsync(); sfx('tick', 0.5); break;
-            case 'press': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('tick', 0.7); break;
-            case 'line': void Haptics.selectionAsync(); break;
-            case 'slid': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); break;
             case 'focus': focused.current = msg.id; if (msg.id) { void Haptics.selectionAsync(); sfx('select', 0.5); } break;
             case 'add': if (params.demo !== '1') void add(msg.kind); break;
             case 'restock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); if (params.demo !== '1') restock(msg.kind, 1); break;
@@ -204,7 +190,6 @@ export default function Closet() {
               void WebBrowser.openBrowserAsync(`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(q)}`);
               break;
             }
-            case 'error': console.warn('closet scene:', msg.message, msg.at ?? ''); break;
           }
         }}
       />
@@ -245,7 +230,6 @@ const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
-  web: { flex: 1, backgroundColor: '#efece5' },
   sheet: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(239,236,229,0.92)', justifyContent: 'flex-end', paddingHorizontal: 16 },
   card: { backgroundColor: '#fffdf8', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#16181d', shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 5 } },
   label: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: '#e2562f' },
