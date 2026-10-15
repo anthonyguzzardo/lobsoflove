@@ -23,7 +23,12 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.mrfox.lobsoflove",
-      "icon": "./assets/images/app-icon-v1.png"
+      "icon": "./assets/images/app-icon-v1.png",
+      "permissions": [
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "output": "static",
@@ -59,6 +64,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a807cb26-4e38-42c5-ad79-ace3c343952b"
+      }
+    },
+    "owner": "anthonyguzzardo"
   }
 }

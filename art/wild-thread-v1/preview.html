@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wild thread — Lobs of Love</title>
+<style>
+:root{color-scheme:light;font-family:Helvetica,Arial,sans-serif;background:#eee9df;color:#343c3a}*{box-sizing:border-box}body{margin:0}main{min-height:100svh;display:flex;flex-direction:column;align-items:center;padding:28px 24px 22px}header,footer{width:min(100%,900px);display:flex;justify-content:space-between;align-items:center;gap:20px}header{font-size:10px;letter-spacing:2px;text-transform:uppercase}header span:last-child{opacity:.5}section{flex:1;display:flex;align-items:center;justify-content:center;width:100%;min-height:0}canvas{display:block;width:min(100%,78svh,900px);aspect-ratio:1}footer{font-size:11px;gap:26px}button{font:inherit;color:inherit;background:none;border:0;padding:12px 0;cursor:pointer;white-space:nowrap}button:hover{color:#ac4830}button:focus-visible,input:focus-visible{outline:1px solid #ac4830;outline-offset:5px}.controls{display:flex;align-items:center;gap:20px}input{width:clamp(80px,20vw,200px);height:2px;accent-color:#747e6c;cursor:pointer}.caption{font-family:Georgia,serif;font-size:17px;font-style:italic}.time{font-variant-numeric:tabular-nums;min-width:30px;opacity:.5}@media(max-width:600px){main{padding:24px 18px}header{font-size:9px;letter-spacing:1.5px}footer{flex-wrap:wrap;gap:10px}.controls{width:100%;justify-content:space-between}input{flex:1}.caption{font-size:16px}canvas{width:100%}}
+</style>
+</head>
+<body><main><header><span>Lobs of Love / Drawing studies</span><span>01 — Wild thread</span></header><section><canvas aria-label="Fine irregular ink strands sweep in from many directions and gather into an open, tangled nest."></canvas></section><footer><span class="caption">A small weather of its own.</span><div class="controls"><button id="play">Pause</button><button id="replay">Redraw</button><input id="seek" aria-label="Drawing progress" type="range" min="0" max="24" step="0.01" value="0"><span class="time" id="time">00</span></div></footer></main>
+<script>
+'use strict';
+const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),seek=document.querySelector('#seek'),play=document.querySelector('#play');
+const size=900,dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=size*dpr;canvas.height=size*dpr;ctx.scale(dpr,dpr);
+let seed=18472;const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;},mix=(a,b,t)=>a+(b-a)*t,clamp=x=>Math.max(0,Math.min(1,x)),ease=x=>{x=clamp(x);return x*x*(3-2*x);};
+const colors=['#334d50','#334d50','#334d50','#707e66','#a8a17a','#b85f42','#527e92','#c19653'];
+const strands=[];
+// Each strand has its own imperfect contour and entry gesture; no rigid group rotation.
+for(let i=0;i<89;i++){
+ const phase=rand()*Math.PI*2,start=rand()*Math.PI*2,turn=(.53+rand()*.91)*Math.PI*2,dir=i%5===0?-1:1;
+ const radius=(i%6===0?65:144)+rand()*88,tilt=-.31,stretch=.72+rand()*.3,wobble=9+rand()*16;
+ const orbit=u=>{const a=start+dir*turn*u,r=radius+Math.sin(a*3+phase)*wobble+Math.sin(a*7.3+phase)*4+Math.sin(u*4+phase)*17;
+ const x=Math.cos(a)*r,y=Math.sin(a)*r*stretch;return {x:458+x*Math.cos(tilt)-y*Math.sin(tilt)+Math.sin(a*2+phase)*9+Math.cos(a*2+.8)*28,y:451+x*Math.sin(tilt)+y*Math.cos(tilt)+Math.sin(a*3.7+phase)*8+Math.sin(a*2)*19};};
+ const first=orbit(0),next=orbit(.008),dx=next.x-first.x,dy=next.y-first.y,len=Math.hypot(dx,dy),tx=dx/len,ty=dy/len;
+ const tail=80+rand()*150,origin={x:first.x-tx*tail+Math.cos(start)*80,y:first.y-ty*tail+Math.sin(start)*80};
+ const pts=[];
+ for(let j=0;j<=64;j++){const t=j/64,q=1-t;pts.push({x:q*q*q*origin.x+3*q*q*t*(origin.x-ty*60)+3*q*t*t*(first.x-tx*70)+t*t*t*first.x,y:q*q*q*origin.y+3*q*q*t*(origin.y+tx*60)+3*q*t*t*(first.y-ty*70)+t*t*t*first.y});}
+ for(let j=1;j<=290;j++)pts.push(orbit(j/290));
+ strands.push({pts,phase,width:.65+rand()*1.05,color:colors[Math.floor(rand()*colors.length)],delay:rand()*9,duration:5+rand()*5,alpha:.48+rand()*.38});
+}
+// Sparse loose filaments reach out from the woven body like climbing tendrils.
+for(let i=0;i<16;i++){
+ const a=rand()*Math.PI*2,phase=rand()*6.28,pts=[];
+ for(let j=0;j<220;j++){const t=j/219,r=195+t*150,angle=a+Math.sin(t*3+phase)*.24+t*t*.65;pts.push({x:450+Math.cos(angle)*r+Math.sin(t*16+phase)*t*8,y:450+Math.sin(angle)*r*.88+Math.cos(t*13+phase)*t*10});}
+ strands.push({pts,phase,width:.4+rand()*.35,color:colors[i%colors.length],delay:9+rand()*3,duration:5,alpha:.38,filament:true});
+}
+let elapsed=0,playing=!matchMedia('(prefers-reduced-motion: reduce)').matches,last=0;
+if(!playing)elapsed=19;
+function draw(t){
+ ctx.fillStyle='#eee9df';ctx.fillRect(0,0,size,size);
+ const disappear=1-ease((t-22)/2);
+ for(const s of strands){
+ const progress=ease((t-s.delay)/s.duration);if(progress<=0)continue;
+ const end=progress*(s.pts.length-1),boil=Math.floor(t*7)/7;
+ ctx.strokeStyle=s.color;ctx.lineCap='round';ctx.lineJoin='round';
+ const point=k=>{const p=s.pts[k],a=k*.075+s.phase;return {x:p.x+Math.sin(a+boil*1.3)*.55+Math.sin(k*.31+boil*2)*.16,y:p.y+Math.cos(a*.8+boil*1.1)*.55};};
+ for(let k=0;k<end;k+=9){const stop=Math.min(k+9,end),tip=clamp((end-k)/15),pressure=.68+.32*Math.sin(k*.027+s.phase);ctx.lineWidth=s.width*pressure*(.35+.65*tip);ctx.globalAlpha=s.alpha*disappear*(.8+.2*Math.sin(k*.11+s.phase));ctx.beginPath();let p=point(k);ctx.moveTo(p.x,p.y);
+ for(let j=k+1;j<=Math.floor(stop);j++){p=point(j);ctx.lineTo(p.x,p.y);}if(stop%1){const p1=point(Math.floor(stop)),p2=point(Math.ceil(stop));ctx.lineTo(mix(p1.x,p2.x,stop%1),mix(p1.y,p2.y,stop%1));}ctx.stroke();}
+ }
+ ctx.globalAlpha=1;seek.value=t;document.querySelector('#time').textContent=String(Math.floor(t)).padStart(2,'0');
+}
+function sync(){play.textContent=playing?'Pause':'Play';}
+play.onclick=()=>{playing=!playing;sync();};document.querySelector('#replay').onclick=()=>{elapsed=0;playing=true;sync();draw(0);};seek.oninput=()=>{elapsed=Number(seek.value);playing=false;sync();draw(elapsed);};
+window.renderAt=t=>{elapsed=clamp(t/24)*24;playing=false;sync();draw(elapsed);};
+function frame(now){if(playing)elapsed=(elapsed+Math.min((now-last)/1000,.05))%24;last=now;if(playing)draw(elapsed);requestAnimationFrame(frame);}sync();draw(elapsed);window.__ready=true;requestAnimationFrame(frame);
+</script></body></html>

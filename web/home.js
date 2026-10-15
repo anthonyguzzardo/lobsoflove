@@ -559,10 +559,84 @@ function paint() {
   $('h2').textContent = p ? p.head[1] : 'TAP A TILE.';
   $('blurb').textContent = p ? (i === 3 && st.record ? st.record : i === 6 && st.gear ? st.gear : p.blurb) : 'your fighter hops there. swipe up works too.';
   if (p) setKey(`0${i}`, p.label, 'SLIDE TO ENTER'); else setKey('', '', '');
-  const pct = Math.round((i / PLACES.length) * 100);
-  $('fill').style.width = `${pct}%`;
-  $('pct').textContent = `${String(i).padStart(2, '0')} / 0${PLACES.length}`;
 }
+
+// The top of the screen: the LOL mark (the O is a ball lobbed over a little net) and one split-flap scoreboard that
+// clacks through your season, the tour (LIVE / FINAL / NEXT) and your pro, after docs/mo-design/vids/type-writer.mov's
+// little machines. Each frame holds 4.2 s; a changing letter shuffles through 2 to 4 random flaps at 55 ms a flap,
+// staggered 22 ms left to right, so a new line rolls in like a stadium board.
+const FLAP_CHARS = 'ABCDEFGHIJKLMNOPRSTUVWXYZ0123456789';
+const board = { key: '', frames: [], at: 0, timer: 0, cells: [], n: 0 };
+function boardFit() {
+  const box = $('flaps');
+  if (!box) return;
+  const n = Math.max(8, Math.floor(box.clientWidth / 17)); // 16 px flaps with a 1 px gap
+  if (n === board.n) return;
+  board.n = n;
+  box.textContent = '';
+  board.cells = Array.from({ length: n }, () => { const c = document.createElement('i'); c.textContent = ' '; box.append(c); return c; });
+  if (board.frames.length) { board.frames = chunkFrames(board.items); show(board.at % board.frames.length); }
+}
+function chunk(text, n) {
+  // Split on words into lines that fit the board; a word longer than the board is cut.
+  const out = []; let line = '';
+  for (const w of text.toUpperCase().split(/\s+/).filter(Boolean)) {
+    const word = w.slice(0, n);
+    if (!line) line = word;
+    else if (line.length + 1 + word.length <= n) line += ` ${word}`;
+    else { out.push(line); line = word; }
+  }
+  if (line) out.push(line);
+  return out.length ? out : [''];
+}
+function chunkFrames(items) {
+  return items.flatMap((it) => chunk(it.text, board.n).map((line) => ({ tag: it.tag, cls: it.cls, line })));
+}
+function flapTo(cell, target, delay) {
+  if (cell.textContent === target) return;
+  const steps = 2 + Math.floor(Math.random() * 3);
+  for (let k = 0; k <= steps; k += 1) {
+    setTimeout(() => {
+      cell.classList.remove('f');
+      void cell.offsetWidth; // restart the flap
+      cell.classList.add('f');
+      setTimeout(() => { cell.textContent = k === steps ? target : FLAP_CHARS[Math.floor(Math.random() * FLAP_CHARS.length)]; }, 30);
+    }, delay + k * 55);
+  }
+}
+function show(i) {
+  const f = board.frames[i];
+  if (!f) return;
+  board.at = i;
+  const tag = $('btag');
+  if (tag.textContent !== f.tag) { tag.className = `f ${f.cls}`; tag.textContent = f.tag; }
+  const line = f.line.padEnd(board.n, ' ');
+  board.cells.forEach((c, k) => flapTo(c, line[k] === ' ' ? ' ' : line[k], k * 22));
+  post({ type: 'flap' }); // the board clacks
+}
+function cycle() {
+  clearTimeout(board.timer);
+  if (board.frames.length > 1) board.timer = setTimeout(() => { show((board.at + 1) % board.frames.length); cycle(); }, 4200);
+}
+function setTop(d) {
+  const items = [];
+  if (d.season) items.push({ tag: 'YOU', cls: 'you', text: d.season });
+  if (d.tour) items.push({ tag: d.tour.tab, cls: d.tour.live ? 'live' : 'tour', text: d.tour.text });
+  if (d.pro && d.pro.text) items.push({ tag: 'PRO', cls: d.pro.won ? 'won' : 'pro', text: d.pro.text });
+  $('board').classList.toggle('live', !!(d.tour && d.tour.live));
+  const key = JSON.stringify(items);
+  if (key !== board.key) {
+    board.key = key;
+    board.items = items;
+    boardFit();
+    board.frames = chunkFrames(items);
+    show(Math.min(board.at, board.frames.length - 1));
+    cycle();
+  }
+  // Your pro won: the jelly is happy about it, once per result.
+  if (d.pro && d.pro.won && d.pro.matchId && st.cheered !== d.pro.matchId) { st.cheered = d.pro.matchId; hero.mood.happy = 1.6; hero.kick(0, 5, 0); }
+}
+window.addEventListener('resize', boardFit);
 function goTo(i) {
   i = Math.max(0, Math.min(PLACES.length, i));
   if (i === st.target) return;
@@ -603,6 +677,7 @@ window.setHome = (d) => {
   mirrorDisc.material.color.set(d.color);
   st.record = d.record; // shown on the standings key, where a record means something
   st.gear = d.gear; // what is worn out, shown on the gear key
+  setTop(d);
   paint();
 };
 paint();

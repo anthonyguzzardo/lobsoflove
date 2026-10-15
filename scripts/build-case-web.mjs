@@ -26,16 +26,10 @@ body{background:var(--paper);color:var(--ink);font-family:var(--mono)}
 #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(120% 85% at 50% 42%,rgba(255,255,255,.22) 0%,rgba(255,255,255,0) 45%,rgba(60,48,30,.2) 100%)}
 #c{position:fixed;inset:0}
 /* Paper fades in behind the header and the headline so text never fights the scene. */
-#fade{position:fixed;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(239,236,229,.96) 0%,rgba(239,236,229,.9) 11%,rgba(239,236,229,0) 24%,rgba(239,236,229,0) 60%,rgba(239,236,229,.9) 74%,rgba(239,236,229,.97) 100%)}
+#fade{position:fixed;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(239,236,229,.97) 0%,rgba(239,236,229,.95) 17%,rgba(239,236,229,0) 31%,rgba(239,236,229,0) 60%,rgba(239,236,229,.9) 74%,rgba(239,236,229,.97) 100%)}
 #grain{position:fixed;inset:0;pointer-events:none;opacity:.16;mix-blend-mode:multiply;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>")}
 #ui{position:fixed;inset:0;pointer-events:none;padding:calc(env(safe-area-inset-top) + 10px) 16px calc(env(safe-area-inset-bottom) + 10px);display:flex;flex-direction:column}
 #ui>*{pointer-events:none}
-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-h1{margin:0;font-size:17px;letter-spacing:.06em;font-weight:800}h1 b{color:var(--clay)}
-#sub{margin:3px 0 0;font-size:10.5px;opacity:.55;letter-spacing:.04em}
-.meter{text-align:right;min-width:112px}.meter span{font-size:8.5px;letter-spacing:.14em;opacity:.55}
-.bar{height:5px;background:rgba(22,24,29,.14);margin:5px 0 3px;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--clay);transition:width .32s cubic-bezier(.16,1,.3,1)}
-#pct{font-size:19px;font-weight:800}
 /* The dock: little floating platforms, one per place. A real ball hops between them; the one it sits on is the active one. */
 #dock{position:relative;display:flex;justify-content:space-between;align-items:flex-end;height:86px;margin:2px 0 0;pointer-events:auto;padding:0 4px}
 #dock .slot{all:unset;position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
@@ -94,32 +88,41 @@ background:var(--accent,var(--clay));box-shadow:0 10px 20px rgba(22,24,29,.2),0 
 @keyframes puff{0%{transform:translate(0,0) scale(.4);opacity:.9}100%{transform:translate(var(--dx),var(--dy)) scale(var(--s));opacity:0}}
 #enter.hit{animation:thud .3s cubic-bezier(.34,1.56,.64,1)}
 @keyframes thud{0%{transform:translateX(0)}35%{transform:translateX(7px)}100%{transform:none}}
-#strip{background:var(--ink);color:var(--paper);border-radius:10px;padding:10px;display:flex;gap:12px;align-items:center;overflow:hidden}
-#deck{position:relative;width:74px;height:54px;flex:none}
-#vinyl{position:absolute;left:26px;top:3px;width:48px;height:48px;border-radius:50%;background:repeating-radial-gradient(circle,#0b0c0f 0 2px,#1d1f25 2px 3px);animation:spin 3.2s linear infinite}
-#vinyl:after{content:"";position:absolute;inset:17px;border-radius:50%;background:var(--clay)}
-#sleeve{position:absolute;left:0;top:0;width:54px;height:54px;border-radius:3px;background:#d7f205;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:2px 0 6px rgba(0,0,0,.35)}
-#sleeve:before,#sleeve:after{content:"";width:6px;height:11px;background:var(--ink);border-radius:1px}
+`;
+// Home's top row only (courts shares homeCss but has no top row).
+const homeTopCss = `
+/* The paper fade only needs to cover one row. */
+#fade{background:linear-gradient(180deg,rgba(239,236,229,.97) 0%,rgba(239,236,229,.88) 9%,rgba(239,236,229,0) 18%,rgba(239,236,229,0) 60%,rgba(239,236,229,.9) 74%,rgba(239,236,229,.97) 100%)}
+#top{display:flex;align-items:center;height:50px}
+/* The board: a stadium split-flap. Ink housing; the mark (L, a ball for the O, a backwards L) is bolted on its left end; a lamp that
+   pulses red while a match is live; a colored tag flap; letter flaps. */
+#board{flex:1;min-width:0;display:flex;align-items:center;gap:6px;height:46px;padding:0 8px 0 0;background:var(--ink);border-radius:6px;box-shadow:0 4px 0 #000,inset 0 1px 0 rgba(255,255,255,.08)}
+#mark{flex:none;height:46px;width:84px;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(255,253,240,.18);margin-right:2px}
+#mark svg{width:70px;height:28px;display:block}
+#mark .ball{transform-box:fill-box;transform-origin:center}
+#board.live #mark .ball{animation:spin 1.3s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-#meta{flex:1;min-width:0}
-#who{font-size:10px;letter-spacing:.14em;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#rec{font-size:17px;font-weight:800;letter-spacing:.04em}
-#wave{display:flex;align-items:center;gap:2px;height:16px;margin-top:3px}
-#wave i{width:2px;background:var(--paper);border-radius:1px;animation:beat 1.1s ease-in-out infinite}
-@keyframes beat{0%,100%{height:3px}50%{height:15px}}
-#ticker{display:flex;margin-top:8px;height:26px;background:#f4f1ea;color:var(--ink);align-items:stretch;overflow:hidden}
-#tab{background:var(--clay);color:#fff;font:800 12px var(--mono);display:flex;align-items:center;padding:0 8px}
-#banner{font:400 17px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.03em;display:flex;align-items:center;padding:0 9px;white-space:nowrap;text-transform:uppercase}
-#right{flex:1;min-width:0}
+#lamp{width:8px;height:8px;flex:none;border-radius:50%;background:#3a3d45;box-shadow:inset 0 0 0 1px rgba(0,0,0,.4)}
+#board.live #lamp{background:#ff4d3a;box-shadow:0 0 6px #ff4d3a,0 0 12px rgba(255,77,58,.6);animation:lamp 1.1s ease-in-out infinite}
+@keyframes lamp{50%{opacity:.35;box-shadow:none}}
+#btag{flex:none;font:800 12px var(--mono);letter-spacing:.1em;padding:7px 7px 6px;border-radius:2px;background:#3a3d45;color:#fffdf0;position:relative}
+#btag.you{background:#d7f205;color:var(--ink)}#btag.live{background:var(--clay);color:#fff}#btag.tour{background:#fffdf0;color:var(--ink)}
+#btag.pro{background:#35d6ff;color:var(--ink)}#btag.won{background:#2fe08a;color:var(--ink)}
+#flaps{flex:1;min-width:0;display:flex;gap:1px;overflow:hidden}
+#flaps i{position:relative;flex:none;width:16px;height:30px;border-radius:2px;background:linear-gradient(180deg,#2b2e36 0 50%,#23262d 50% 100%);color:#fffdf0;font:800 17px/30px var(--mono);font-style:normal;text-align:center;transform-origin:50% 50%}
+#flaps i:after,#btag:after{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(0,0,0,.55)}
+#flaps i.f,#btag.f{animation:flap 70ms ease-in-out}
+@keyframes flap{50%{transform:scaleY(.08);filter:brightness(.55)}}
+@media(prefers-reduced-motion:reduce){#board.live #lamp,#board.live #mark .ball{animation:none}}
 `;
 const homeBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
-<header><div><h1>LOBSOFLOVE <b>S01</b></h1><p id="sub">tap a platform or a tile.</p></div><div class="meter"><span>PATH</span><div class="bar"><i id="fill"></i></div><div id="pct">00 / 04</div></div></header>
+<div id="top"><div id="board" aria-live="polite"><div id="mark" role="img" aria-label="LobsOfLove"><svg viewBox="0 0 66 26"><path d="M5 2v21h14" fill="none" stroke="#fffdf0" stroke-width="5.5" stroke-linejoin="miter"/><g class="ball"><circle cx="33" cy="13" r="10.2" fill="#d7f205" stroke="#fffdf0" stroke-width="1.6"/><path d="M26.2 6c4.8 3.6 4.8 10.4 0 14M39.8 6c-4.8 3.6-4.8 10.4 0 14" fill="none" stroke="#16181d" stroke-width="2.1"/></g><path d="M61 2v21H47" fill="none" stroke="#fffdf0" stroke-width="5.5" stroke-linejoin="miter"/></svg></div><i id="lamp"></i><b id="btag"></b><div id="flaps"></div></div></div>
 <div class="grow"></div>
 <div id="head"><div id="h1"></div><div id="h2"></div><div id="blurb"></div></div>
 <div id="enter" role="slider" aria-label="Slide the ball to go in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>
 <div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div>
 </div>`;
-emit('home-html.ts', 'HOME_HTML', page({ css: homeCss, body: homeBody, js: bundle('web/home.js') }));
+emit('home-html.ts', 'HOME_HTML', page({ css: homeCss + homeTopCss, body: homeBody, js: bundle('web/home.js') }));
 
 // Courts: the stage islands. Shares the home page's paper, ink and mono type; the accent follows the stage you are on.
 const courtsCss = homeCss + `

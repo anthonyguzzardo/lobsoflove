@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lobs of Love — line studies</title><style>
+*{box-sizing:border-box}body{margin:0;background:#121827;color:#f2ecdf;font:15px system-ui,sans-serif}main{max-width:1080px;margin:auto;padding:36px 24px}header{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:24px}.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:.22em;color:#b1a9ba}h1{font-family:Georgia,serif;font-size:clamp(32px,5vw,56px);font-weight:400;letter-spacing:-.04em;margin:8px 0}header p{max-width:290px;color:#a8adc0;line-height:1.6}section{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:30px;align-items:center}.paper{background:#171d30;border:1px solid #30364b;border-radius:18px;overflow:hidden;position:relative}canvas{display:block;width:100%;aspect-ratio:1;touch-action:none}.badge{position:absolute;top:20px;left:20px;pointer-events:none;font-size:10px;letter-spacing:.18em;color:#bbb5c7;text-transform:uppercase}aside{display:grid;gap:12px}button{font:inherit;cursor:pointer;background:#1e2539;color:inherit;border:1px solid #384059;border-radius:10px;min-height:44px;padding:13px 16px;text-align:left}button[aria-pressed=true]{border-color:#e5b47d;background:#2b2b3d}.choice b{display:block;font-weight:500;margin:4px 0 8px}.choice small{display:block;color:#adb2c4;line-height:1.5}.num{font:11px ui-monospace,monospace;color:#dda96f}#description{color:#babdcd;line-height:1.65;font-size:13px;margin:6px 0}.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px}.controls button{text-align:center}#play{background:#e5b47d;color:#171d30;border:0}input{accent-color:#e5b47d;flex:1;min-width:140px;height:32px}output{font:11px ui-monospace,monospace;color:#b9becd}.note{color:#8f98ae;font-size:12px;line-height:1.6;margin-top:20px}button:focus-visible,input:focus-visible{outline:3px solid #b5bdf2;outline-offset:3px}@media(max-width:720px){main{padding:24px 16px}header{display:block;margin-bottom:18px}header p{max-width:none;font-size:13px}section{grid-template-columns:1fr;gap:18px}aside{grid-template-columns:repeat(2,1fr);gap:7px}.choice{padding:10px}.choice small{display:none}.choice b{font-size:12px;line-height:1.35}#description{grid-column:1/-1}h1{margin-bottom:6px}.note{margin-top:12px}}
+</style></head><body><main><header><div><div class="eyebrow">Lobs of Love / motion sketches</div><h1>A little less solid.</h1></div><p>Fine ink, restless edges, and color that follows the line. Four directions to play with.</p></header><section><div><div class="paper"><div class="badge" id="badge">01 / Court from a line</div><canvas id="art" width="1100" height="1100" role="img" aria-label="An animated tennis illustration drawn with fine trembling lines"></canvas></div><div class="controls"><button id="play">Pause</button><button id="replay">Replay</button><input id="time" type="range" min="0" max="12" step=".01" value="0" aria-label="Animation time"><output id="clock">0.0 / 12s</output></div></div><aside><button class="choice" data-mode="0" aria-pressed="true"><span class="num">01</span><b>Court from a line</b><small>Hairline geometry. A net woven strand by strand.</small></button><button class="choice" data-mode="1" aria-pressed="false"><span class="num">02</span><b>Living threads</b><small>Patterned color drawn around the familiar machine.</small></button><button class="choice" data-mode="2" aria-pressed="false"><span class="num">03</span><b>Sketch into pigment</b><small>A fragile ink drawing becomes the painted object.</small></button><button class="choice" data-mode="3" aria-pressed="false"><span class="num">04</span><b>Written in color</b><small>Fine patterned handwriting on warm paper.</small></button><p id="description"></p></aside></section><p class="note">Exploratory studies. Drag on the artwork to add your own fine strokes. The app’s current icon and loading screen are unchanged.</p></main><script>
+const cv=document.getElementById('art'),g=cv.getContext('2d'),timeInput=document.getElementById('time'),play=document.getElementById('play');
+const machine=new Image(),halo=new Image();machine.src='../../assets/images/lol-splash/tennis-world-painted.png';halo.src='../../assets/images/lol-splash/chalk-halo.png';
+const palette=['#f07467','#83a9f3','#e7b578','#c3a3e4','#83bca4'];
+const notes=['A single line lays out the court; fine strands build the net. A few repeated drawings make the ink feel delicate and alive.','The reference video’s patterned strokes, made lighter and thinner. They draw themselves behind the machine, then quietly tremble in place.','The machine first exists as a fine-line study. Pigment softly develops inside it, leaving a faint tracing around the edges.','From example-canvas-writing: a different color and pattern for each gesture, redrawn as delicate ink on warm paper.'];
+const titles=['Court from a line','Living threads','Sketch into pigment','Written in color'];
+let mode=0,t=0,playing=!matchMedia('(prefers-reduced-motion: reduce)').matches,last=0,raf=0,userStrokes=[],live=null;
+const clamp=x=>Math.max(0,Math.min(1,x)),ease=x=>{x=clamp(x);return x*x*(3-2*x)};
+function points(fn,n=140){return Array.from({length:n+1},(_,i)=>fn(i/n))}
+function line(a,b,n=50){return points(u=>[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u],n)}
+function path(pts,progress=1,color='#ddd4c8',width=1,seed=0,alpha=1,boil=true){if(progress<=0||pts.length<2)return;const end=Math.max(2,Math.ceil(pts.length*clamp(progress))),phase=Math.floor(t*5.5);g.save();g.globalAlpha=alpha;g.lineWidth=width;g.lineCap='round';g.lineJoin='round';g.strokeStyle=color;g.beginPath();for(let i=0;i<end;i++){let [x,y]=pts[i];if(boil){x+=Math.sin(i*.29+seed*4+phase*1.1)*.45;y+=Math.cos(i*.21+seed+phase*.9)*.5}if(i===0)g.moveTo(x,y);else g.lineTo(x,y)}g.stroke();g.restore()}
+const A=[115,295],B=[315,204],C=[456,332],D=[244,442];
+const quad=[...line(A,B),...line(B,C),...line(C,D),...line(D,A)];
+const lerp=(a,b,u)=>[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u];
+function court(){
+ const alpha=1-ease((t-10.4)/1.6);g.save();g.globalAlpha=alpha;
+ const wash=ease((t-3.8)/2)*.13;g.fillStyle='rgba(131,188,164,'+wash+')';g.beginPath();[A,B,C,D].forEach((p,i)=>i?g.lineTo(...p):g.moveTo(...p));g.closePath();g.fill();
+ path(quad,ease((t-.4)/2.8),'#dad5ce',1.05,1);
+ const lines=[[lerp(A,D,.1),lerp(B,C,.1)],[lerp(A,D,.9),lerp(B,C,.9)],[lerp(A,B,.28),lerp(D,C,.28)],[lerp(A,B,.72),lerp(D,C,.72)],[lerp(lerp(A,B,.28),lerp(D,C,.28),.5),lerp(lerp(A,B,.72),lerp(D,C,.72),.5)]];
+ lines.forEach((p,i)=>path(line(...p),ease((t-1.6-i*.28)/1.1),i===4?'#e7b578':'#acaec7',.8,i));
+ const near=lerp(A,D,.5),far=lerp(B,C,.5);const nt=[near[0],near[1]-38],ft=[far[0],far[1]-38];
+ path(line(near,nt),ease((t-3.7)/.5),'#e7b578',1.5);path(line(far,ft),ease((t-3.9)/.5),'#e7b578',1.5);
+ path(line(nt,ft),ease((t-4.2)/.7),'#eee3d1',1.2);
+ for(let i=0;i<=24;i++)path(line(lerp(nt,ft,i/24),lerp(near,far,i/24)),ease((t-4.4-i*.045)/.45),'#abb8cf',.45,i);
+ for(let i=1;i<5;i++)path(line(lerp(nt,near,i/5),lerp(ft,far,i/5)),ease((t-4.7-i*.12)/.7),'#abb8cf',.45,i);
+ const arc=points(u=>[175+200*u,265-100*Math.sin(u*Math.PI)-u*6]);path(arc,ease((t-6)/1.7),'#e7b578',.85,4,.65);
+ if(t>6){const p=arc[Math.floor(clamp((t-6)/1.7)*(arc.length-1))];g.fillStyle='#e7b578';g.beginPath();g.arc(...p,4,0,Math.PI*2);g.fill()}
+ g.restore();
+}
+const threads=Array.from({length:7},(_,i)=>points(u=>{const angle=-2.7+u*5.8;const r=177+18*Math.sin(u*8+i*1.8)+i*4;return [275+Math.cos(angle)*r+Math.sin(u*17+i)*13,280+Math.sin(angle)*r*.86+Math.cos(u*13+i)*18]},220));
+function drawMachine(alpha=1){if(!machine.complete||!machine.naturalWidth)return;g.save();g.globalAlpha*=alpha;g.drawImage(machine,85,80,380,380);g.restore()}
+function ribbons(){
+ for(let j=0;j<threads.length;j++){const p=threads[j],k=ease((t-.3-j*.2)/3.8),fade=1-ease((t-10.5)/1.5);path(p,k,palette[j%5],j%3===0?2.4:1.1,j,.7*fade);
+ for(let i=0;i<Math.floor(p.length*k);i+=9){const [x,y]=p[i];g.save();g.globalAlpha=.65*fade;g.fillStyle=j%2?'#171d30':'#f3e9da';g.beginPath();g.arc(x,y,j%2?.55:.65,0,Math.PI*2);g.fill();g.restore()}}
+ drawMachine(.95);
+}
+const outlines=[[[100,335],[256,202],[461,277],[304,458],[100,335]],[[100,335],[103,371],[300,486],[304,458]],[[304,458],[461,277],[460,316],[300,486]],[[245,206],[208,77],[220,62],[443,99],[461,277]],[[229,81],[431,114],[448,242],[261,193],[229,81]],[[141,318],[267,218],[420,279],[293,409],[141,318]],[[194,278],[345,351]],[[194,278],[194,262],[345,334],[345,351]],[[132,345],[150,352],[138,366],[120,358],[132,345]],[[158,360],[178,368],[164,382],[145,373],[158,360]]].map(poly=>poly.flatMap((p,i)=>i?line(poly[i-1],p,25):[]));
+function develops(){const paint=ease((t-5)/3.5)*(1-ease((t-10.4)/1.6));if(halo.complete&&halo.naturalWidth){g.save();g.globalAlpha=paint*.3;g.drawImage(halo,40,40,470,470);g.restore()}
+ outlines.forEach((p,i)=>path(p,ease((t-.3-i*.2)/2),'#d3c6bd',.8,i,(1-ease((t-4.6)/1.3))*(1-ease((t-10.8)/1.2))));
+ if(paint>0){g.save();g.globalAlpha=paint;drawMachine(1);g.restore()}
+}
+
+function bez(a,b,c,d,n=80){return points(u=>{const v=1-u;return [v*v*v*a[0]+3*v*v*u*b[0]+3*v*u*u*c[0]+u*u*u*d[0],v*v*v*a[1]+3*v*v*u*b[1]+3*v*u*u*c[1]+u*u*u*d[1]]},n)}
+const letters=[
+ [...bez([115,315],[158,271],[178,159],[151,177]),...bez([151,177],[131,187],[114,298],[137,310]),...bez([137,310],[150,324],[171,311],[181,296])],
+ [...bez([230,266],[192,226],[164,302],[195,313]),...bez([195,313],[230,327],[247,248],[218,258]),...bez([218,258],[215,278],[245,280],[259,267])],
+ [...bez([259,267],[253,296],[263,329],[278,308]),...bez([278,308],[296,287],[301,254],[293,261]),...bez([293,261],[282,284],[307,283],[322,272])],
+ [...bez([322,291],[365,280],[359,245],[335,264]),...bez([335,264],[302,290],[324,333],[369,305]),...bez([369,305],[387,296],[402,286],[416,290])]
+];
+function writing(){const colors=['#db5145','#326cc9','#d9993c','#9459b4'];const fade=1-ease((t-10.7)/1.3);letters.forEach((p,j)=>{const k=ease((t-.5-j*1.25)/1.6);path(p,k,colors[j],3,j,fade);for(let i=4;i<Math.floor(p.length*k);i+=10){const [x,y]=p[i];g.save();g.globalAlpha=fade*.9;g.fillStyle=j===1?'#1f315d':'#f6eddf';g.beginPath();g.arc(x,y,.65,0,Math.PI*2);g.fill();g.restore()}});const underline=bez([128,350],[207,343],[331,359],[414,342]);path(underline,ease((t-6.2)/1.3),'#4e9874',1.15,4,fade*.65);}
+
+let grain=document.createElement('canvas');grain.width=grain.height=200;const gg=grain.getContext('2d');let rand=37;for(let i=0;i<4000;i++){rand=(rand*1664525+1013904223)>>>0;const x=(rand>>>16)%200;rand=(rand*1664525+1013904223)>>>0;gg.fillStyle=i%2?'rgba(255,255,255,.035)':'rgba(0,0,0,.05)';gg.fillRect(x,(rand>>>16)%200,1,1)}
+function render(){g.setTransform(2,0,0,2,0,0);g.fillStyle=mode===3?'#efece5':'#171d30';g.fillRect(0,0,550,550);g.fillStyle=g.createPattern(grain,'repeat');g.fillRect(0,0,550,550);[court,ribbons,develops,writing][mode]();for(let i=0;i<userStrokes.length;i++)path(userStrokes[i],1,palette[i%5],1.2,i,.8);timeInput.value=t;document.getElementById('clock').textContent=t.toFixed(1)+' / 12s'}
+function loop(now){if(playing&&last)t=(t+Math.min((now-last)/1000,.06))%12;last=now;render();if(playing)raf=requestAnimationFrame(loop)}
+function setPlaying(v){playing=v;play.textContent=v?'Pause':'Play';cancelAnimationFrame(raf);last=0;render();if(v)raf=requestAnimationFrame(loop)}
+play.onclick=()=>setPlaying(!playing);document.getElementById('replay').onclick=()=>{t=0;setPlaying(true)};timeInput.oninput=()=>{setPlaying(false);t=+timeInput.value;render()};
+function select(n){mode=n;t=playing?0:8;userStrokes=[];document.querySelectorAll('.choice').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.mode===n)));document.getElementById('badge').style.color=n===3?'#66616a':'#bbb5c7';document.getElementById('description').textContent=notes[n];document.getElementById('badge').textContent='0'+(n+1)+' / '+titles[n];render()}
+document.querySelectorAll('.choice').forEach(b=>b.onclick=()=>select(+b.dataset.mode));
+function pos(e){const r=cv.getBoundingClientRect();return [(e.clientX-r.left)/r.width*550,(e.clientY-r.top)/r.height*550]}
+cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);live=[pos(e)];userStrokes.push(live)};cv.onpointermove=e=>{if(live){live.push(pos(e));render()}};cv.onpointerup=cv.onpointercancel=()=>{live=null};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)setPlaying(false)});matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',e=>{if(e.matches){t=8;setPlaying(false)}});
+window.renderAt=(seconds,study=mode)=>{setPlaying(false);select(study);t=seconds;render()};
+Promise.all([machine,halo].map(im=>im.decode())).then(()=>{window.__ready=true;select(0);if(!playing)t=8;setPlaying(playing)}).catch(()=>{document.getElementById('description').textContent='Could not load the artwork. Reopen the preview from its saved folder.'});
+</script></body></html>

@@ -10,8 +10,9 @@ import { dueList, useCloset } from '@/lib/gear';
 import { computeSeason, scoreLine, useMatches, winnerOf } from '@/lib/matches';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
+import { featured, findPro, proLine, proMatch, tourLine, useTour } from '@/lib/tour';
 
-type Msg = { type: 'ready' } | { type: 'press' } | { type: 'line' } | { type: 'slid' } | { type: 'hop' } | { type: 'land' } | { type: 'go'; to: keyof typeof ROUTES } | { type: 'error'; message: string; at?: string };
+type Msg = { type: 'ready' } | { type: 'press' } | { type: 'line' } | { type: 'slid' } | { type: 'hop' } | { type: 'land' } | { type: 'flap' } | { type: 'go'; to: keyof typeof ROUTES } | { type: 'error'; message: string; at?: string };
 
 const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter' | 'write' | 'gear', Href> = { play: '/case', courts: '/courts', standings: '/standings', fighter: '/fighter', write: '/ink', gear: '/gear' };
 
@@ -21,6 +22,7 @@ export default function Home() {
   const roster = useRoster();
   const closet = useCloset();
   const matches = useMatches();
+  const tour = useTour();
   const web = useRef<WebView>(null);
   const ready = useRef(false);
 
@@ -31,7 +33,14 @@ export default function Home() {
   const last = [...matches].sort((a, b) => b.playedAt - a.playedAt)[0];
   const name = (id: string) => roster.find((f) => f.id === id)?.name ?? '?';
   const lastWinner = last ? winnerOf(last) : null;
+  const season = seasonLine(rows, you.id, name, matches.length);
+  const pro = findPro(tour, you.favoritePro);
+  const proM = pro ? proMatch(tour, pro.name) : null;
+  const line = tourLine(featured(tour, proM));
   const data = JSON.stringify({
+    season,
+    tour: line,
+    pro: proLine(tour, you.favoritePro),
     name: you.name,
     color: you.color,
     cast: you.cast,
@@ -75,6 +84,8 @@ export default function Home() {
           } else if (msg.type === 'hop') {
             void Haptics.selectionAsync();
             sfx('tick', 0.6);
+          } else if (msg.type === 'flap') {
+            sfx('tick', 0.3); // the board clacks over to the next line; no haptic, it runs every few seconds
           } else if (msg.type === 'land') {
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             sfx('slam', 0.35);
@@ -86,6 +97,26 @@ export default function Home() {
       />
     </View>
   );
+}
+
+const ordinal = (n: number) => `${n}${['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : Math.min(n % 10, 4) % 4]}`;
+const pts = (n: number) => `${n} point${n === 1 ? '' : 's'}`;
+
+/** One true sentence about the season: where you stand and who you are chasing. */
+function seasonLine(rows: ReturnType<typeof computeSeason>['rows'], youId: string, name: (id: string) => string, played: number): string {
+  const me = rows.findIndex((r) => r.id === youId);
+  const row = rows[me];
+  if (!played) return 'season 01. nobody has played yet. go first.';
+  if (!row || row.wins + row.losses === 0) return `season 01. ${played} match${played === 1 ? '' : 'es'} in. you have not played.`;
+  const rec = `${row.wins} and ${row.losses}`;
+  if (me === 0) {
+    const second = rows[1];
+    const gap = second ? row.points - second.points : 0;
+    return `1st of ${rows.length}. ${rec}. ${second ? (gap ? `${name(second.id)} is ${pts(gap)} behind.` : `tied with ${name(second.id)}.`) : ''}`.trim();
+  }
+  const leader = rows[0];
+  const gap = leader.points - row.points;
+  return `${ordinal(me + 1)} of ${rows.length}. ${rec}. ${gap ? `${pts(gap)} behind ${name(leader.id)}.` : `tied with ${name(leader.id)}.`}`;
 }
 
 const styles = StyleSheet.create({

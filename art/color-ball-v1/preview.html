@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Color in play — Lobs of Love</title>
+<style>
+:root{color-scheme:light;font-family:Helvetica,Arial,sans-serif;background:#eee9df;color:#343c3a}*{box-sizing:border-box}body{margin:0}main{min-height:100svh;display:flex;flex-direction:column;align-items:center;padding:28px 24px 22px}header,footer{width:min(100%,900px);display:flex;justify-content:space-between;align-items:center;gap:20px}header{font-size:10px;letter-spacing:2px;text-transform:uppercase}header span:last-child{opacity:.5}section{flex:1;display:flex;align-items:center;justify-content:center;width:100%;min-height:0}canvas{display:block;width:min(100%,78svh,900px);aspect-ratio:1}footer{font-size:11px;gap:26px}button{font:inherit;color:inherit;background:none;border:0;padding:12px 0;cursor:pointer;white-space:nowrap}button:hover{color:#ac4830}button:focus-visible,input:focus-visible{outline:1px solid #ac4830;outline-offset:5px}.controls{display:flex;align-items:center;gap:20px}input{width:clamp(80px,20vw,200px);height:2px;accent-color:#747e6c;cursor:pointer}.caption{font-family:Georgia,serif;font-size:17px;font-style:italic}.time{font-variant-numeric:tabular-nums;min-width:30px;opacity:.5}@media(max-width:600px){main{padding:24px 18px}header{font-size:9px;letter-spacing:1.5px}footer{flex-wrap:wrap;gap:10px}.controls{width:100%;justify-content:space-between}input{flex:1}.caption{font-size:16px}canvas{width:100%}}
+</style>
+</head>
+<body><main><header><span>Lobs of Love / Drawing studies</span><span>02 — Color in play</span></header><section><canvas aria-label="Thick patterned colored strokes curl around and draw a playful tennis ball."></canvas></section><footer><span class="caption">A little color. A little bounce.</span><div class="controls"><button id="play">Pause</button><button id="replay">Redraw</button><input id="seek" aria-label="Drawing progress" type="range" min="0" max="24" step="0.01" value="0"><span class="time" id="time">00</span></div></footer></main>
+<script>
+'use strict';
+const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),seek=document.querySelector('#seek'),play=document.querySelector('#play');
+const size=900,dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=size*dpr;canvas.height=size*dpr;ctx.scale(dpr,dpr);
+const mix=(a,b,t)=>a+(b-a)*t,clamp=x=>Math.max(0,Math.min(1,x)),ease=x=>{x=clamp(x);return x*x*(3-2*x);};
+const sample=(fn,n=220)=>Array.from({length:n+1},(_,i)=>fn(i/n));
+const colors=['#e8664f','#508cc3','#e9ac45','#a27ac5','#439779'];
+const curls=colors.map((color,i)=>{
+ const start=i*Math.PI*2/5-1.8;
+ return {color,pts:sample(u=>{const a=start+u*4.8,r=340-175*u+28*Math.sin(u*6+i)+12*Math.sin(u*17+i*.7);return [450+Math.cos(a)*r,445+Math.sin(a)*r*.88];}),delay:i*.45,width:16+(i%3)*3};
+});
+function stroke(pts,progress,color,width,pattern=0,alpha=1,t=0){
+ if(progress<=0)return;const end=Math.min(pts.length-1,progress*(pts.length-1));
+ const actual=[];for(let i=0;i<=Math.floor(end);i++){const p=pts[i];actual.push([p[0]+Math.sin(i*.14+Math.floor(t*7)*.8)*.55,p[1]+Math.cos(i*.12+Math.floor(t*7)*.7)*.55]);}
+ if(actual.length<2)return;ctx.save();ctx.globalAlpha=alpha;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();actual.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();
+ let distance=0;for(let i=1;i<actual.length;i++){const a=actual[i-1],b=actual[i],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);distance+=len;if(distance<14)continue;distance=0;ctx.save();ctx.translate(...b);ctx.rotate(Math.atan2(dy,dx));ctx.fillStyle=pattern===1?'#244f7c':'#fff2d7';ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=2.2;if(pattern===1){ctx.beginPath();ctx.moveTo(-2,-width*.29);ctx.lineTo(2,width*.29);ctx.stroke();}else if(pattern===2){ctx.fillRect(-2,-1,4,2);}else{ctx.beginPath();ctx.arc(0,0,width*.12,0,Math.PI*2);ctx.fill();}ctx.restore();}ctx.restore();
+}
+const circle=sample(u=>{const a=-Math.PI/2+u*Math.PI*2,r=169+Math.sin(a*3)*2+Math.sin(a*7)*1.4;return [450+Math.cos(a)*r,445+Math.sin(a)*r];},320);
+const seams=[-1,1].map(side=>sample(u=>{const y=-137+274*u;return [450+side*(99-66*Math.sin(Math.PI*u)),445+y];}));
+let elapsed=0,playing=!matchMedia('(prefers-reduced-motion: reduce)').matches,last=0;
+if(!playing)elapsed=19;
+function draw(t){
+ ctx.fillStyle='#eee9df';ctx.fillRect(0,0,size,size);
+ const fade=1-ease((t-22)/2),arrive=ease((t-5)/3);
+ ctx.save();ctx.globalAlpha=fade;
+ // Broad colored gestures arrive first, then leave room for the ball.
+ for(let i=0;i<curls.length;i++){const s=curls[i];stroke(s.pts,ease((t-s.delay)/3.7),s.color,s.width,i%3,1-arrive*.82,t);}
+ const bounce=t>10?Math.sin((t-10)*2.3)*Math.exp(-(t-10)*.45)*13:0;
+ ctx.save();ctx.translate(0,-bounce);
+ ctx.globalAlpha=fade*arrive;ctx.fillStyle='#c7d96c';ctx.beginPath();circle.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();ctx.fill();ctx.globalAlpha=fade;
+ stroke(circle,ease((t-4)/3.2),'#51966f',13,2,1,t);
+ for(let i=0;i<2;i++)stroke(seams[i],ease((t-7-i*.6)/1.7),'#fff5d9',12,2,1,t);
+ // Small handmade marks keep the filled ball lively without crowding it.
+ ctx.globalAlpha=arrive*fade*.4;ctx.fillStyle='#6c9c53';for(let i=0;i<15;i++){const x=450+Math.sin(i*14.3)*65,y=445+Math.cos(i*8.7)*110;ctx.beginPath();ctx.ellipse(x,y,2.5,1.2,-.5,0,Math.PI*2);ctx.fill();}
+ ctx.restore();ctx.restore();
+ seek.value=t;document.querySelector('#time').textContent=String(Math.floor(t)).padStart(2,'0');
+}
+function sync(){play.textContent=playing?'Pause':'Play';}
+play.onclick=()=>{playing=!playing;sync();};document.querySelector('#replay').onclick=()=>{elapsed=0;playing=true;sync();draw(0);};seek.oninput=()=>{elapsed=Number(seek.value);playing=false;sync();draw(elapsed);};
+window.renderAt=t=>{elapsed=clamp(t/24)*24;playing=false;sync();draw(elapsed);};
+function frame(now){if(playing)elapsed=(elapsed+Math.min((now-last)/1000,.05))%24;last=now;if(playing)draw(elapsed);requestAnimationFrame(frame);}sync();draw(elapsed);window.__ready=true;requestAnimationFrame(frame);
+</script></body></html>

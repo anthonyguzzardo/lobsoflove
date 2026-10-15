@@ -118,7 +118,7 @@ export default function MakeYourFighter() {
           <Pressable style={StyleSheet.absoluteFill} onPress={commit} accessibilityLabel="Done" />
           <View style={[styles.card, { marginBottom: 12 }]}>
             <Text style={styles.label}>{FIELDS[editing].label}</Text>
-            {editing !== 'name' ? <Text style={styles.hint}>Shows on your player card.</Text> : null}
+            {editing === 'favoritePro' ? <Text style={styles.hint}>Tracked at the top of home whenever they play.</Text> : editing !== 'name' ? <Text style={styles.hint}>Shows on your player card.</Text> : null}
             <TextInput
               value={text}
               onChangeText={setText}
