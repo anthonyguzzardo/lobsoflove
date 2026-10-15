@@ -437,13 +437,14 @@ function spin(wy, wz = 0) {
 // Each play style's tic while it waits: the way it would fidget at the net.
 let shoutAt = -10;
 // Shout bubble over the head, face overrides, and a short camera shake.
-const fx = { shoutUntil: -1, happyUntil: -1, winceUntil: -1, shakeUntil: -1, sipUntil: -1, freeUntil: -1, slyUntil: -1 };
+const fx = { shoutUntil: -1, happyUntil: -1, winceUntil: -1, shakeUntil: -1, sipUntil: -1, freeUntil: -1, slyUntil: -1, aimUntil: -1 };
 function showShout(text, dur) { $('shout').textContent = text; fx.shoutUntil = clock + dur; }
 const flex = new THREE.Vector3(1, 1, 1);
 const TICS = {
   wall: { every: 6, go() { startDrink(); } },
   moon: { every: 4.0, go() { fx.freeUntil = clock + 0.9; kick(0, 6.4, 0); spin(0, (Math.random() - 0.5) * 2); post({ type: 'boing' }); } },
-  bot: { every: 4.0, go() { fx.freeUntil = clock + 0.4; spin(Math.random() < 0.5 ? 4.5 : -4.5); post({ type: 'beep' }); } },
+  // Servebot snipes you. See SNIPE.
+  bot: { every: 6, go() { startSnipe(); } },
   goblin: { every: 4.0, go() { fx.freeUntil = clock + 0.45; const s = com().x > 0 ? -1 : 1; kick(2.4 * s, 3.2, 0); } },
   grunter: { every: 4.5, go() { [0, 60, 120, 180].forEach((ms, i) => setTimeout(() => kick(i % 2 ? -1.8 : 1.8, 0.6, 0), ms)); shoutAt = clock; showShout('HNNGH!', 0.7); post({ type: 'grunt' }); } },
   junk: { every: 4.0, go() { const m = Math.floor(Math.random() * NN); const p = new THREE.Vector3(B.x[m * 3], B.x[m * 3 + 1], B.x[m * 3 + 2]); poke(p, new THREE.Vector3(Math.random() - 0.5, -0.4, Math.random() - 0.5).normalize(), 2.6, 0.5); } },
@@ -560,15 +561,41 @@ function ballsStep(dt) {
     } else {
       // Returns are flat drives at the camera (no gravity), so they hold their spot on screen and swell toward you.
       if (!b.drive) b.v.y -= 9.8 * dt;
-      b.m.position.addScaledVector(b.v, dt);
-      b.m.rotation.y += dt * 18;
+      if (b.path) {
+        const P = b.path; P.t += dt;
+        // On screen it slides onto the dot early (ease out); in depth it closes late (cubic), so it swells as it lands.
+        const k = clamp(P.t / P.T, 0, 1); const e = 1 - (1 - k) ** 2; const d = k * k * k;
+        const prev = b.m.position.clone();
+        const ray = new THREE.Vector3(P.a[0] + (P.b[0] - P.a[0]) * e, P.a[1] + (P.b[1] - P.a[1]) * e, 0.5).unproject(camera).sub(camera.position).normalize();
+        b.m.position.copy(camera.position).addScaledVector(ray, P.d0 + (P.d1 - P.d0) * d);
+        if (dt > 0 && k < 1) b.v.copy(b.m.position).sub(prev).divideScalar(dt);
+        // Then it flattens on the glass for 90 ms before the crack.
+        if (k >= 1) {
+          if (!P.hitAt) { P.hitAt = clock; if (b.gone) { b.gone(); b.gone = null; } if (b.streak) { scene.remove(b.streak); b.streak = null; } }
+          b.m.scale.set(1.25, 1.25, 0.5); b.m.lookAt(camera.position);
+          if (clock - P.hitAt > 0.09) b.arrived = true;
+        }
+      } else b.m.position.addScaledVector(b.v, dt);
+      if (!(b.path && b.path.hitAt)) b.m.rotation.y += dt * 18;
       // Loose balls bounce on the paper, losing 45% each time, and roll off after three.
       if (!b.drive && b.m.position.y < BALL_R && b.v.y < 0) {
         b.m.position.y = BALL_R; b.v.y *= -0.55; b.v.x *= 0.85; b.v.z *= 0.85;
         b.bounces = (b.bounces || 0) + 1;
         if (b.bounces === 1) post({ type: 'ballbounce' });
       }
-      if (b.m.position.distanceTo(camera.position) < 1.2 || b.bounces > 3 || Math.abs(b.m.position.x) > 5) { scene.remove(b.m); balls.splice(i, 1); }
+      if (b.streak) {
+        // A cone of wind behind the ball, 0.9 long, pointed back where it came from.
+        const d = b.v.clone().normalize();
+        b.streak.position.copy(b.m.position);
+        b.streak.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
+        b.streak.scale.set(1, 0.9, 1);
+      }
+      const arrived = b.arrived;
+      if (arrived || (!b.path && b.m.position.distanceTo(camera.position) < 1.2) || b.bounces > 3 || Math.abs(b.m.position.x) > 5 + (b.streak ? 6 : 0) || b.m.position.length() > 20) {
+        scene.remove(b.m); if (b.streak) scene.remove(b.streak);
+        balls.splice(i, 1);
+        if (b.gone) b.gone();
+      }
     }
   }
   const allIn = drill.on && !drill.queue.length && drill.landed >= drill.total;
@@ -880,6 +907,154 @@ function lureStep(dt) {
   if (t > 3.3) { lure.t = -1; victim.visible = victimShadow.visible = false; flex.set(1, 1, 1); }
 }
 
+// SNIPE: Servebot's serve, aimed at you. t in s.
+// 0-1.0 it shuts its left eye, the right one glints like a scope, and a red laser dot wanders over your screen, ticking at
+// 0.3, 0.6 and 0.85, then locks (reticle shrinks from 3x onto it). 1.0-1.35 the toss: the ball rises 0.65 above its head.
+// 1.35-1.5 it coils (90% tall, exit curve). 1.5 it snaps up on the pop curve and fires a flat 26 units/s rocket that comes
+// out of the screen onto the dot: the glass cracks there (fades over 0.9 s), the camera shakes, "ACE." and the radar speed.
+// One time in four it is the other half of its line: the dot never settles, both serves sail wide, "FAULT." then
+// "DOUBLE.", and it glitches (four jolts, 50 ms apart) with both eyes wide.
+const scopeTex = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 30);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,90,70,0.8)'); gr.addColorStop(1, 'rgba(255,40,30,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  g.fillStyle = 'rgba(255,240,230,0.95)';
+  for (const [w, h] of [[120, 5], [5, 120]]) g.fillRect(64 - w / 2, 64 - h / 2, w, h); // the four-point star of a glinting lens
+  return new THREE.CanvasTexture(c);
+})();
+const glint = new THREE.Sprite(new THREE.SpriteMaterial({ map: scopeTex, transparent: true, depthTest: false, blending: THREE.AdditiveBlending }));
+glint.visible = false;
+glint.renderOrder = 5;
+face.add(glint);
+const dot = document.createElement('div');
+dot.style.cssText = 'position:fixed;left:0;top:0;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#ff2a1f;box-shadow:0 0 10px 4px rgba(255,42,31,.55);pointer-events:none;opacity:0;z-index:5';
+const reticle = document.createElement('div');
+reticle.style.cssText = 'position:fixed;left:0;top:0;width:56px;height:56px;margin:-28px 0 0 -28px;pointer-events:none;opacity:0;z-index:5';
+reticle.innerHTML = '<svg viewBox="0 0 56 56" width="56" height="56" fill="none" stroke="#ff2a1f" stroke-width="2.5"><circle cx="28" cy="28" r="20"/><path d="M28 2v14M28 40v14M2 28h14M40 28h14"/></svg>';
+const crack = document.createElement('div');
+crack.style.cssText = 'position:fixed;left:0;top:0;width:220px;height:220px;margin:-110px 0 0 -110px;pointer-events:none;opacity:0;z-index:5';
+{
+  // Eleven spokes with a kink halfway out, and a ring of short cross cracks: a ball-sized break in the glass.
+  let d = '';
+  for (let i = 0; i < 11; i += 1) {
+    const a = (i / 11) * Math.PI * 2 + (i % 3) * 0.17; const r1 = 30 + (i % 4) * 9; const r2 = 70 + (i % 5) * 9;
+    const kx = 110 + Math.cos(a + 0.12) * r1; const ky = 110 + Math.sin(a + 0.12) * r1;
+    d += `M${110 + Math.cos(a) * 9} ${110 + Math.sin(a) * 9}L${kx} ${ky}L${110 + Math.cos(a - 0.06) * r2} ${110 + Math.sin(a - 0.06) * r2}`;
+    const b = a + Math.PI / 11; const rr = 22 + (i % 2) * 14;
+    d += `M${110 + Math.cos(a) * rr} ${110 + Math.sin(a) * rr}L${110 + Math.cos(b) * rr} ${110 + Math.sin(b) * rr}`;
+  }
+  crack.innerHTML = `<svg viewBox="0 0 220 220" width="220" height="220" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="${d}" stroke="rgba(255,255,255,.95)" stroke-width="4"/><path d="${d}" stroke="#1e1810" stroke-width="1.6"/><circle cx="110" cy="110" r="10" fill="rgba(255,255,255,.7)" stroke="#1e1810" stroke-width="1.6"/></svg>`;
+}
+document.body.append(dot, reticle, crack);
+const streakGeo = new THREE.CylinderGeometry(BALL_R * 0.9, 0.0, 1, 12, 1, true).translate(0, -0.5, 0);
+const streakMat = new THREE.MeshBasicMaterial({ color: 0xfffdf0, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+const snipe = { t: -1, miss: false, serve: 0, fired: false, ticks: 0, ball: null, sx: 0, sy: 0, crackAt: -10 };
+function startSnipe() {
+  if (snipe.t >= 0) return;
+  Object.assign(snipe, { t: 0, miss: Math.random() < 0.25, serve: 0, fired: false, ticks: 0 });
+}
+function endSnipe() {
+  snipe.t = -1; glint.visible = false; dot.style.opacity = reticle.style.opacity = '0'; flex.set(1, 1, 1);
+  if (snipe.ball) { scene.remove(snipe.ball); snipe.ball = null; }
+}
+// Where the dot sits: wandering over the lower stage, settling on a spot near the middle (your chest) as it locks.
+function dotAt(t) {
+  const st = $('stage').getBoundingClientRect();
+  const k = snipe.miss ? 0 : inOut(clamp(t / 1.0, 0, 1));
+  const wx = Math.sin(t * 5.3) * 0.32 + Math.sin(t * 11.7) * 0.06; const wy = Math.sin(t * 4.1 + 1) * 0.2 + Math.cos(t * 9.2) * 0.05;
+  return [st.left + st.width * (0.5 + wx * (1 - k)), st.top + st.height * (0.72 + wy * (1 - k))];
+}
+function snipeStep(dt) {
+  if (crack.style.opacity !== '0') {
+    const a = clock - snipe.crackAt;
+    crack.style.opacity = a > 0.9 ? '0' : String(1 - Math.max(0, a - 0.5) / 0.4);
+  }
+  if (snipe.t < 0) return;
+  if (B.cast !== 'bot') { endSnipe(); return; }
+  snipe.t += dt;
+  const t = snipe.t;
+  fx.aimUntil = t < 1.6 ? clock + 0.05 : fx.aimUntil;
+  // Glint: pops in on the pop curve, pulses, gone the instant it fires.
+  glint.visible = t < 1.5;
+  const eye = eyes[1];
+  glint.position.set(eye.position.x, eye.position.y, 0.12);
+  glint.scale.setScalar(0.42 * POP(clamp(t / 0.25, 0, 1)) * (1 + 0.18 * Math.sin(t * 18)));
+  // Laser dot and reticle.
+  if (t < 1.55) {
+    const [x, y] = snipe.t < 1.0 || snipe.miss ? dotAt(t) : dotAt(1.0);
+    snipe.sx = x; snipe.sy = y;
+    dot.style.opacity = String(clamp(t / 0.15, 0, 1));
+    dot.style.transform = `translate(${x}px,${y}px)`;
+    const lock = clamp((t - 0.85) / 0.15, 0, 1);
+    reticle.style.opacity = snipe.miss ? '0' : String(lock);
+    reticle.style.transform = `translate(${x}px,${y}px) scale(${3 - 2 * ENTER(lock)})`;
+  } else dot.style.opacity = reticle.style.opacity = '0';
+  const TICKS = [0.3, 0.6, 0.85];
+  if (snipe.ticks < TICKS.length && t >= TICKS[snipe.ticks]) { snipe.ticks += 1; post({ type: 'aimtick' }); }
+  if (snipe.ticks === TICKS.length && t >= 1.0) { snipe.ticks += 1; if (!snipe.miss) post({ type: 'lock' }); }
+  // Toss and coil.
+  const c = com();
+  const top = c.y + (B.geo.boundingBox.max.y - B.geo.boundingBox.min.y) * 0.5;
+  if (t >= 1.0 && t < 1.5) {
+    if (!snipe.ball) { snipe.ball = new THREE.Mesh(ballGeo, ballMat); scene.add(snipe.ball); }
+    const k = clamp((t - 1.0) / 0.5, 0, 1);
+    snipe.ball.position.set(c.x + 0.25, top + 0.05 + 0.65 * Math.sin(k * Math.PI * 0.62) / Math.sin(Math.PI * 0.62), c.z + 0.1);
+    snipe.ball.rotation.x += dt * 4;
+  }
+  if (t >= 1.35 && t < 1.5) { const k = EXIT((t - 1.35) / 0.15); flex.set(1 + 0.06 * k, 1 - 0.1 * k, 1); }
+  else if (t >= 1.5 && t < 1.9) { const k = POP((t - 1.5) / 0.4); flex.set(1.06 - 0.06 * k, 0.9 + 0.1 * k, 1); }
+  else flex.set(1, 1, 1);
+  if (t >= 1.5 && !snipe.fired) {
+    snipe.fired = true;
+    const start = snipe.ball.position.clone();
+    scene.remove(snipe.ball); snipe.ball = null;
+    // Aim through the dot, 0.9 in front of the lens. A miss aims 1.6 screens off to one side instead.
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const nx = snipe.miss ? side * 1.6 : (snipe.sx / window.innerWidth) * 2 - 1;
+    const ny = snipe.miss ? -0.2 : -((snipe.sy / window.innerHeight) * 2 - 1);
+    const dir = new THREE.Vector3(nx, ny, 0.5).unproject(camera).sub(camera.position).normalize();
+    const target = camera.position.clone().addScaledVector(dir, 0.9);
+    const v = target.clone().sub(start).normalize().multiplyScalar(26);
+    const m = new THREE.Mesh(ballGeo, ballMat);
+    m.position.copy(start);
+    scene.add(m);
+    const streak = new THREE.Mesh(streakGeo, streakMat);
+    scene.add(streak);
+    // An ace flies a set path in screen space, from the toss straight onto the dot, closing from its own depth to 1.7 from
+    // the lens (0.4 s), so it reads as a rocket coming out of the screen, not a ball hanging in one corner.
+    const s0 = start.clone().project(camera);
+    const path = snipe.miss ? null : { t: 0, T: 0.4, a: [s0.x, s0.y], b: [nx, ny], d0: start.distanceTo(camera.position), d1: 1.7 };
+    balls.push({ m, v, state: 'out', drive: true, vi: -1, aim: -1, streak, path, gone: snipe.miss ? null : snipeHit });
+    kick(0, 2.4, 0);
+    fx.freeUntil = clock + 0.3;
+    post({ type: 'snipe' });
+  }
+  if (snipe.miss && t >= 1.95 && snipe.fired) {
+    if (snipe.serve === 0) {
+      // First serve out: "FAULT." and straight into the second, same routine from the toss.
+      snipe.serve = 1; showShout('FAULT.', 0.8); post({ type: 'fault' });
+      snipe.t = 0.55; snipe.fired = false; snipe.ticks = 0;
+    } else {
+      showShout('DOUBLE.', 1.2); post({ type: 'double' });
+      fx.shoutUntil = clock + 1.2; shoutAt = clock; // wide eyes
+      [0, 50, 100, 150].forEach((ms, i) => setTimeout(() => { spin(i % 2 ? -5 : 5); kick(i % 2 ? -1.2 : 1.2, 0.4, 0); }, ms));
+      endSnipe();
+    }
+  }
+  if (!snipe.miss && t > 2.4) endSnipe();
+}
+function snipeHit() {
+  snipe.crackAt = clock;
+  crack.style.transform = `translate(${snipe.sx}px,${snipe.sy}px) rotate(${Math.random() * 360}deg)`;
+  crack.style.opacity = '1';
+  fx.shakeUntil = clock + 0.18;
+  showShout(`ACE. ${128 + Math.floor(Math.random() * 19)} MPH`, 1.3);
+  post({ type: 'ace' });
+}
+
 function paintMinis(hex) {
   // Left to right, 50 ms apart.
   minis.forEach((m, i) => { m.userData.paintAt = clock + 0.05 * i; m.userData.paint = hex; });
@@ -1076,10 +1251,13 @@ function poseFace(dt) {
   let lx = grab.on ? clamp((grab.T.x - tmpA.x) * 0.4, -0.03, 0.03) : 0.015 * Math.sin(clock * 0.7);
   let ly = grab.on ? clamp((grab.T.y - tmpA.y) * 0.4, -0.03, 0.03) : 0.01 * Math.sin(clock * 0.5);
   if (sly) { lx = -0.03; ly = -0.012; }
+  // Aim: left eye shut, right eye straight down the barrel at you.
+  const aim = clock < fx.aimUntil;
+  if (aim) { lx = 0; ly = 0; }
   for (const e of eyes) {
     e.position.set(e.userData.sx * sp / 2, 0.03, 0.02);
     const happy = clock < fx.happyUntil; const wince = clock < fx.winceUntil;
-    e.scale.set(1, happy || clock < fx.sipUntil ? 0.16 : wince ? 0.28 : sly ? 0.5 : blink * (1 - 0.7 * g) * (1 + 0.25 * surprise), 1);
+    e.scale.set(1, happy || clock < fx.sipUntil || (aim && e.userData.sx < 0) ? 0.16 : wince ? 0.28 : sly ? 0.5 : aim ? 1.1 : blink * (1 - 0.7 * g) * (1 + 0.25 * surprise), 1);
     e.userData.pupil.position.set(lx, ly, 0.04);
   }
   for (const b of brows) b.position.set(b.userData.sx * 0.11, 0.17, 0.03);
@@ -1112,6 +1290,7 @@ function advance(dt) {
   ballsStep(dt);
   drinkStep(dt);
   lureStep(dt);
+  snipeStep(dt);
   slide.step(dt);
   shelfStep(dt);
 }
@@ -1216,4 +1395,5 @@ window.demoFighter = () => {
 /** Test hook: switch style as if its candy were tapped. */
 window.demoStyle = (cast) => changeStyle(cast);
 window.demoDrink = () => { if (B.cast === 'wall') startDrink(); };
+window.demoSnipe = (miss) => { if (B.cast !== 'bot') return; startSnipe(); snipe.miss = !!miss; nextTic = clock + 6; };
 post({ type: 'ready' });

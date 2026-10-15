@@ -13,7 +13,7 @@ import { sfx } from '@/lib/sfx';
 
 type Field = 'name' | 'bio' | 'favoritePro' | 'homeCourt' | 'racket';
 type Msg =
-  | { type: 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' | 'serve' | 'pock' | 'return' | 'flex' | 'burst' | 'cheer' | 'dash' | 'gulp' | 'crush' | 'ahh' | 'ballbounce' | 'gotyou' }
+  | { type: 'save' | 'poke' | 'grab' | 'fling' | 'squish' | 'splat' | 'boing' | 'beep' | 'grunt' | 'swish' | 'serve' | 'pock' | 'return' | 'flex' | 'burst' | 'cheer' | 'dash' | 'gulp' | 'crush' | 'ahh' | 'ballbounce' | 'gotyou' | 'aimtick' | 'lock' | 'snipe' | 'ace' | 'fault' | 'double' }
   | { type: 'bloop'; cast: CastId }
   | { type: 'thud'; v: number }
   | { type: 'cast'; cast: CastId }
@@ -65,6 +65,8 @@ export default function MakeYourFighter() {
           // ?demo=<style> switches to that style as if its candy were tapped; ?demo=drink makes the Wall drink right away.
           if (params.demo && params.demo in CAST) run(`setTimeout(() => window.demoStyle('${params.demo}'), 900)`);
           if (params.demo === 'drink') run('setTimeout(() => window.demoDrink(), 900)');
+          // ?demo=snipe switches to Servebot and serves an ace; ?demo=double serves the double fault.
+          if (params.demo === 'snipe' || params.demo === 'double') run(`setTimeout(() => window.demoStyle('bot'), 900); setTimeout(() => window.demoSnipe(${params.demo === 'double'}), 3200)`);
         }}
         onMessage={(m: SceneMsg) => {
           const msg = m as Msg;
@@ -92,6 +94,12 @@ export default function MakeYourFighter() {
             case 'ahh': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); break;
             case 'gotyou': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('select', 0.8); break;
             case 'ballbounce': sfx('bounce', 0.45); break;
+            case 'aimtick': sfx('tick', 0.45); break;
+            case 'lock': void Haptics.selectionAsync(); sfx('tick', 0.9); break;
+            case 'snipe': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('pock', 1); sfx('swish', 0.9); break;
+            case 'ace': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('slam', 0.7); break;
+            case 'fault': sfx('drip', 0.6); break;
+            case 'double': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); sfx('bloop', 0.7); break;
             case 'serve': sfx('bounce', 0.3); break;
             case 'pock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('pock', 0.7); break;
             case 'return': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('pock', 0.9); break;

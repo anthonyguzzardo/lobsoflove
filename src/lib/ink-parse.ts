@@ -62,6 +62,23 @@ export function decode(slots: Slot[], names: string[] = []): string {
       beams = beams.map((b) => ({ text: b.text.trimEnd() + ' ', cost: b.cost + (b.run && !vocab.has(b.run) ? 0.3 : 0), run: '' }));
       continue;
     }
+    const top = slot.cands[0]?.trim() ?? '';
+    if (top.length > 1) {
+      // Written across the screen, not stacked: the recognizer read a whole word (or a whole score) in context.
+      // Take its top readings as they are; picking them apart letter by letter would throw that context away.
+      const words = slot.cands.map((c) => c.trim().toLowerCase()).filter(Boolean).slice(0, 4);
+      const next: Beam[] = [];
+      for (const b of beams) {
+        const last = b.text[b.text.length - 1];
+        words.forEach((w, i) => {
+          const sep = last && last !== ' ' && isLetter(last) && isLetter(w[0]) ? ' ' : '';
+          next.push({ text: b.text + sep + w, cost: b.cost + i, run: '' });
+        });
+      }
+      next.sort((a, b) => a.cost - b.cost);
+      beams = next.slice(0, 48);
+      continue;
+    }
     const opts = new Map<string, number>();
     const singles = slot.cands.map((c) => c.trim()).filter((c) => c.length === 1);
     const list = singles.length ? singles : slot.cands.map((c) => c.trim()[0]).filter(Boolean);

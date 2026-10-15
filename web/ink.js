@@ -22,6 +22,7 @@ const MONO = 'ui-monospace, "SF Mono", Menlo, monospace';
 
 // Timing, in ms. CHAR_GAP is the one to tune first: too short splits a 4 into two marks, too long feels slow.
 const CHAR_GAP = 420;
+const WORD_GAP = 900;
 const IDLE_READ = 1700;
 const FLY = 340;
 
@@ -173,7 +174,10 @@ function endStroke(st) {
   if (isFlick(pts)) { fadeOut([st]); closeChar(); post({ type: 'space' }); armIdle(); return; }
   S.group.push(st);
   clearTimeout(charTimer);
-  charTimer = setTimeout(closeChar, CHAR_GAP);
+  // Written across the screen (wider than tall): a word, not one stacked letter. Pen lifts between its letters are
+  // longer, so wait longer before calling it done, or the word gets cut into pieces.
+  const b = box(S.group.flatMap((x) => x.pts));
+  charTimer = setTimeout(closeChar, b.w > b.h * 1.3 && b.w > 90 ? WORD_GAP : CHAR_GAP);
 }
 
 function dropCard() { if (S.card) { S.cardGone = now(); S.mode = 'write'; } }
@@ -195,6 +199,8 @@ cv.addEventListener('pointerdown', (e) => {
     return;
   }
   if (fingers.size > 2 || two) return;
+  const pen = S.mode === 'write' && !S.live ? hitPen(e.clientX, e.clientY) : 0;
+  if (pen) { fingers.delete(e.pointerId); PEN = pen; post({ type: 'pen', size: pen }); return; }
   clearTimeout(charTimer); clearTimeout(idleTimer);
   S.live = { id: e.pointerId, pts: [[e.clientX, e.clientY, now()]] };
 });
@@ -247,7 +253,27 @@ window.clearAll = () => { S.line = ''; S.pending = 0; S.group = []; S.card = nul
 // ─── Drawing ───────────────────────────────────────────────────────────────────
 
 // The brush is shared: src/lib/brush.ts holds the look, web/lib/brush.js draws it on a canvas.
-const drawInk = (strokes, alpha = 1) => drawBrush(g, strokes, alpha);
+// Pen size: three sizes, picked with the three dots under the line (top right). The app remembers the choice.
+const PENS = [11, 15, 19];
+let PEN = 15;
+window.setPen = (w) => { if (PENS.includes(w)) PEN = w; };
+const penSpot = (i) => [W - 22 - (PENS.length - 1 - i) * 34, LINE_Y() + 34];
+function hitPen(x, y) {
+  for (let i = 0; i < PENS.length; i++) { const [px, py] = penSpot(i); if (Math.hypot(x - px, y - py) < 17) return PENS[i]; }
+  return 0;
+}
+function drawPens() {
+  if (S.mode === 'card') return;
+  PENS.forEach((w, i) => {
+    const [x, y] = penSpot(i);
+    g.save();
+    g.fillStyle = INK; g.globalAlpha = w === PEN ? 0.9 : 0.3;
+    g.beginPath(); g.arc(x, y, w / 2, 0, Math.PI * 2); g.fill();
+    if (w === PEN) { g.strokeStyle = CLAY; g.globalAlpha = 1; g.lineWidth = 2.5; g.beginPath(); g.arc(x, y, w / 2 + 5, 0, Math.PI * 2); g.stroke(); }
+    g.restore();
+  });
+}
+const drawInk = (strokes, alpha = 1) => drawBrush(g, strokes, alpha, PEN);
 // Paper grain: one noise tile, laid over the whole page at low strength.
 const grain = paperGrain(g);
 
@@ -448,6 +474,7 @@ function frame() {
   drawInk(S.group);
   if (S.live) drawInk([S.live]);
   drawLegend();
+  drawPens();
   drawStamp(t);
   requestAnimationFrame(frame);
 }

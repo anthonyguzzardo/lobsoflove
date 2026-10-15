@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -19,13 +20,17 @@ type Msg =
   | { type: 'space' } | { type: 'erase' } | { type: 'read' } | { type: 'readNow' }
   | { type: 'save' } | { type: 'nope' } | { type: 'toss' } | { type: 'more' } | { type: 'exit' }
   | { type: 'char'; strokes: Stroke[]; w: number; h: number }
-  | { type: 'choose'; field: 'opp'; value: string };
+  | { type: 'choose'; field: 'opp'; value: string }
+  | { type: 'pen'; size: number };
+
+const PEN_KEY = 'lol.ink.pen';
+const INK_LAST = 'lol.ink.last';
 
 /** A written character waiting on (or done with) the recognizer. */
 type Entry = { space: true } | { space?: false; cands: string[] | null };
 
 /**
- * Write anything: one finger, letters stacked in one spot, no form. The page (web/ink.js) draws and
+ * Write anything: one finger, letters stacked in one spot or written across, no form. The page (web/ink.js) draws and
  * classifies strokes; this side recognizes each character, decodes the line, and draws a card back.
  */
 export default function Ink() {
@@ -60,6 +65,8 @@ export default function Ink() {
   const read = async () => {
     if (!entries.current.some((e) => !e.space)) return;
     await Promise.all(inflight.current);
+    // What the recognizer returned for each piece, kept so a bad read can be looked at afterwards.
+    AsyncStorage.setItem(INK_LAST, JSON.stringify({ at: Date.now(), text: text(), entries: entries.current })).catch(() => {});
     showCard();
   };
 
@@ -89,6 +96,7 @@ export default function Ink() {
 
   const onReady = () => {
     pushLine();
+    AsyncStorage.getItem(PEN_KEY).then((v) => { if (v) run(`window.setPen(${Number(v)})`); }).catch(() => {});
     if (params.demo === 'loops') run('window.demoLoops()');
     else if (params.demo) run(`window.demoInk(${params.demo === '1' ? '' : JSON.stringify(params.demo)})`);
   };
@@ -140,6 +148,10 @@ export default function Ink() {
         break;
       case 'more':
         card.current = null;
+        break;
+      case 'pen':
+        void Haptics.selectionAsync();
+        AsyncStorage.setItem(PEN_KEY, String(msg.size)).catch(() => {});
         break;
       case 'exit':
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

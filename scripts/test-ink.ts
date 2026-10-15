@@ -20,6 +20,10 @@ assert.equal(decode([...word('beat'), s('O', 'o'), s('v'), s('e'), s('r')], name
 assert.equal(decode([...word('beat'), ...word('marco')], names), 'beat marco', 'splits run-together words at known words');
 assert.equal(decode([...word('won'), { space: true }, s('6'), s('-'), s('S', 's', '5'), s('7'), s('-'), s('5')], names), 'won 6-57-5');
 
+// Written across instead of stacked: whole words come back from the recognizer and must be kept whole.
+assert.equal(decode([s('Anthony', 'Anthomy', 'A')], names), 'anthony');
+assert.equal(decode([s('beat', 'heat'), s('marco', 'Marco'), s('6-4', '6.4'), { space: true }, s('6-2')], names), 'beat marco6-4 6-2');
+
 // Sets: the writer's own example, commas and all.
 assert.deepEqual(takeSets('6,4-2,6,7,6').sets, [[6, 4], [2, 6], [7, 6]]);
 assert.deepEqual(takeSets('646276').sets, [[6, 4], [6, 2], [7, 6]], 'no separators: digits pair up');

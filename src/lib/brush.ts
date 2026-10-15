@@ -18,7 +18,7 @@ export const BRUSHES: readonly Brush[] = [
 ];
 
 /** Default tube thickness in points. */
-export const BRUSH_WIDTH = 19;
+export const BRUSH_WIDTH = 15;
 
 /** Contact shadow under the tube, and the highlight along its top edge. */
 export const SHADOW = { dx: 1.5, dy: 2.5, color: 'rgba(60,45,30,0.13)' };
