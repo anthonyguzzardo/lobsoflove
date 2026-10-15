@@ -257,7 +257,7 @@ window.clearAll = () => { S.line = ''; S.pending = 0; S.group = []; S.card = nul
 const PENS = [11, 15, 19];
 let PEN = 15;
 window.setPen = (w) => { if (PENS.includes(w)) PEN = w; };
-const penSpot = (i) => [W - 22 - (PENS.length - 1 - i) * 34, LINE_Y() + 34];
+const penSpot = (i) => [W - 30 - (PENS.length - 1 - i) * 34, LINE_Y() + 34];
 function hitPen(x, y) {
   for (let i = 0; i < PENS.length; i++) { const [px, py] = penSpot(i); if (Math.hypot(x - px, y - py) < 17) return PENS[i]; }
   return 0;

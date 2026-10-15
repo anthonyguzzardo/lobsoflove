@@ -103,6 +103,13 @@ export function addMatch(input: Omit<Match, 'id' | 'playedAt'> & { playedAt?: nu
   return m.id;
 }
 
+/** Deletes a match (the "undo last match" command). */
+export function removeMatch(id: string) {
+  matches = matches.filter((m) => m.id !== id);
+  emit();
+  AsyncStorage.setItem(KEY, JSON.stringify(matches)).catch(() => {});
+}
+
 export function useMatches(): Match[] {
   return useSyncExternalStore(
     (l) => {

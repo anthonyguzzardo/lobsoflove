@@ -1,5 +1,6 @@
 // Turns stacked finger-written characters into something to log: a match, a gear entry, or a question.
 // Pure: no React Native imports, so scripts/test-ink.ts can run it under tsx.
+import type { Command } from '@/lib/ink-commands';
 import type { Fighter } from '@/lib/roster';
 
 export type SetScore = [number, number];
@@ -117,12 +118,12 @@ export function decode(slots: Slot[], names: string[] = []): string {
 
 // ─── Parsing: what the text means ──────────────────────────────────────────────
 
-export type Question = { field: 'opp'; prompt: string; options: { label: string; value: string }[] };
-export type Answers = { opp?: string };
+export type Question = { field: 'opp' | 'pick'; prompt: string; options: { label: string; value: string }[] };
+export type Answers = { opp?: string; pick?: string };
 
 export type MatchDraft = { kind: 'match'; opp: string | null; sets: SetScore[]; won: boolean | null; playedAt: number; minutes: number | null; when: string };
 export type GearDraft = { kind: 'gear'; item: string; cost: number | null; at: number; when: string };
-export type Draft = MatchDraft | GearDraft | { kind: 'none' };
+export type Draft = MatchDraft | GearDraft | { kind: 'command'; cmd: Command } | { kind: 'none' };
 
 /** What gets drawn back: the lines, any open question, and whether a check mark may save it. */
 export type Card = { text: string; lines: string[]; questions: Question[]; warn: string | null; canSave: boolean; draft: Draft };
@@ -215,7 +216,7 @@ function lev(a: string, b: string): number {
   }
   return d[b.length];
 }
-const sim = (a: string, b: string) => 1 - lev(a, b) / Math.max(a.length, b.length, 1);
+export const sim = (a: string, b: string) => 1 - lev(a, b) / Math.max(a.length, b.length, 1);
 
 /** Every roster fighter scored against the words that are not tennis words. */
 export function matchNames(text: string, roster: Fighter[]): { word: string | null; ranked: { id: string; name: string; score: number }[] } {

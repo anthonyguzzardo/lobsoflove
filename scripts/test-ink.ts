@@ -1,6 +1,7 @@
 // Run: npx tsx scripts/test-ink.ts
 import assert from 'node:assert/strict';
 
+import { parseCommand } from '../src/lib/ink-commands';
 import { decode, parse, takeSets, takeTime, type Slot } from '../src/lib/ink-parse';
 import type { Fighter } from '../src/lib/roster';
 
@@ -76,5 +77,21 @@ assert.ok(c.draft.kind === 'gear' && c.draft.item === 'REGRIP');
 c = parse('restring 28', roster, {}, now);
 assert.ok(c.draft.kind === 'gear' && c.draft.cost === 28, 'bare number with a gear word is the price');
 assert.equal(parse('beat marco 6-4 6-2 $10 balls', roster, {}, now).draft.kind, 'match', 'a real score wins over gear words');
+
+// Commands.
+const ctx = { roster, venues: [{ id: 'v1', name: 'Balboa Tennis Club' }, { id: 'v2', name: 'Linda Vista Community Park' }, { id: 'v3', name: 'North Park Rec Center' }], lastMatch: { id: 'm1', label: 'W vs MARCO 6-4 6-2' } };
+const cmd = (t: string) => { const c = parseCommand(t, ctx); return c?.draft.kind === 'command' ? c.draft.cmd : null; };
+assert.deepEqual(cmd('change fighter to servebot'), { kind: 'cast', cast: 'bot' });
+assert.deepEqual(cmd('chnge figter to srvebot'), null, 'too mangled for the fixed commands: no guessing');
+assert.deepEqual(cmd('change fighter to srvebot'), { kind: 'cast', cast: 'bot' }, 'misspelled name still lands');
+assert.deepEqual(cmd('make me the junkballer'), { kind: 'cast', cast: 'junk' });
+assert.deepEqual(cmd('color red'), { kind: 'color', color: '#ff5252', word: 'red' });
+assert.deepEqual(cmd('call me anthony'), { kind: 'name', name: 'ANTHONY' });
+assert.deepEqual(cmd('court balboa'), { kind: 'court', id: 'v1', name: 'Balboa Tennis Club', home: false });
+assert.deepEqual(cmd('home court north park'), { kind: 'court', id: 'v3', name: 'North Park Rec Center', home: true });
+assert.deepEqual(cmd('undo last match'), { kind: 'undo', matchId: 'm1' });
+assert.deepEqual(cmd('open standings'), { kind: 'open', page: 'standings' });
+assert.equal(parseCommand('beat marco 6-4 6-2', ctx), null, 'a match is not a command');
+assert.equal(parseCommand('restring $28', ctx), null, 'gear is not a command');
 
 console.log('ink parse: all good');
