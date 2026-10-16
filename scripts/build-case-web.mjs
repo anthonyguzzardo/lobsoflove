@@ -353,3 +353,18 @@ body{background:#ebe8e2;font-family:ui-monospace,"SF Mono",Menlo,monospace;color
 #cap{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 22px);text-align:center;font:700 12px ui-monospace,Menlo,monospace;pointer-events:none}
 `;
 emit('lines-html.ts', 'LINES_HTML', page({ css: linesCss, body: '<canvas id="c"></canvas><div id="head"><b>LOBSOFLOVE SEASON 01</b><div id="sub"></div></div><div id="cap"></div>', pre: `window.VENUES=${readFileSync(`${root}src/data/venues.json`)};`, js: bundle('web/lines.js') }));
+
+// The match: a flip scoreboard on the fence. Same paper, ink, mono type and slide strip as home; clay marks a score that can't happen.
+const scoreCss = homeCss + `
+#ui{padding-top:calc(env(safe-area-inset-top) + 56px)}
+#line{font:800 12px var(--mono);letter-spacing:.05em;text-align:center;margin:0 0 10px;padding:7px 10px;border-radius:6px;background:rgba(239,236,229,.92);box-shadow:inset 0 0 0 1.6px rgba(22,24,29,.18);transition:color .2s,background .2s}
+#line.bad{color:#fffdf0;background:var(--clay);box-shadow:none}
+#line.won{background:var(--ink);color:#efece5;box-shadow:none}
+#enter{margin-bottom:6px}
+`;
+const scoreBody = `<canvas id="c"></canvas><div id="vig"></div><div id="grain"></div><div id="ui">
+<div class="grow"></div>
+<div id="line"></div>
+${homeBody.match(/<div id="enter"[\s\S]*?<\/svg><\/div><\/div><\/div>/)[0]}
+</div>`;
+emit('score-html.ts', 'SCORE_HTML', page({ css: scoreCss, body: scoreBody, js: bundle('web/score.js') }));

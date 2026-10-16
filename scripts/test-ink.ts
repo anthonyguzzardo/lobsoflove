@@ -1,6 +1,7 @@
 // Run: npx tsx scripts/test-ink.ts
 import assert from 'node:assert/strict';
 
+import { actionToLine, patchCard } from '../src/lib/ink-claude';
 import { parseCommand } from '../src/lib/ink-commands';
 import { decode, parse, takeSets, takeTime, type Slot } from '../src/lib/ink-parse';
 import type { Fighter } from '../src/lib/roster';
@@ -93,5 +94,22 @@ assert.deepEqual(cmd('undo last match'), { kind: 'undo', matchId: 'm1' });
 assert.deepEqual(cmd('open standings'), { kind: 'open', page: 'standings' });
 assert.equal(parseCommand('beat marco 6-4 6-2', ctx), null, 'a match is not a command');
 assert.equal(parseCommand('restring $28', ctx), null, 'gear is not a command');
+
+// AI reader actions (shapes copied from real read-ink output) come back as lines the offline reader turns into cards.
+const aiCtx = { roster, venues: ctx.venues, lastMatch: null };
+const fromAi = (a: Parameters<typeof actionToLine>[0]) => {
+  const m = actionToLine(a, aiCtx)!;
+  return patchCard(parseCommand(m.line, ctx) ?? parse(m.line, roster, {}, now), m, ctx.venues);
+};
+let ai = fromAi({ action: 'set_fighter', cast_id: 'bot', note: '' });
+assert.ok(ai.draft.kind === 'command' && ai.draft.cmd.kind === 'cast' && ai.draft.cmd.cast === 'bot');
+ai = fromAi({ action: 'log_match', opponent_id: 'd2', sets: [{ mine: 5, theirs: 7 }, { mine: 6, theirs: 4 }, { mine: 8, theirs: 10 }], i_won: false, played_at_local: '2026-10-14T18:00', court_id: 'v2', note: '' });
+assert.ok(ai.draft.kind === 'match' && ai.draft.opp === 'd2' && ai.draft.won === false && ai.draft.courtId === 'v2');
+assert.deepEqual(ai.draft.kind === 'match' && ai.draft.sets, [[5, 7], [6, 4], [8, 10]]);
+assert.equal(new Date(ai.draft.kind === 'match' ? ai.draft.playedAt : 0).getHours(), 18);
+assert.equal(ai.lines.at(-1), '@ Linda Vista Community Park');
+ai = fromAi({ action: 'log_gear', gear_item: 'RESTRING', cost: 32, note: '' });
+assert.ok(ai.draft.kind === 'gear' && ai.draft.cost === 32);
+assert.equal(actionToLine({ action: 'unknown', note: 'weather' }, aiCtx), null);
 
 console.log('ink parse: all good');

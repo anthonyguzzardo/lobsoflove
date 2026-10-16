@@ -10,6 +10,7 @@ import { INK_HTML } from '@/generated/ink-html';
 import venues from '@/data/venues.json';
 import { courtById, pickCourt, usePickedCourt } from '@/lib/courts';
 import { addGear } from '@/lib/gear';
+import { actionToLine, AI_READER_READY, askAiReader, patchCard, unknownCard } from '@/lib/ink-claude';
 import { parseCommand, type Page } from '@/lib/ink-commands';
 import { decode, parse, type Answers, type Card, type Slot } from '@/lib/ink-parse';
 import { layoutLine, recognizeChar, type Stroke } from '@/lib/ink-recognize';
@@ -23,7 +24,8 @@ type Msg =
   | { type: 'save' } | { type: 'nope' } | { type: 'toss' } | { type: 'more' } | { type: 'exit' }
   | { type: 'char'; strokes: Stroke[]; w: number; h: number }
   | { type: 'choose'; field: 'opp' | 'pick'; value: string }
-  | { type: 'pen'; size: number };
+  | { type: 'pen'; size: number }
+  | { type: 'dropped' };
 
 const PEN_KEY = 'lol.ink.pen';
 const PAGE_ROUTES: Record<Page, '/' | '/standings' | '/courts' | '/fighter' | '/gear' | '/case'> = { home: '/', standings: '/standings', courts: '/courts', fighter: '/fighter', gear: '/gear', case: '/case' };
@@ -66,8 +68,39 @@ export default function Ink() {
     run(`window.setLine(${JSON.stringify(text())}, ${pending})`);
   };
 
+  // The AI reader's answer for a line the offline reader did not understand (see src/lib/ink-claude.ts).
+  const ai = useRef<{ for: string; line: string | null; extra: { playedAt?: number; courtId?: string }; note: string } | null>(null);
+  const asking = useRef<string | null>(null);
+  const aiContext = () => {
+    const last = [...matches].sort((a, b) => b.playedAt - a.playedAt)[0];
+    return { roster, venues, lastMatch: last ? `${winnerOf(last) === last.p1 ? 'W' : 'L'} vs ${roster.find((f) => f.id === last.p2)?.name ?? '?'} ${scoreLine(last.sets)}` : null };
+  };
+  const askAi = (t: string) => {
+    asking.current = t;
+    const ctx = aiContext();
+    askAiReader(t, ctx)
+      .then((a) => { const m = actionToLine(a, ctx); ai.current = { for: t, line: m?.line ?? null, extra: m ?? {}, note: a.note }; })
+      .catch((e: Error) => { ai.current = { for: t, line: null, extra: {}, note: e.message === 'CAPPED' ? 'out of AI reads for today' : "couldn't reach the reader" }; })
+      .finally(() => {
+        asking.current = null;
+        // Still the same line, and the card is still up: show the answer.
+        if (card.current && (lineText.current ?? text()) === t) showCard();
+      });
+  };
+
   const showCard = () => {
-    const c = understand(lineText.current ?? text());
+    const t = lineText.current ?? text();
+    let c: Card;
+    if (ai.current?.for === t) {
+      c = ai.current.line ? patchCard(understand(ai.current.line), ai.current.extra, venues) : unknownCard(t, ai.current.note);
+    } else {
+      c = understand(t);
+      // Not a score, gear or a fixed command: ask the AI reader, and say so on the card while it thinks.
+      if (c.draft.kind === 'none' && AI_READER_READY && t.trim().length >= 3 && !offline.current) {
+        if (asking.current !== t) askAi(t);
+        c = { ...c, lines: [`"${t}"`, 'reading it...'], canSave: false };
+      }
+    }
     if (offline.current && c.draft.kind === 'none') c.lines = ['no signal', "can't read ink yet", 'your writing is kept'];
     card.current = c;
     run(`window.showCard(${JSON.stringify({ lines: c.lines, questions: c.questions, warn: c.warn, canSave: c.canSave })})`);
@@ -84,9 +117,12 @@ export default function Ink() {
     if (line) {
       try {
         const cands = (await recognizeChar(line.strokes, line.w, line.h)).map((c) => c.trim()).filter(Boolean);
-        // The recognizer ranks readings by how likely the words are. Prefer the best one that is something we can log.
-        const fits = cands.slice(0, 8).find((c) => understand(c).draft.kind !== 'none');
-        lineText.current = fits ?? cands[0] ?? null;
+        // Trust the recognizer's ranking. A lower reading only wins when it has the same letters and digits as the top one
+        // and differs in spacing or punctuation ("6-46-2" vs "6-4 6-2"); it never gets to add or drop a character.
+        const bare = (c: string) => c.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const top = cands[0] ?? null;
+        const fits = top ? cands.slice(0, 8).find((c) => bare(c) === bare(top) && understand(c).draft.kind !== 'none') : undefined;
+        lineText.current = fits ?? top;
         offline.current = false;
       } catch {
         offline.current = true;
@@ -110,7 +146,7 @@ export default function Ink() {
     if (d.kind === 'match' && d.opp) {
       // Court: the one picked on /courts this session, else wherever you played last.
       const last = [...matches].sort((a, b) => b.playedAt - a.playedAt)[0];
-      const court = courtById(picked) ?? courtById(last?.courtId);
+      const court = courtById(d.courtId ?? picked) ?? courtById(last?.courtId);
       const id = addMatch({ p1: 'you', p2: d.opp, sets: d.sets, court: court?.name ?? last?.court ?? '', courtId: court?.id ?? last?.courtId, photoUri: null, playedAt: d.playedAt, minutes: d.minutes ?? undefined });
       run(`window.saved(${JSON.stringify(d.won ? 'WIN SAVED' : 'SAVED')})`);
       reset();
@@ -137,7 +173,8 @@ export default function Ink() {
     AsyncStorage.getItem(PEN_KEY).then((v) => { if (v) run(`window.setPen(${Number(v)})`); }).catch(() => {});
     // Test hook: /ink?say=change fighter to servebot skips the handwriting and shows the card for that sentence.
     if (params.say) { lineText.current = params.say; entries.current = [{ space: true }]; run(`window.setLine(${JSON.stringify(params.say)}, 0)`); showCard(); }
-    else if (params.demo === 'loops') run('window.demoLoops()');
+    else if (params.demo === 'hold') run('window.demoHold()');
+    else if (params.demo === 'leave') run('window.demoLeave()');
     else if (params.demo) run(`window.demoInk(${params.demo === '1' ? '' : JSON.stringify(params.demo)})`);
   };
 
@@ -191,6 +228,9 @@ export default function Ink() {
         break;
       case 'more':
         card.current = null;
+        break;
+      case 'dropped':
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         break;
       case 'pen':
         void Haptics.selectionAsync();

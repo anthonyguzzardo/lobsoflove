@@ -1,132 +1,126 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useRef } from 'react';
+import { Alert, StyleSheet, View } from 'react-native';
 
-import { FighterAvatar } from '@/components/fighter';
-import { Underlined } from '@/components/brush-stroke';
-import { C } from '@/constants/arcade';
-import { courtById, usePickedCourt } from '@/lib/courts';
-import { addMatch, type SetScore, useMatches, winnerOf } from '@/lib/matches';
-import { useRoster } from '@/lib/roster';
 import { BackSwing } from '@/components/back-swing';
+import { type Cue, SceneView, type SceneMsg, useScene } from '@/components/scene-view';
+import { SCORE_HTML } from '@/generated/score-html';
+import { courtById, usePickedCourt } from '@/lib/courts';
+import { addMatch, useMatches } from '@/lib/matches';
+import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
+import { matchState, type SetScore } from '@/lib/tennis';
+import { themeFor } from '@/lib/themes';
 
+/** The board in progress, so a phone on the bench can leave the screen between changeovers and come back to the same score. */
+const DRAFT_KEY = 'lol.board.v1';
+type Draft = { vs: string; sets: SetScore[]; mtb: boolean; at: number };
+/** A draft older than this is a match nobody finished; start clean. */
+const DRAFT_HOURS = 12;
+
+const CUES: Record<string, Cue> = {
+  lift: () => { void Haptics.selectionAsync(); sfx('tick', 0.45); },
+  clack: (m) => { void Haptics.impactAsync(m.v > 0.5 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light); sfx('clack', 0.3 + 0.6 * (m.v ?? 0.5)); },
+  stuck: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid); sfx('clack', 0.35); },
+  set: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('ping'); },
+  match: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('win'); },
+  bad: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); },
+  court: () => { void Haptics.selectionAsync(); sfx('tick', 0.6); },
+  tb: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('swish', 0.5); },
+  poke: () => { void Haptics.selectionAsync(); sfx('squeak', 0.6); },
+};
+
+/** The match: a flip scoreboard on the court fence (web/score.js). Flip plates as you play, seal it, then the photo. */
 export default function MatchScreen() {
   const { vs } = useLocalSearchParams<{ vs: string }>();
   const roster = useRoster();
   const past = useMatches();
-  const insets = useSafeAreaInsets();
+  const scene = useScene();
+  const { run } = scene;
   const you = roster.find((f) => f.isYou) ?? roster[0];
   const opp = roster.find((f) => f.id === vs) ?? roster.find((f) => !f.isYou) ?? you;
   const pickedCourt = usePickedCourt();
   const court = courtById(pickedCourt ?? (past.length ? past[past.length - 1].courtId : undefined));
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [sets, setSets] = useState<SetScore[]>([[0, 0]]);
-  const winner = winnerOf({ p1: you.id, p2: opp.id, sets });
+  const board = useRef<{ sets: SetScore[]; mtb: boolean }>({ sets: [[0, 0]], mtb: false });
+  const sealing = useRef(false);
 
-  const takePhoto = async () => {
+  // Hang the board once: the saved draft for this opponent if there is a fresh one, else a clean 0-0.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      let draft: Draft | null = null;
+      try {
+        const raw = await AsyncStorage.getItem(DRAFT_KEY);
+        const d = raw ? (JSON.parse(raw) as Draft) : null;
+        if (d && d.vs === opp.id && Date.now() - d.at < DRAFT_HOURS * 3600 * 1000) draft = d;
+      } catch {
+        // Unreadable draft: start clean.
+      }
+      if (!live) return;
+      board.current = { sets: draft?.sets ?? [[0, 0]], mtb: draft?.mtb ?? false };
+      const fighter = (f: typeof you) => ({ name: f.name, color: f.color, cast: f.cast });
+      run(`window.setBoard(${JSON.stringify({ you: fighter(you), opp: fighter(opp), ...board.current, court: null })})`);
+    })();
+    return () => { live = false; };
+    // The board is hung once per opponent; the court sign updates on its own below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run, opp.id]);
+
+  useEffect(() => {
+    run(`window.setCourt(${JSON.stringify(court ? { name: court.name, area: court.area } : null)})`);
+    if (court) run(`window.setGround(${JSON.stringify(themeFor(court).ground)})`);
+  }, [run, court]);
+
+  const shoot = async (): Promise<string | null> => {
     const cam = await ImagePicker.requestCameraPermissionsAsync();
-    const res = cam.granted
-      ? await ImagePicker.launchCameraAsync({ quality: 0.7 }).catch(() => null)
-      : null;
+    const res = cam.granted ? await ImagePicker.launchCameraAsync({ quality: 0.7 }).catch(() => null) : null;
     // The simulator has no camera, and a denied permission lands here too: fall back to the library.
     const picked = res ?? (await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 }));
-    if (!picked.canceled && picked.assets[0]) {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setPhoto(picked.assets[0].uri);
+    return !picked.canceled && picked.assets[0] ? picked.assets[0].uri : null;
+  };
+
+  const seal = async () => {
+    const { sets, mtb } = board.current;
+    if (sealing.current || matchState(sets, mtb).winner === null) return;
+    if (!court) {
+      Alert.alert('Pick a court', 'Every match is played somewhere. Tap the sign on the fence.');
+      return;
+    }
+    sealing.current = true;
+    try {
+      // Every match ends with a photo at the court. Backing out of the camera leaves the board as it was; the strip re-arms itself.
+      const photo = await shoot();
+      if (!photo) return;
+      const id = addMatch({ p1: you.id, p2: opp.id, court: court.name, courtId: court.id, photoUri: photo, sets });
+      AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
+      router.replace({ pathname: '/card/[id]', params: { id } });
+    } finally {
+      sealing.current = false;
     }
   };
 
-  const bump = (i: number, side: 0 | 1, by: number) => {
-    void Haptics.selectionAsync();
-    setSets((s) => s.map((set, j) => (j === i ? (side === 0 ? [Math.max(0, set[0] + by), set[1]] : [set[0], Math.max(0, set[1] + by)]) : set) as SetScore));
-  };
-
-  const submit = () => {
-    if (!winner) return Alert.alert('No winner yet', 'Every set needs a winner, and one player has to take more sets.');
-    if (!photo) return Alert.alert('Photo first', 'Every match starts with a photo at the court.');
-    if (!court) return Alert.alert('Pick a court', 'Every match is played somewhere.');
-    const id = addMatch({ p1: you.id, p2: opp.id, court: court.name, courtId: court.id, photoUri: photo, sets });
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    sfx('win');
-    router.replace({ pathname: '/card/[id]', params: { id } });
+  const onMessage = (m: SceneMsg) => {
+    if (m.type === 'score') {
+      board.current = { sets: m.sets as SetScore[], mtb: !!m.mtb };
+      const draft: Draft = { vs: opp.id, ...board.current, at: Date.now() };
+      AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft)).catch(() => {});
+    } else if (m.type === 'court') router.push({ pathname: '/courts', params: { from: 'match' } });
+    else if (m.type === 'slid') void seal();
   };
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled">
-      <BackSwing />
-      <Underlined width={6}><Text style={styles.kicker}>NEW MATCH</Text></Underlined>
-      <View style={styles.versus}>
-        <View style={styles.who}><FighterAvatar cast={you.cast} color={you.color} size={84} /><Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{you.name}</Text></View>
-        <Text style={styles.vs}>VS</Text>
-        <View style={styles.who}><FighterAvatar cast={opp.cast} color={opp.color} size={84} /><Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{opp.name}</Text></View>
-      </View>
-
-      <Text style={styles.label}>1 · PHOTO AT THE COURT</Text>
-      <Pressable onPress={takePhoto} style={styles.photo} accessibilityRole="button" accessibilityLabel="Take the match photo">
-        {photo ? <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Text style={styles.photoHint}>TAP TO SHOOT{'\n'}<Text style={styles.photoSub}>both of you, or the court</Text></Text>}
-      </Pressable>
-
-      <Text style={styles.label}>2 · COURT</Text>
-      <Pressable onPress={() => router.push({ pathname: '/courts', params: { from: 'match' } })} style={styles.courtBtn} accessibilityRole="button" accessibilityLabel="Choose the court">
-        <Text style={[styles.courtName, !court && { color: C.dim }]} numberOfLines={1}>{court ? court.name.toUpperCase() : 'CHOOSE YOUR COURT'}</Text>
-        <Text style={styles.link}>{court ? 'CHANGE ›' : 'PICK ›'}</Text>
-      </Pressable>
-
-      <Text style={styles.label}>3 · SCORE</Text>
-      {sets.map((set, i) => (
-        <View key={i} style={styles.setRow}>
-          <Text style={styles.setNo}>SET {i + 1}</Text>
-          {([0, 1] as const).map((side) => (
-            <View key={side} style={styles.stepper}>
-              <Pressable onPress={() => bump(i, side, -1)} hitSlop={8} style={styles.stepBtn} accessibilityLabel="Minus one game"><Text style={styles.stepTxt}>−</Text></Pressable>
-              <Text style={[styles.games, { color: side === 0 ? you.color : opp.color }]}>{set[side]}</Text>
-              <Pressable onPress={() => bump(i, side, 1)} hitSlop={8} style={styles.stepBtn} accessibilityLabel="Plus one game"><Text style={styles.stepTxt}>+</Text></Pressable>
-            </View>
-          ))}
-        </View>
-      ))}
-      <View style={styles.setActions}>
-        {sets.length < 5 ? <Pressable onPress={() => setSets((s) => [...s, [0, 0]])}><Text style={styles.link}>+ ADD SET</Text></Pressable> : null}
-        {sets.length > 1 ? <Pressable onPress={() => setSets((s) => s.slice(0, -1))}><Text style={[styles.link, { color: C.dim }]}>REMOVE LAST</Text></Pressable> : null}
-      </View>
-
-      <Pressable onPress={submit} style={({ pressed }) => [styles.cta, !(winner && photo && court) && styles.ctaOff, pressed && { transform: [{ scale: 0.97 }] }]} accessibilityRole="button">
-        <Text style={styles.ctaText}>{winner ? `GAME, SET, MATCH · ${(winner === you.id ? you : opp).name}` : 'GAME, SET, MATCH'}</Text>
-      </Pressable>
-      <Text style={styles.note}>Saved on this phone only for now. Opponent confirmation arrives with the shared backend.</Text>
-    </ScrollView>
+    <View style={styles.root}>
+      <StatusBar style="dark" />
+      <SceneView scene={scene} html={SCORE_HTML} name="score" cues={CUES} onMessage={onMessage} />
+      <BackSwing floating />
+    </View>
   );
 }
 
-const heavy = { fontWeight: '900', fontStyle: 'italic' } as const;
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
-  kicker: { color: C.ball, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginTop: 8 },
-  versus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', marginTop: 6 },
-  who: { alignItems: 'center', width: 130 },
-  name: { ...heavy, color: C.text, fontSize: 15 },
-  vs: { ...heavy, color: C.dim, fontSize: 24 },
-  label: { color: C.dim, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginTop: 18, marginBottom: 6 },
-  photo: { height: 170, borderRadius: 14, borderWidth: 2, borderColor: C.line, borderStyle: 'dashed', backgroundColor: C.panel, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  photoHint: { ...heavy, color: C.text, fontSize: 18, textAlign: 'center' },
-  photoSub: { color: C.dim, fontSize: 12, fontWeight: '600', fontStyle: 'normal' },
-  courtBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
-  courtName: { ...heavy, color: C.text, fontSize: 16, flex: 1 },
-  setRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.panel, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 8 },
-  setNo: { color: C.dim, fontSize: 11, fontWeight: '800', letterSpacing: 1, width: 44 },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  stepBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.panelHi, alignItems: 'center', justifyContent: 'center' },
-  stepTxt: { color: C.text, fontSize: 22, fontWeight: '700', lineHeight: 26 },
-  games: { ...heavy, fontSize: 30, width: 40, textAlign: 'center' },
-  setActions: { flexDirection: 'row', gap: 20, marginTop: 2 },
-  link: { color: C.ball, fontSize: 12, fontWeight: '900', letterSpacing: 1, paddingVertical: 8 },
-  cta: { backgroundColor: C.ball, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 12, alignItems: 'center', marginTop: 18 },
-  ctaOff: { opacity: 0.45 },
-  ctaText: { ...heavy, color: C.bg, fontSize: 17 },
-  note: { color: C.dim, fontSize: 11, textAlign: 'center', marginTop: 10 },
+  root: { flex: 1, backgroundColor: '#efece5' },
 });

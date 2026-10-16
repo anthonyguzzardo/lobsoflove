@@ -85,23 +85,25 @@ function assemble(t,fade,titleTime=t){
 }
 function draw(t,options={}){
  ctx.fillStyle='#eee9df';ctx.fillRect(0,0,size,size);
- ctx.save();if(options.icon){ctx.translate(450,450);ctx.scale(1.08,1.08);ctx.translate(-450,-445);}
+ ctx.save();if(options.icon){ctx.translate(450,450);ctx.scale(1.12,1.12);ctx.translate(-450,-445);}
  const fade=1-ease((t-34)/2),arrive=ease((t-5)/3);
  ctx.save();ctx.globalAlpha=fade;
  // Broad colored gestures arrive first, then leave room for the ball.
- for(let i=0;i<curls.length;i++){const s=curls[i];stroke(s.pts,ease((t-s.delay)/3.7),s.color,s.width,s.pattern,(1-arrive*.82)*fade,t);}
+ for(let i=0;i<curls.length;i++){const s=curls[i];stroke(s.pts,ease((t-s.delay)/3.7),s.color,s.width*(options.icon?1.12:1),s.pattern,(options.icon?.38:1-arrive*.82)*fade,t);}
  const bounce=t>10?Math.sin((t-10)*2.3)*Math.exp(-(t-10)*.45)*13:0;
  ctx.save();ctx.translate(0,-bounce);
- ctx.globalAlpha=fade*arrive;ctx.fillStyle='#c7d96c';ctx.beginPath();circle.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();ctx.fill();ctx.globalAlpha=fade;
- stroke(circle,ease((t-4)/3.2),'#51966f',13,2,fade,t);
+ ctx.globalAlpha=fade*arrive;ctx.fillStyle=options.icon?'#c1d35d':'#c7d96c';ctx.beginPath();circle.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();ctx.fill();ctx.globalAlpha=fade;
+ stroke(circle,ease((t-4)/3.2),options.icon?'#447e62':'#51966f',options.icon?15:13,2,fade,t);
  for(let i=0;i<2;i++)stroke(seams[i],ease((t-7-i*.6)/1.7),'#fff5d9',12,2,fade,t);
  // Small handmade marks keep the filled ball lively without crowding it.
  ctx.globalAlpha=arrive*fade*.4;ctx.fillStyle='#6c9c53';for(let i=0;i<15;i++){const x=450+Math.sin(i*14.3)*65,y=445+Math.cos(i*8.7)*110;ctx.beginPath();ctx.ellipse(x,y,2.5,1.2,-.5,0,Math.PI*2);ctx.fill();}
  ctx.restore();ctx.restore();
- if(options.icon){for(const side of [-1,1])stroke(letter(side),1,side<0?colors[0]:colors[1],32,side<0?0:1,1,30);}else assemble(t,fade,options.titleTime??t);
+ if(options.icon){for(const side of [-1,1])stroke(letter(side),1,side<0?'#df5d51':'#407eb9',38,side<0?0:1,1,30);}else assemble(t,fade,options.titleTime??t);
  ctx.restore();
 
 }
 
-return {draw,drawMark:()=>draw(30,{icon:true}),getState:()=>state};
+// Preserve the original woven drawing, with modest contrast adjustments for the launcher.
+function drawMark(){draw(30,{icon:true});}
+return {draw,drawMark,getState:()=>state};
 };

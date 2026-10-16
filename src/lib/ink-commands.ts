@@ -17,7 +17,7 @@ export type Command =
 export type Venue = { id: string; name: string };
 export type Ctx = { roster: Fighter[]; venues: Venue[]; lastMatch: { id: string; label: string } | null };
 
-const COLOR_WORDS: Record<string, string> = {
+export const COLOR_WORDS: Record<string, string> = {
   yellow: COLORS[0], lime: COLORS[0], ball: COLORS[0], pink: COLORS[1], blue: COLORS[2], cyan: COLORS[2], orange: COLORS[3],
   purple: COLORS[4], violet: COLORS[4], green: COLORS[5], red: COLORS[6], white: COLORS[7], cream: COLORS[7],
 };

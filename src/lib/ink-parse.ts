@@ -121,7 +121,7 @@ export function decode(slots: Slot[], names: string[] = []): string {
 export type Question = { field: 'opp' | 'pick'; prompt: string; options: { label: string; value: string }[] };
 export type Answers = { opp?: string; pick?: string };
 
-export type MatchDraft = { kind: 'match'; opp: string | null; sets: SetScore[]; won: boolean | null; playedAt: number; minutes: number | null; when: string };
+export type MatchDraft = { kind: 'match'; opp: string | null; sets: SetScore[]; won: boolean | null; playedAt: number; minutes: number | null; when: string; courtId?: string };
 export type GearDraft = { kind: 'gear'; item: string; cost: number | null; at: number; when: string };
 export type Draft = MatchDraft | GearDraft | { kind: 'command'; cmd: Command } | { kind: 'none' };
 
@@ -233,7 +233,7 @@ export function matchNames(text: string, roster: Fighter[]): { word: string | nu
   return { word, ranked };
 }
 
-const when = (d: Date, now: Date) => {
+export const when = (d: Date, now: Date) => {
   const day = d.toDateString() === now.toDateString() ? 'today' : d.toDateString() === new Date(now.getTime() - 86400e3).toDateString() ? 'yesterday' : d.toLocaleDateString('en-US', { weekday: 'short' }).toLowerCase();
   const h = d.getHours();
   return `${day} ${((h + 11) % 12) + 1}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;

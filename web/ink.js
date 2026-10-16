@@ -1,14 +1,14 @@
 // The write-anything canvas. One finger writes, one character stacked on top of the last.
 // The page only draws and classifies strokes; src/app/ink.tsx recognizes, decodes and parses, then draws a card back here.
 //
-// Gestures (one finger is always ink, so nothing else needs a button):
+// Gestures. Every stroke is ink, whatever its shape (circles, zigzags, an @), so control lives in things writing never does:
 //   pause ~0.4 s after lifting   next character
-//   scratch (fast zigzag)         erase the last character (or throw away the read card)
+//   press and hold still ~0.5 s   erase the last character; keep holding to keep erasing (on a card: throw it away)
 //   fast flick to the right       space
 //   pause ~1.7 s                  read it: the app draws back what it understood
 //   check mark on the card        save           circle an option   answer the card's question
+//   drag in from the left edge    leave (a two-finger swipe down works too)
 //   two-finger tap                read now (on a card: save)
-//   three fast circles            leave (so do a swipe in from the left edge and a two-finger swipe down)
 
 import { DRAW_MS, drawEase, wobbleLine } from '../src/lib/brush.ts';
 import { post } from './lib/bridge.js';
@@ -70,42 +70,16 @@ const box = (pts) => {
 const len = (pts) => { let s = 0; for (let i = 1; i < pts.length; i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return s; };
 const dur = (pts) => pts[pts.length - 1][2] - pts[0][2];
 
-function isScratch(pts) {
-  const b = box(pts);
-  if (b.w < 50 || dur(pts) > 1400) return false;
-  let dir = 0, turns = 0, anchor = pts[0][0];
-  for (const [x] of pts) {
-    const d = x - anchor;
-    if (Math.abs(d) < 14) continue;
-    const s = Math.sign(d);
-    if (dir && s !== dir) turns++;
-    dir = s; anchor = x;
-  }
-  return turns >= 4;
-}
 function isFlick(pts) {
   const dx = pts[pts.length - 1][0] - pts[0][0];
   const dy = pts[pts.length - 1][1] - pts[0][1];
   return dur(pts) < 200 && dx > W * 0.55 && Math.abs(dy) < dx * 0.3;
 }
-/** Net turning of a stroke, in full turns. Loops in the same direction add up; an 8 cancels itself out. */
-function turns(pts) {
-  let total = 0, prev = null, ax = pts[0][0], ay = pts[0][1];
-  for (const [x, y] of pts) {
-    if (Math.hypot(x - ax, y - ay) < 6) continue;
-    const a = Math.atan2(y - ay, x - ax);
-    if (prev !== null) { let d = a - prev; if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; total += d; }
-    prev = a; ax = x; ay = y;
-  }
-  return Math.abs(total) / (2 * Math.PI);
-}
-/** Three fast circles in one stroke: leave. */
-const isLoops = (pts) => dur(pts) < 3000 && turns(pts) >= 2.7;
 /** Starts at the left edge and drags right: the iOS "back" motion, done with one finger. */
 function isEdgeSwipe(pts) {
   const dx = pts[pts.length - 1][0] - pts[0][0];
   const dy = pts[pts.length - 1][1] - pts[0][1];
-  return pts[0][0] < 28 && dx > W * 0.35 && Math.abs(dy) < dx * 0.5;
+  return pts[0][0] < 36 && dx > W * 0.3 && Math.abs(dy) < dx * 0.5;
 }
 function isCircle(pts) {
   const b = box(pts);
@@ -145,7 +119,7 @@ function fadeOut(strokes) { S.fading.push({ strokes, born: now() }); }
 function endStroke(st) {
   const pts = st.pts;
   if (pts.length < 2) pts.push([pts[0][0] + 0.5, pts[0][1] + 0.5, pts[0][2] + 1]); // a dot is still a mark (period, i-dot)
-  if (isEdgeSwipe(pts) || isLoops(pts)) { fadeOut([st]); post({ type: 'exit' }); return; }
+  if (isEdgeSwipe(pts)) { fadeOut([st]); post({ type: 'exit' }); return; }
 
   if (S.mode === 'card') {
     if (S.hits.length && isCircle(pts)) {
@@ -159,18 +133,11 @@ function endStroke(st) {
       else { S.nudge = now(); post({ type: 'nope' }); }
       return;
     }
-    if (isScratch(pts)) { fadeOut([st]); dropCard(); post({ type: 'toss' }); armIdle(); return; }
     // Anything else means they are not done: put the card away and keep writing.
     dropCard();
     post({ type: 'more' });
   }
 
-  if (isScratch(pts)) {
-    fadeOut([st]);
-    if (S.group.length) { fadeOut(S.group); S.group = []; } else post({ type: 'erase' });
-    armIdle();
-    return;
-  }
   if (isFlick(pts)) { fadeOut([st]); closeChar(); post({ type: 'space' }); armIdle(); return; }
   S.group.push(st);
   clearTimeout(charTimer);
@@ -181,6 +148,49 @@ function endStroke(st) {
 }
 
 function dropCard() { if (S.card) { S.cardGone = now(); S.mode = 'write'; } }
+
+// ─── Hold to erase ─────────────────────────────────────────────────────────────
+// A finger that lands and stays put is not writing. After HOLD_MS a ring has filled around it and the last character goes;
+// held on, another goes every HOLD_REPEAT, like holding backspace. Moving more than HOLD_SLOP first makes it ink instead.
+const HOLD_MS = 500;
+const HOLD_REPEAT = 360;
+const HOLD_SLOP = 10;
+let hold = null; // { id, x, y, t0, fired, timer }
+
+function eraseOne() {
+  if (S.mode === 'card') { dropCard(); post({ type: 'toss' }); return; }
+  clearTimeout(charTimer);
+  if (S.group.length) { fadeOut(S.group); S.group = []; post({ type: 'dropped' }); }
+  else post({ type: 'erase' });
+}
+function startHold(id, x, y) {
+  hold = { id, x, y, t0: now(), fired: 0, timer: 0 };
+  const fire = () => {
+    if (!hold) return;
+    if (!hold.fired && S.live && S.live.id === hold.id) { S.live = null; } // the dot under the finger was never ink
+    hold.fired++;
+    hold.flash = now();
+    eraseOne();
+    hold.timer = setTimeout(fire, HOLD_REPEAT);
+  };
+  hold.timer = setTimeout(fire, HOLD_MS);
+}
+function endHold() { if (hold) { clearTimeout(hold.timer); const fired = hold.fired; hold = null; if (fired) armIdle(); return fired; } return 0; }
+function drawHold(t) {
+  if (!hold) return;
+  const k = hold.fired ? 1 : clamp01((t - hold.t0 - 120) / (HOLD_MS - 120));
+  if (k <= 0) return;
+  g.save();
+  g.strokeStyle = CLAY; g.lineWidth = 4; g.lineCap = 'round';
+  g.globalAlpha = 0.9;
+  g.beginPath(); g.arc(hold.x, hold.y, 34, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); g.stroke();
+  if (hold.flash) {
+    const f = clamp01((t - hold.flash) / 220);
+    g.globalAlpha = 0.5 * (1 - f); g.lineWidth = 3;
+    g.beginPath(); g.arc(hold.x, hold.y, 34 + 26 * ease.enter(f), 0, Math.PI * 2); g.stroke();
+  }
+  g.restore();
+}
 
 // ─── Touch ─────────────────────────────────────────────────────────────────────
 
@@ -194,6 +204,7 @@ cv.addEventListener('pointerdown', (e) => {
     // Second finger: whatever the first one started was the start of a gesture, not ink.
     if (S.live && S.live.pts.length && dur(S.live.pts) < 350) S.live = null;
     else if (S.live) { endStroke(S.live); S.live = null; }
+    endHold();
     two = { t0: now() };
     clearTimeout(charTimer); clearTimeout(idleTimer);
     return;
@@ -203,6 +214,7 @@ cv.addEventListener('pointerdown', (e) => {
   if (pen) { fingers.delete(e.pointerId); PEN = pen; post({ type: 'pen', size: pen }); return; }
   clearTimeout(charTimer); clearTimeout(idleTimer);
   S.live = { id: e.pointerId, pts: [[e.clientX, e.clientY, now()]] };
+  startHold(e.pointerId, e.clientX, e.clientY);
 });
 
 cv.addEventListener('pointermove', (e) => {
@@ -212,12 +224,13 @@ cv.addEventListener('pointermove', (e) => {
   if (!S.live || S.live.id !== e.pointerId) return;
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   for (const c of evs.length ? evs : [e]) S.live.pts.push([c.clientX, c.clientY, now()]);
-  if (S.live.pts.length % 6 === 0 && isLoops(S.live.pts)) { fadeOut([S.live]); S.live = null; post({ type: 'exit' }); }
+  if (hold && !hold.fired && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > HOLD_SLOP) endHold();
 });
 
 function up(e) {
   const f = fingers.get(e.pointerId);
   fingers.delete(e.pointerId);
+  if (hold && hold.id === e.pointerId && endHold()) { S.live = null; return; }
   if (two) {
     if (f) { two.dy = (two.dy ?? 0) + (f.y - f.y0) / 2; two.moved = Math.max(two.moved ?? 0, Math.hypot(f.x - f.x0, f.y - f.y0)); }
     if (fingers.size === 0) {
@@ -331,8 +344,8 @@ function drawHints(t) {
 function drawLegend() {
   if (S.mode === 'card') return;
   const rows = S.line || S.pending
-    ? ['SCRATCH = ERASE    FLICK RIGHT = SPACE', 'PAUSE = READ IT    3 FAST CIRCLES = LEAVE']
-    : ['ONE LETTER ON TOP OF THE LAST', 'SCRATCH = ERASE    FLICK RIGHT = SPACE', 'PAUSE = READ IT    3 FAST CIRCLES = LEAVE'];
+    ? ['HOLD STILL = ERASE    FLICK RIGHT = SPACE', 'PAUSE = READ IT    DRAG FROM LEFT EDGE = LEAVE']
+    : ['ONE LETTER ON TOP OF THE LAST', 'HOLD STILL = ERASE    FLICK RIGHT = SPACE', 'PAUSE = READ IT    DRAG FROM LEFT EDGE = LEAVE'];
   g.save();
   g.font = `700 12px ${MONO}`;
   g.textAlign = 'center';
@@ -411,11 +424,11 @@ function drawCard(t) {
   }
 
   y = Math.max(y + 40, H - 120);
-  const foot = c.canSave ? 'draw a check to save' : c.questions.length ? 'circle one' : c.warn ? 'scratch it out and rewrite' : 'keep writing';
+  const foot = c.canSave ? 'draw a check to save' : c.questions.length ? 'circle one' : c.warn ? 'hold still to toss it, then rewrite' : 'keep writing';
   revealText(foot, cx, y, `700 26px ${HAND}`, c.canSave ? CLAY : INK, born + 600, t);
   g.font = `700 12px ${MONO}`; g.textAlign = 'center'; g.fillStyle = INK; g.globalAlpha = alpha * 0.75;
-  g.fillText('SCRATCH = TOSS    KEEP WRITING = ADD MORE', cx, y + 34);
-  g.fillText('3 FAST CIRCLES = LEAVE', cx, y + 54);
+  g.fillText('HOLD STILL = TOSS    KEEP WRITING = ADD MORE', cx, y + 34);
+  g.fillText('DRAG FROM LEFT EDGE = LEAVE', cx, y + 54);
   g.restore();
 }
 
@@ -475,6 +488,7 @@ function frame() {
   if (S.live) drawInk([S.live]);
   drawLegend();
   drawPens();
+  drawHold(t);
   drawStamp(t);
   requestAnimationFrame(frame);
 }
@@ -506,13 +520,14 @@ async function demoStroke(poly) {
   for (const [x, y] of pts) { S.live.pts.push([x, y, now()]); await sleep(14); }
   const st = S.live; S.live = null; endStroke(st);
 }
-window.demoInk = async (text = 'w 6-4 6-2') => {
+window.demoInk = async (text = 'w 6-4 6-2', answer = true) => {
   await sleep(700);
   for (const ch of text) {
     if (ch === ' ') { closeChar(); post({ type: 'space' }); await sleep(250); continue; }
     for (const poly of GLYPHS[ch]) { await demoStroke(poly); await sleep(140); }
     await sleep(CHAR_GAP + 260);
   }
+  if (!answer) return;
   // Then answer the card: circle the second option, and draw a check.
   for (let i = 0; i < 40 && !S.hits.length; i++) await sleep(150);
   await sleep(1400);
@@ -525,14 +540,17 @@ window.demoInk = async (text = 'w 6-4 6-2') => {
   const x = W * 0.36, y = H * 0.62;
   await demoPath([[x, y], [x + 30, y + 46], [x + 46, y + 70], [x + 80, y + 10], [x + 120, y - 50]]);
 };
-/** Three fast loops in the middle of the screen: the way out. */
-window.demoLoops = async () => {
-  await sleep(1500);
-  const cx = W / 2, cy = H * 0.45;
-  const pts = Array.from({ length: 90 }, (_, k) => { const a = (k / 89) * Math.PI * 2 * 3.1; return [cx + Math.cos(a) * 70 + k * 0.6, cy + Math.sin(a) * 60]; });
-  S.live = { id: -1, pts: [] };
-  for (const [px, py] of pts) { if (!S.live) return; S.live.pts.push([px, py, now()]); if (S.live.pts.length % 6 === 0 && isLoops(S.live.pts)) { fadeOut([S.live]); S.live = null; post({ type: 'exit' }); return; } await sleep(12); }
+/** Writes "6-4", then holds still in the middle until two characters are gone. */
+window.demoHold = async () => {
+  await window.demoInk('6-4', false);
+  await sleep(600);
+  S.live = { id: -2, pts: [[W / 2, H * 0.5, now()]] };
+  startHold(-2, W / 2, H * 0.5);
+  await sleep(HOLD_MS + HOLD_REPEAT + 120);
+  endHold(); S.live = null;
 };
+/** Drags in from the left edge: the way out. */
+window.demoLeave = async () => { await sleep(1200); await demoPath(Array.from({ length: 20 }, (_, k) => [6 + k * 11, H * 0.5 + k])); };
 async function demoPath(pts) {
   S.live = { id: -1, pts: [] };
   for (const [px, py] of pts) { S.live.pts.push([px, py, now()]); await sleep(16); }
