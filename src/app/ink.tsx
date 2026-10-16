@@ -13,7 +13,7 @@ import { addGear } from '@/lib/gear';
 import { actionToLine, AI_READER_READY, askAiReader, patchCard, unknownCard } from '@/lib/ink-claude';
 import { parseCommand, type Page } from '@/lib/ink-commands';
 import { decode, parse, type Answers, type Card, type Slot } from '@/lib/ink-parse';
-import { layoutLine, recognizeChar, type Stroke } from '@/lib/ink-recognize';
+import { layoutLine, pickTurn, recognizeChar, TURNS, turnPiece, type Stroke, type Turn } from '@/lib/ink-recognize';
 import { addMatch, removeMatch, scoreLine, useMatches, winnerOf } from '@/lib/matches';
 import { goBack } from '@/lib/nav';
 import { saveFighter, useRoster } from '@/lib/roster';
@@ -107,22 +107,41 @@ export default function Ink() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
+  // The turn the writing is at, once a read has found it (0 = upright). Live letters are read at this turn too.
+  const turnLock = useRef<Turn | null>(null);
+  /** How much sense a reading makes: something loggable, with valid sets, in plain characters. Rotated ink rarely scores. */
+  const readingScore = (t: string) => {
+    const c = understand(t);
+    const plain = t.length ? [...t.toLowerCase()].filter((ch) => /[a-z0-9 \-$@:,.']/.test(ch)).length / t.length : 0;
+    return (c.draft.kind !== 'none' ? 4 : 0) + (c.draft.kind === 'match' && !c.warn ? 1.5 : 0) + (c.canSave ? 1 : 0) + plain * 2;
+  };
+
   // The whole-line reading, when there is one; it replaces the letter-by-letter guess.
   const lineText = useRef<string | null>(null);
   const read = async () => {
     if (!entries.current.some((e) => !e.space)) return;
     await Promise.all(inflight.current);
     lineText.current = null;
-    const line = layoutLine(entries.current);
-    if (line) {
+    if (entries.current.some((e) => !e.space && e.strokes.length)) {
       try {
-        const cands = (await recognizeChar(line.strokes, line.w, line.h)).map((c) => c.trim()).filter(Boolean);
-        // Trust the recognizer's ranking. A lower reading only wins when it has the same letters and digits as the top one
-        // and differs in spacing or punctuation ("6-46-2" vs "6-4 6-2"); it never gets to add or drop a character.
-        const bare = (c: string) => c.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const top = cands[0] ?? null;
-        const fits = top ? cands.slice(0, 8).find((c) => bare(c) === bare(top) && understand(c).draft.kind !== 'none') : undefined;
-        lineText.current = fits ?? top;
+        // The phone may be sideways, upside down, or flat on a table with the writer anywhere around it. Read the line
+        // at all four turns at once and keep the one that makes sense (src/lib/ink-recognize.ts pickTurn).
+        const results = await Promise.all(TURNS.map(async (turn) => {
+          const line = layoutLine(entries.current.map((e) => (e.space ? e : { strokes: turnPiece(e.strokes, turn) })));
+          const cands = line ? (await recognizeChar(line.strokes, line.w, line.h)).map((c) => c.trim()).filter(Boolean) : [];
+          return { turn, cands };
+        }));
+        const pick = pickTurn(results, readingScore, turnLock.current);
+        if (pick) {
+          // Lock the angle once a turn wins clearly; nobody turns the phone mid-sentence.
+          if (pick.margin >= 1 && pick.turn !== turnLock.current) { turnLock.current = pick.turn; run(`window.setTurn(${pick.turn})`); }
+          // Trust the recognizer's ranking. A lower reading only wins when it has the same letters and digits as the top one
+          // and differs in spacing or punctuation ("6-46-2" vs "6-4 6-2"); it never gets to add or drop a character.
+          const cands = results.find((r) => r.turn === pick.turn)!.cands;
+          const bare = (c: string) => c.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const fits = cands.slice(0, 8).find((c) => bare(c) === bare(pick.text) && understand(c).draft.kind !== 'none');
+          lineText.current = fits ?? pick.text;
+        }
         offline.current = false;
       } catch {
         offline.current = true;
@@ -174,6 +193,7 @@ export default function Ink() {
     // Test hook: /ink?say=change fighter to servebot skips the handwriting and shows the card for that sentence.
     if (params.say) { lineText.current = params.say; entries.current = [{ space: true }]; run(`window.setLine(${JSON.stringify(params.say)}, 0)`); showCard(); }
     else if (params.demo === 'hold') run('window.demoHold()');
+    else if (params.demo === 'sideways') run('window.demoSideways()');
     else if (params.demo === 'leave') run('window.demoLeave()');
     else if (params.demo) run(`window.demoInk(${params.demo === '1' ? '' : JSON.stringify(params.demo)})`);
   };
@@ -186,7 +206,7 @@ export default function Ink() {
         const entry: Entry = { cands: null, strokes: msg.strokes };
         entries.current.push(entry);
         void Haptics.selectionAsync();
-        const p = recognizeChar(msg.strokes, msg.w, msg.h, text())
+        const p = recognizeChar(turnPiece(msg.strokes, turnLock.current ?? 0), msg.w, msg.h, text())
           .then((c) => { entry.cands = c.length ? c : ['?']; offline.current = false; })
           .catch(() => { entry.cands = ['?']; offline.current = true; })
           .finally(() => { inflight.current.delete(p); pushLine(); });

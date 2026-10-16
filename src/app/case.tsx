@@ -1,116 +1,82 @@
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useMemo } from 'react';
+import { StyleSheet, View } from 'react-native';
 
-import { CaseWeb } from '@/components/case-web';
-import { Underlined } from '@/components/brush-stroke';
-import { DISC_ART } from '@/lib/discs';
-import { computeSeason, useMatches } from '@/lib/matches';
-import { CAST, useRoster } from '@/lib/roster';
 import { BackSwing } from '@/components/back-swing';
+import { type Cue, SceneView, type SceneMsg, useScene } from '@/components/scene-view';
+import { CASE_HTML } from '@/generated/case-html';
+import { computeSeason, scoreLine, useMatches, winnerOf } from '@/lib/matches';
+import { CAST, useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 
-const INK = '#0b0f1a';
+const CUES: Record<string, Cue> = {
+  open: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('tick', 0.6); },
+  pick: () => { void Haptics.selectionAsync(); sfx('swish', 0.5); },
+  side: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('tick', 0.4); },
+  slid: () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('go'); },
+  played: () => { sfx('select', 0.8); },
+};
 
-/** Opponent select: a clear jewel case you can spin, open, and play. */
+/**
+ * Opponent select: every rival is a disc in a clear jewel case (web/case.js). Spin the case for the tracklist (your matches against
+ * them), open it for their liner notes, slide the ball to load the disc and play.
+ */
 export default function CaseSelect() {
-  const params = useLocalSearchParams<{ pick?: string; load?: string; demo?: string }>();
+  const params = useLocalSearchParams<{ pick?: string; demo?: string }>();
   const roster = useRoster();
   const matches = useMatches();
-  const insets = useSafeAreaInsets();
-  const rivals = roster.filter((f) => !f.isYou);
-  const [tapped, setTapped] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const [loads, setLoads] = useState(0);
-  // `?demo=1` plays the screen by itself (spin at 3.6 s, open at 6.6 s, next fighter at 13 s, play at 16.5 s) so the motion can be recorded without a finger.
-  const demo = params.demo === '1';
-  useEffect(() => {
-    if (!demo) return;
-    const timers = [setTimeout(() => setTapped('d3'), 13000), setTimeout(() => setLoads(1), 16500)];
-    return () => timers.forEach(clearTimeout);
-  }, [demo]);
-  const pickedId = tapped ?? params.pick ?? rivals[0]?.id;
-  const index = Math.max(0, rivals.findIndex((f) => f.id === pickedId));
-  const picked = rivals[index];
-  const loadSignal = loads + (params.load === '1' ? 1 : 0);
-  const loading = loadSignal > 0;
-  const { rows } = computeSeason(roster, matches);
-  const row = rows.find((r) => r.id === picked.id);
-  const record = row && row.wins + row.losses > 0 ? `${row.wins}–${row.losses} · ${row.points} PTS` : 'NO MATCHES YET';
+  const scene = useScene();
+  const { run } = scene;
+  const you = roster.find((f) => f.isYou) ?? roster[0];
 
-  const choose = (i: number) => {
-    const next = rivals[(i + rivals.length) % rivals.length];
-    if (!next || next.id === picked.id || loading) return;
-    void Haptics.selectionAsync();
-    sfx('swish', 0.5);
-    setTapped(next.id);
-  };
-  const load = () => {
-    if (loading) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    sfx('go');
-    setLoads((n) => n + 1);
-  };
-  const loaded = () => {
-    sfx('select', 0.8);
-    router.push({ pathname: '/match', params: { vs: pickedId } });
+  const payload = useMemo(() => {
+    const { rows } = computeSeason(roster, matches);
+    const rank = Object.fromEntries(rows.map((r, i) => [r.id, i + 1]));
+    const rivals = roster.filter((f) => !f.isYou).map((f) => {
+      const games = matches
+        .filter((m) => (m.p1 === you.id && m.p2 === f.id) || (m.p2 === you.id && m.p1 === f.id))
+        .sort((a, b) => a.playedAt - b.playedAt);
+      // Every score is read from your side, so the tracklist always says what you did.
+      const tracks = games.map((m) => ({
+        r: winnerOf(m) === you.id ? 'W' : 'L',
+        score: scoreLine(m.p1 === you.id ? m.sets : m.sets.map(([a, b]) => [b, a] as [number, number])),
+        date: new Date(m.playedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase(),
+      }));
+      const w = tracks.filter((t) => t.r === 'W').length;
+      return {
+        id: f.id, name: f.name, cast: f.cast, color: f.color, rank: rank[f.id] ?? rows.length + 1,
+        style: CAST[f.cast].label, tagline: f.bio || CAST[f.cast].tagline, pro: f.favoritePro, home: f.homeCourt, racket: f.racket,
+        h2h: [w, tracks.length - w], tracks,
+      };
+    });
+    return JSON.stringify({ rivals, pick: params.pick ?? rivals[0]?.id });
+  }, [roster, matches, you.id, params.pick]);
+
+  useEffect(() => { run(`window.setRack(${payload})`); }, [run, payload]);
+
+  const onMessage = (m: SceneMsg) => {
+    if (m.type === 'played') router.push({ pathname: '/match', params: { vs: m.id } });
   };
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 6, paddingBottom: insets.bottom + 8 }]}>
+    <View style={styles.root}>
       <StatusBar style="dark" />
-      <View style={styles.pad}>
-        <BackSwing />
-      </View>
-
-      <CaseWeb cast={picked.cast} playSignal={loadSignal} demo={demo} onOpenChange={(o) => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('tick', 0.6); setOpen(o); }} onPlayed={loaded} />
-
-      <View style={styles.now}>
-        <Text style={styles.track}>TRACK {String(index + 1).padStart(2, '0')} / {String(rivals.length).padStart(2, '0')}  ·  {record}</Text>
-        <Underlined redrawKey={picked.id} style={{ maxWidth: '100%' }}><Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit>{picked.name}</Text></Underlined>
-        <Text style={styles.tagline} numberOfLines={1}>{loading ? 'Loading…' : open ? CAST[picked.cast].tagline : 'Tap to open · drag to spin'}</Text>
-      </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelf} style={styles.shelfScroll}>
-        {rivals.map((f, i) => (
-          <Pressable key={f.id} onPress={() => choose(i)} style={[styles.mini, f.id === picked.id && styles.miniOn]} accessibilityRole="button" accessibilityLabel={f.name}>
-            <Image source={DISC_ART[f.cast]} style={styles.miniDisc} contentFit="contain" />
-          </Pressable>
-        ))}
-      </ScrollView>
-
-      <View style={styles.transport}>
-        <Pressable onPress={() => choose(index - 1)} hitSlop={8} style={styles.skip} accessibilityRole="button" accessibilityLabel="Previous opponent"><Text style={styles.skipText}>⏮</Text></Pressable>
-        <Pressable onPress={load} style={({ pressed }) => [styles.play, pressed && { transform: [{ scale: 0.94 }] }, loading && { opacity: 0.5 }]} accessibilityRole="button" accessibilityLabel={`Load ${picked.name} and play`}>
-          <Text style={styles.playText}>▶</Text>
-        </Pressable>
-        <Pressable onPress={() => choose(index + 1)} hitSlop={8} style={styles.skip} accessibilityRole="button" accessibilityLabel="Next opponent"><Text style={styles.skipText}>⏭</Text></Pressable>
-      </View>
+      <SceneView
+        scene={scene}
+        html={CASE_HTML}
+        name="case"
+        cues={CUES}
+        onMessage={onMessage}
+        // `?demo=1` plays the screen by itself (spin at 1.5 s, open at 3.5 s, next rival at 6 s) so the motion can be recorded without a finger.
+        onReady={() => { if (params.demo === '1') run('setTimeout(() => window.fling(0, 1500), 1500); setTimeout(() => window.setOpen(true), 3500); setTimeout(() => window.pick(window.nextId()), 6000)'); }}
+      />
+      <BackSwing floating />
     </View>
   );
 }
 
-const heavy = { fontWeight: '900', fontStyle: 'italic' } as const;
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f6f5f2' },
-  pad: { paddingHorizontal: 16 },
-  link: { color: INK, fontSize: 12, fontWeight: '900', letterSpacing: 1.5, paddingVertical: 6, opacity: 0.6 },
-  now: { alignItems: 'center', paddingHorizontal: 20 },
-  track: { color: INK, opacity: 0.5, fontSize: 10, fontWeight: '900', letterSpacing: 1.6 },
-  name: { ...heavy, color: INK, fontSize: 28 },
-  tagline: { color: INK, opacity: 0.55, fontSize: 12, fontStyle: 'italic' },
-  shelfScroll: { flexGrow: 0, marginTop: 10 },
-  shelf: { paddingHorizontal: 16, gap: 6, alignItems: 'center', flexGrow: 1, justifyContent: 'center' },
-  mini: { padding: 3, borderRadius: 30, borderWidth: 2, borderColor: 'transparent', opacity: 0.6 },
-  miniOn: { borderColor: INK, opacity: 1 },
-  miniDisc: { width: 44, height: 44 },
-  transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 28, marginTop: 8 },
-  skip: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
-  skipText: { color: INK, fontSize: 24 },
-  play: { width: 72, height: 72, borderRadius: 36, backgroundColor: INK, alignItems: 'center', justifyContent: 'center' },
-  playText: { color: '#d7f205', fontSize: 30, marginLeft: 4 },
+  root: { flex: 1, backgroundColor: '#efece5' },
 });

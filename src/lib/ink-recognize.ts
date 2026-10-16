@@ -64,3 +64,43 @@ export function layoutLine(entries: LinePiece[]): { strokes: Stroke[]; w: number
   }
   return { strokes: out, w: x + 10, h: 140 };
 }
+
+/** The four turns a phone (and its writer) can be at, in degrees clockwise. */
+export const TURNS = [0, 90, 180, 270] as const;
+export type Turn = (typeof TURNS)[number];
+
+/**
+ * Turns each piece's strokes by `deg` clockwise around the piece's own center. A piece written sideways comes out
+ * upright: the right turn makes letters upright, and a word written across turns with them, so its letters run left
+ * to right again.
+ */
+export function turnPiece(strokes: Stroke[], deg: Turn): Stroke[] {
+  if (!deg) return strokes;
+  const pts = strokes.flat();
+  const cx = (Math.min(...pts.map((p) => p[0])) + Math.max(...pts.map((p) => p[0]))) / 2;
+  const cy = (Math.min(...pts.map((p) => p[1])) + Math.max(...pts.map((p) => p[1]))) / 2;
+  const r = (deg * Math.PI) / 180;
+  const c = Math.round(Math.cos(r));
+  const s = Math.round(Math.sin(r));
+  return strokes.map((st) => st.map(([x, y, t]) => [cx + (x - cx) * c - (y - cy) * s, cy + (x - cx) * s + (y - cy) * c, t]));
+}
+
+/**
+ * Picks the turn whose reading makes the most sense. `score` rates one reading (something loggable, real words);
+ * readings of upside-down or sideways ink are rarely anything, so the upright turn usually wins clearly. The
+ * recognizer's own agreement (several of its top guesses saying the same thing) breaks ties, and `prefer` (the turn
+ * already locked in) gets a small edge so the angle does not flicker between reads.
+ */
+export function pickTurn(results: { turn: Turn; cands: string[] }[], score: (text: string) => number, prefer: Turn | null): { turn: Turn; text: string; margin: number } | null {
+  const bare = (c: string) => c.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const rated = results
+    .filter((r) => r.cands.length)
+    .map((r) => {
+      const top = r.cands[0].trim();
+      const agree = r.cands.slice(1, 5).filter((c) => bare(c) === bare(top)).length;
+      return { turn: r.turn, text: top, value: score(top) + agree * 0.4 + (r.turn === prefer ? 0.6 : 0) };
+    })
+    .sort((a, b) => b.value - a.value);
+  if (!rated.length) return null;
+  return { turn: rated[0].turn, text: rated[0].text, margin: rated[0].value - (rated[1]?.value ?? 0) };
+}

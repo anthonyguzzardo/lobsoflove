@@ -22,7 +22,6 @@ const circle=sample(u=>{const a=-Math.PI/2+u*Math.PI*2,r=169+Math.sin(a*3)*2+Mat
 const seams=[-1,1].map(side=>sample(u=>{const y=-137+274*u;return [450+side*(99-66*Math.sin(Math.PI*u)),445+y];}));
 
 const line=(a,b,n=35)=>sample(u=>[mix(a[0],b[0],u),mix(a[1],b[1],u)],n);
-const letter=side=>{const x=450+side*255;return [...line([x,239],[x+side*3,646],80),...sample(u=>[x+side*3-side*155*u,646+Math.sin(u*Math.PI)*3],45)];};
 // Silhouettes follow FighterAvatar: a single goblin body and the compact Serve Bot.
 function friend(kind,x,y,t,active,side,celebrate,effort=0,scale=.56){
  const hop=active?Math.max(0,Math.sin(t*6+side))*9:celebrate?Math.max(0,Math.sin(t*8))*15:0;
@@ -59,29 +58,41 @@ for(const char of 'LOBS OF LOVE'){
  pen+=53;
 }
 const teams=[['goblin','grunter','rabbit'],['bot','wall','ghost']];
-function teamPose(side,t){
- const delay=side<0?0:.7,push=ease((t-10-delay)/3),lift=ease((t-13-delay)/3.7),settle=Math.max(0,t-16.7-delay);
- const wobble=settle>0?Math.sin(settle*8)*Math.exp(-settle*2.1)*.11:0;
- return {x:mix(side<0?65:835,450+side*258,push),y:mix(side<0?595:675,646,push),angle:-side*(Math.PI/2*(1-lift)+wobble),push,lift};
-}
 function assemble(t,fade,titleTime=t){
  const crew=[];
  for(const side of [-1,1]){
- const pose=teamPose(side,t),reveal=ease((t-7.5-(side>0?.7:0))/1.2);
- const local=letter(side).map(p=>[p[0]-(450+side*258),p[1]-646]);
- ctx.save();ctx.translate(pose.x,pose.y);ctx.rotate(pose.angle);if(side>0){const flip=ease((t-20)/2.3);ctx.translate(0,-Math.sin(flip*Math.PI)*16);ctx.scale(-Math.cos(flip*Math.PI),1);}stroke(local,reveal,side<0?colors[0]:colors[1],32,side<0?0:1,fade,t);ctx.restore();
  for(let i=0;i<3;i++){
- const gather=ease((t-8.5-i*.18)/1.4),park=ease((t-19-i*.15)/2);
- const workingX=pose.x-side*(45+i*69),workingY=pose.y+64+(i%2)*9;
+ // The innermost friend leads each group in from the edge of the canvas.
+ const start=10+(2-i)*1.1+(side>0?.65:0),progress=ease((t-start)/6);
  const finalX=side<0?207+i*94:693-i*94;
- const x=mix(mix(450+side*(285-i*66),workingX,gather),finalX,park);
- const y=mix(mix(806,workingY,gather),776,park);
- crew.push({kind:teams[side<0?0:1][i],x,y,side,i,visible:ease((t-8-i*.15)/.7),active:t>8.5&&t<21,scale:mix(.56,.476,park),celebrate:t>24+i*.12&&t<26+i*.12});
+ const x=mix(side<0?-65:965,finalX,progress);
+ const y=776+Math.sin(progress*Math.PI)*(12+i*6);
+ crew.push({kind:teams[side<0?0:1][i],x,y,side,i,visible:clamp((t-start)/.5),active:progress>0&&progress<1,celebrate:t>23+i*.2&&t<25+i*.2});
  }
  }
- crew.sort((a,b)=>a.y-b.y).forEach(c=>{ctx.save();ctx.globalAlpha=fade*c.visible;friend(c.kind,c.x,c.y,t+c.i*.22,c.active,-c.side,c.celebrate,(c.side>0&&t>20&&t<22.3?.85:0)+Math.sin(clamp((t-12.4-(c.side>0?.7:0))/4.3)*Math.PI),c.scale);ctx.restore();});
+ crew.sort((a,b)=>a.y-b.y).forEach(c=>{ctx.save();ctx.globalAlpha=fade*c.visible;friend(c.kind,c.x,c.y,t+c.i*.22,c.active,-c.side,c.celebrate,0,.476);ctx.restore();});
  titlePaths.forEach((p,i)=>stroke(p,ease((titleTime-23-i*.12)/.65),titleColors[i],9,2,fade,t));
- state={time:t,leftPlaced:t>=18.5,rightPlaced:t>=19.2,titleComplete:titleTime>=26,crew:crew.map(c=>({kind:c.kind,x:c.x,y:c.y})),poses:[teamPose(-1,t),teamPose(1,t)]};
+ state={time:t,crewSettled:t>=18.85,titleComplete:titleTime>=26,crew:crew.map(c=>({kind:c.kind,x:c.x,y:c.y}))};
+}
+// Small decorative score notes sit in the margins, outside the logo and crew.
+const scoreGlyphs={
+ '6':[[.77,.05],[.48,.13],[.25,.4],[.18,.73],[.3,.96],[.59,1],[.8,.83],[.74,.61],[.5,.52],[.24,.69]],
+ '4':[[.62,.04],[.13,.64],[.86,.64],[.65,.64],[.65,.99]],
+ '7':[[.12,.08],[.87,.08],[.55,.5],[.33,1]],
+ '5':[[.84,.06],[.25,.06],[.2,.49],[.52,.42],[.78,.58],[.77,.82],[.54,1],[.22,.93]],
+ '2':[[.15,.23],[.31,.06],[.62,.03],[.82,.22],[.72,.43],[.17,.97],[.86,.97]],
+ '-':[[.24,.54],[.76,.51]],
+};
+const scoreNotes=[['6-4',68,340,-.19,'#8b697a'],['7-5',770,251,.16,'#657d90'],['6-2',67,606,.12,'#718266'],['7-6',777,625,-.17,'#9b7659']];
+function drawScoreNotes(t,fade){
+ scoreNotes.forEach(([text,x,y,angle,color],index)=>{
+  const reveal=ease((t-3-index*.55)/1.5);if(!reveal)return;
+  ctx.save();ctx.translate(x,y);ctx.rotate(angle);ctx.globalAlpha=fade*.62;ctx.strokeStyle=color;ctx.lineWidth=2.7;ctx.lineCap='round';ctx.lineJoin='round';
+  [...text].forEach((char,j)=>{const pts=scoreGlyphs[char],progress=clamp(reveal*3-j);if(!progress)return;
+   ctx.save();ctx.beginPath();ctx.rect(j*24-4,-4,26*progress+4,38);ctx.clip();ctx.beginPath();
+   pts.forEach(([px,py],k)=>{const xx=j*24+px*21+py*2,yy=py*28;if(k===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy);});ctx.stroke();ctx.restore();
+  });ctx.restore();
+ });
 }
 function draw(t,options={}){
  ctx.fillStyle='#eee9df';ctx.fillRect(0,0,size,size);
@@ -89,16 +100,20 @@ function draw(t,options={}){
  const fade=1-ease((t-34)/2),arrive=ease((t-5)/3);
  ctx.save();ctx.globalAlpha=fade;
  // Broad colored gestures arrive first, then leave room for the ball.
- for(let i=0;i<curls.length;i++){const s=curls[i];stroke(s.pts,ease((t-s.delay)/3.7),s.color,s.width*(options.icon?1.12:1),s.pattern,(options.icon?.38:1-arrive*.82)*fade,t);}
+ for(let i=0;i<curls.length;i++){
+ const s=curls[i];
+ const pts=options.icon?s.pts.map(([x,y])=>{const dx=x-450,dy=y-445,r=Math.hypot(dx,dy),out=211+18*Math.log1p(Math.exp((r-211)/18));return [450+dx*out/r,445+dy*out/r];}):s.pts;
+ stroke(pts,ease((t-s.delay)/3.7),s.color,s.width*(options.icon?1.25:1),s.pattern,(options.icon?.60:1-arrive*.82)*fade,t);
+ }
  const bounce=t>10?Math.sin((t-10)*2.3)*Math.exp(-(t-10)*.45)*13:0;
  ctx.save();ctx.translate(0,-bounce);
- ctx.globalAlpha=fade*arrive;ctx.fillStyle=options.icon?'#c1d35d':'#c7d96c';ctx.beginPath();circle.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();ctx.fill();ctx.globalAlpha=fade;
- stroke(circle,ease((t-4)/3.2),options.icon?'#447e62':'#51966f',options.icon?15:13,2,fade,t);
- for(let i=0;i<2;i++)stroke(seams[i],ease((t-7-i*.6)/1.7),'#fff5d9',12,2,fade,t);
+ ctx.globalAlpha=fade*arrive;ctx.fillStyle=options.icon?'#c6d958':'#c7d96c';ctx.beginPath();circle.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();ctx.fill();ctx.globalAlpha=fade;
+ stroke(circle,ease((t-4)/3.2),options.icon?'#35694f':'#51966f',options.icon?17:13,2,fade,t);
+ for(let i=0;i<2;i++)stroke(seams[i],ease((t-7-i*.6)/1.7),'#fff5d9',options.icon?17:12,2,fade,t);
  // Small handmade marks keep the filled ball lively without crowding it.
  ctx.globalAlpha=arrive*fade*.4;ctx.fillStyle='#6c9c53';for(let i=0;i<15;i++){const x=450+Math.sin(i*14.3)*65,y=445+Math.cos(i*8.7)*110;ctx.beginPath();ctx.ellipse(x,y,2.5,1.2,-.5,0,Math.PI*2);ctx.fill();}
  ctx.restore();ctx.restore();
- if(options.icon){for(const side of [-1,1])stroke(letter(side),1,side<0?'#df5d51':'#407eb9',38,side<0?0:1,1,30);}else assemble(t,fade,options.titleTime??t);
+ if(!options.icon){drawScoreNotes(t,fade);assemble(t,fade,options.titleTime??t);}
  ctx.restore();
 
 }

@@ -7,7 +7,13 @@
     "production": {
       "distribution": "store",
       "autoIncrement": true,
-      "ios": { "resourceClass": "m-medium" }
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://cmezhntsbcazbeshupxr.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_2QpvLej6Ws6aywTgjyTSZg_gg94hnG4"
+      }
     }
   },
   "submit": {

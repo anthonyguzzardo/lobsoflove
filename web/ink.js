@@ -70,10 +70,10 @@ const box = (pts) => {
 const len = (pts) => { let s = 0; for (let i = 1; i < pts.length; i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return s; };
 const dur = (pts) => pts[pts.length - 1][2] - pts[0][2];
 
-function isFlick(pts) {
+function isFlick(pts, width = W) {
   const dx = pts[pts.length - 1][0] - pts[0][0];
   const dy = pts[pts.length - 1][1] - pts[0][1];
-  return dur(pts) < 200 && dx > W * 0.55 && Math.abs(dy) < dx * 0.3;
+  return dur(pts) < 200 && dx > width * 0.55 && Math.abs(dy) < dx * 0.3;
 }
 /** Starts at the left edge and drags right: the iOS "back" motion, done with one finger. */
 function isEdgeSwipe(pts) {
@@ -105,7 +105,7 @@ function closeChar() {
   if (!S.group.length) return;
   const t0 = S.group[0].pts[0][2];
   post({ type: 'char', w: W, h: H, strokes: S.group.map((s) => s.pts.map(([x, y, t]) => [x, y, t - t0])) });
-  S.fading.push({ strokes: S.group, born: now(), to: lineEnd() });
+  S.fading.push({ strokes: S.group, born: now(), to: TURN ? undefined : lineEnd() });
   S.group = [];
   S.pending++;
   armIdle();
@@ -122,12 +122,13 @@ function endStroke(st) {
   if (isEdgeSwipe(pts)) { fadeOut([st]); post({ type: 'exit' }); return; }
 
   if (S.mode === 'card') {
-    if (S.hits.length && isCircle(pts)) {
-      const b = box(pts);
+    const up = pts.map(toUser); // card hits and shapes are in the writer's frame
+    if (S.hits.length && isCircle(up)) {
+      const b = box(up);
       const hit = S.hits.find((h) => b.cx > h.x0 - 12 && b.cx < h.x1 + 12 && b.cy > h.y0 - 24 && b.cy < h.y1 + 24) ?? S.hits.find((h) => b.x0 < h.x1 && b.x1 > h.x0 && b.y0 < h.y1 && b.y1 > h.y0);
       if (hit) { fadeOut([st]); post({ type: 'choose', field: hit.field, value: hit.value }); return; }
     }
-    if (isCheck(pts)) {
+    if (isCheck(up)) {
       fadeOut([st]);
       if (S.card.canSave) post({ type: 'save' });
       else { S.nudge = now(); post({ type: 'nope' }); }
@@ -138,13 +139,24 @@ function endStroke(st) {
     post({ type: 'more' });
   }
 
-  if (isFlick(pts)) { fadeOut([st]); closeChar(); post({ type: 'space' }); armIdle(); return; }
+  if (isFlick(pts.map(toUser), UW())) { fadeOut([st]); closeChar(); post({ type: 'space' }); armIdle(); return; }
   S.group.push(st);
   clearTimeout(charTimer);
-  // Written across the screen (wider than tall): a word, not one stacked letter. Pen lifts between its letters are
-  // longer, so wait longer before calling it done, or the word gets cut into pieces.
-  const b = box(S.group.flatMap((x) => x.pts));
-  charTimer = setTimeout(closeChar, b.w > b.h * 1.3 && b.w > 90 ? WORD_GAP : CHAR_GAP);
+  // Written across (a word, not one stacked letter): each new stroke lands in a new spot instead of on top of the
+  // last ones. Pen lifts between a word's letters are longer, so wait longer before calling it done. Judged by where
+  // strokes land, not by the shape's width, so a stacked letter written sideways is still one letter.
+  charTimer = setTimeout(closeChar, movesOn(S.group) ? WORD_GAP : CHAR_GAP);
+}
+
+/** True when the newest stroke landed mostly outside the strokes before it: the writer is moving along a line. */
+function movesOn(group) {
+  if (group.length < 2) return false;
+  const a = box(group[group.length - 1].pts);
+  const b = box(group.slice(0, -1).flatMap((x) => x.pts));
+  const pad = 6; // dots and dashes have no area of their own
+  const ix = Math.max(0, Math.min(a.x1 + pad, b.x1 + pad) - Math.max(a.x0 - pad, b.x0 - pad));
+  const iy = Math.max(0, Math.min(a.y1 + pad, b.y1 + pad) - Math.max(a.y0 - pad, b.y0 - pad));
+  return (ix * iy) / ((a.w + 2 * pad) * (a.h + 2 * pad)) < 0.3;
 }
 
 function dropCard() { if (S.card) { S.cardGone = now(); S.mode = 'write'; } }
@@ -210,7 +222,7 @@ cv.addEventListener('pointerdown', (e) => {
     return;
   }
   if (fingers.size > 2 || two) return;
-  const pen = S.mode === 'write' && !S.live ? hitPen(e.clientX, e.clientY) : 0;
+  const pen = S.mode === 'write' && !S.live ? (() => { const [ux, uy] = toUser([e.clientX, e.clientY]); return inUserDims(() => hitPen(ux, uy)); })() : 0;
   if (pen) { fingers.delete(e.pointerId); PEN = pen; post({ type: 'pen', size: pen }); return; }
   clearTimeout(charTimer); clearTimeout(idleTimer);
   S.live = { id: e.pointerId, pts: [[e.clientX, e.clientY, now()]] };
@@ -290,7 +302,36 @@ const drawInk = (strokes, alpha = 1) => drawBrush(g, strokes, alpha, PEN);
 // Paper grain: one noise tile, laid over the whole page at low strength.
 const grain = paperGrain(g);
 
-const LINE_Y = () => Math.max(TOP, 20) + 54;
+const LINE_Y = () => (TURN ? 20 : Math.max(TOP, 20)) + 54;
+
+// ─── Facing the writer ─────────────────────────────────────────────────────────
+// The app finds the turn the writing is at (src/app/ink.tsx reads the line at all four turns). Once it knows, the line,
+// the card, the hints and the pen dots are drawn facing the writer, and check marks and circles are judged from their
+// side. Ink itself always stays exactly where the finger put it.
+let TURN = 0;          // degrees clockwise that turn the writing upright
+let turnBorn = 0;
+window.setTurn = (t) => { if (t !== TURN) { TURN = t; turnBorn = now(); } };
+const side = () => TURN === 90 || TURN === 270;
+const UW = () => (side() ? H : W);
+const UH = () => (side() ? W : H);
+/** A screen point in the writer's frame. */
+function toUser([x, y, ...rest]) {
+  const r = (TURN * Math.PI) / 180, c = Math.round(Math.cos(r)), s = Math.round(Math.sin(r));
+  const dx = x - W / 2, dy = y - H / 2;
+  return [UW() / 2 + dx * c - dy * s, UH() / 2 + dx * s + dy * c, ...rest];
+}
+/** Runs `fn` with W and H set to the writer's width and height (no drawing transform). */
+function inUserDims(fn) { const sw = W, sh = H; W = UW(); H = UH(); try { return fn(); } finally { W = sw; H = sh; } }
+/** Runs `draw` in the writer's frame: W and H are the writer's width and height while it runs. */
+function inUserFrame(draw) {
+  const sw = W, sh = H, uw = UW(), uh = UH();
+  g.save();
+  g.translate(sw / 2, sh / 2);
+  g.rotate((-TURN * Math.PI) / 180);
+  g.translate(-uw / 2, -uh / 2);
+  W = uw; H = uh;
+  try { draw(); } finally { W = sw; H = sh; g.restore(); }
+}
 const LINE_FONT = `700 32px ${HAND}`;
 function lineEnd() {
   g.font = LINE_FONT;
@@ -480,16 +521,17 @@ function frame() {
   g.fillRect(0, 0, W, H);
   g.fillStyle = grain;
   g.fillRect(0, 0, W, H);
-  drawLine(t);
-  drawHints(t);
-  drawCard(t);
+  const fadeIn = turnBorn ? clamp01((t - turnBorn) / 260) : 1;
+  g.globalAlpha = fadeIn;
+  inUserFrame(() => { drawLine(t); drawHints(t); drawCard(t); });
+  g.globalAlpha = 1;
   drawFading(t);
   drawInk(S.group);
   if (S.live) drawInk([S.live]);
-  drawLegend();
-  drawPens();
+  g.globalAlpha = fadeIn;
+  inUserFrame(() => { drawLegend(); drawPens(); drawStamp(t); });
+  g.globalAlpha = 1;
   drawHold(t);
-  drawStamp(t);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -505,9 +547,14 @@ const GLYPHS = {
   ' ': 'flick',
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let DEMO_TURN = 0; // write the demo as if the paper were turned: the app must turn it back by DEMO_TURN
 async function demoStroke(poly) {
   const size = Math.min(W * 0.7, H * 0.4);
   const ox = (W - size) / 2, oy = H * 0.3;
+  if (DEMO_TURN) {
+    const r = (-DEMO_TURN * Math.PI) / 180, c = Math.round(Math.cos(r)), sn = Math.round(Math.sin(r));
+    poly = poly.map(([x, y]) => [0.5 + (x - 0.5) * c - (y - 0.5) * sn, 0.5 + (x - 0.5) * sn + (y - 0.5) * c]);
+  }
   const pts = [];
   for (let i = 1; i < poly.length; i++) {
     const [ax, ay] = poly[i - 1], [bx, by] = poly[i];
@@ -520,6 +567,8 @@ async function demoStroke(poly) {
   for (const [x, y] of pts) { S.live.pts.push([x, y, now()]); await sleep(14); }
   const st = S.live; S.live = null; endStroke(st);
 }
+/** The demo, written sideways (the paper turned a quarter): the app should find the turn and face the card that way. */
+window.demoSideways = async () => { DEMO_TURN = 90; await window.demoInk('w 6-4 6-2', false); };
 window.demoInk = async (text = 'w 6-4 6-2', answer = true) => {
   await sleep(700);
   for (const ch of text) {

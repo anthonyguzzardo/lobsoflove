@@ -17,7 +17,7 @@ const emit = (file, name, html) => {
 // Opponent picker: the jewel case.
 const casts = ['wall', 'moon', 'bot', 'goblin', 'grunter', 'junk', 'comet', 'ghost', 'lobber', 'rabbit'];
 const art = Object.fromEntries(casts.map((c) => [c, 'data:image/jpeg;base64,' + readFileSync(`${root}assets/discs/${c}.jpg`).toString('base64')]));
-emit('case-html.ts', 'CASE_HTML', page({ css: 'body{background:#f6f5f2}', body: '<canvas id="c"></canvas>', pre: `window.DISC_ART=${JSON.stringify(art)};`, js: bundle('web/case.js') }));
+// (emitted below, after the home styles it shares)
 
 // Home: the diorama. One accent (clay #e2562f) on paper and ink; monospace throughout; a condensed face only on the banner.
 const homeCss = `
@@ -368,3 +368,43 @@ const scoreBody = `<canvas id="c"></canvas><div id="vig"></div><div id="grain"><
 ${homeBody.match(/<div id="enter"[\s\S]*?<\/svg><\/div><\/div><\/div>/)[0]}
 </div>`;
 emit('score-html.ts', 'SCORE_HTML', page({ css: scoreCss, body: scoreBody, js: bundle('web/score.js') }));
+
+// Opponent picker: the jewel case on the paper. Same ink, mono type and slide strip as home; the rival's color is the only other hue.
+const caseCss = homeCss + `
+#ui{padding-top:calc(env(safe-area-inset-top) + 56px)}
+#stage{flex:1;min-height:200px}
+/* Nameplate, as on the fighter screen: their ladder rank on a tab in their color, the name on ink. */
+#plate{display:flex;align-items:stretch;height:46px;border-radius:6px;overflow:hidden;background:var(--ink);box-shadow:0 5px 0 #000,0 10px 16px rgba(22,24,29,.22)}
+#rk{flex:none;display:flex;align-items:center;padding:0 11px;background:var(--pc,var(--clay));color:var(--ink);font:800 15px var(--mono);letter-spacing:.04em}
+#name{flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;color:var(--paper);font:800 22px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden}
+#name span,#rk span{display:inline-block;animation:pop .32s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes pop{0%{transform:translateY(10px) scale(.6);opacity:0}100%{transform:none;opacity:1}}
+/* Under the plate: their line (or what to do), and the head to head as a little scoreboard, you first. */
+#under{display:flex;align-items:center;gap:12px;margin:12px 2px 0;min-height:44px}
+#tag{flex:1;min-width:0;font:700 12px var(--mono);line-height:1.35;opacity:.75}
+#tag.in{animation:tagin .36s cubic-bezier(.16,1,.3,1) both}
+@keyframes tagin{0%{opacity:0;transform:translateY(6px)}100%{opacity:.75;transform:none}}
+#h2h{flex:none;display:grid;grid-template-columns:auto auto auto;grid-template-rows:auto auto;align-items:center;column-gap:4px;text-align:center}
+#h2h b{font:800 24px var(--mono);width:30px;height:34px;line-height:34px;border-radius:4px;background:var(--ink);color:var(--paper)}
+#h2h b+i+b{background:#fffdf8;color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
+#h2h i{font:800 16px var(--mono);font-style:normal;opacity:.5}
+#h2h span{grid-column:1/4;font:800 9.5px var(--mono);letter-spacing:.12em;margin-top:4px;opacity:.6}
+#h2h.none b{opacity:.25}
+/* The rack: every rival's disc in a row. The one in the case is lifted, spinning, over an ink bar. */
+#rack{display:flex;justify-content:space-between;gap:2px;margin:16px 0 14px;pointer-events:auto}
+#rack .cd{all:unset;position:relative;flex:1;max-width:48px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;padding-bottom:7px}
+#rack img{width:min(40px,calc((100vw - 32px) / var(--n) - 6px));aspect-ratio:1;border-radius:50%;box-shadow:0 2px 0 rgba(22,24,29,.25),0 4px 8px rgba(40,34,26,.18);opacity:.6;transition:transform .32s cubic-bezier(.34,1.56,.64,1),opacity .2s}
+#rack .cd:after{content:"";position:absolute;bottom:0;width:22px;height:4px;border-radius:2px;background:var(--ink);opacity:0;transform:scaleX(.3);transition:opacity .2s,transform .32s cubic-bezier(.34,1.56,.64,1)}
+#rack .cd.on img{opacity:1;transform:translateY(-4px) scale(1.12);animation:turn 2.4s linear infinite}
+#rack .cd.on:after{opacity:1;transform:none}
+@keyframes turn{to{rotate:360deg}}
+#enter{margin-bottom:8px}
+`;
+const caseBody = `<canvas id="c"></canvas><div id="vig"></div><div id="grain"></div><div id="ui">
+<div id="stage"></div>
+<div id="plate"><div id="rk"></div><div id="name"></div></div>
+<div id="under"><div id="tag"></div><div id="h2h"><b id="hw"></b><i>-</i><b id="hl"></b><span id="hcap"></span></div></div>
+<div id="rack" aria-label="Opponents"></div>
+<div id="enter" role="slider" aria-label="Slide the ball to load the disc"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>
+</div>`;
+emit('case-html.ts', 'CASE_HTML', page({ css: caseCss, body: caseBody, pre: `window.DISC_ART=${JSON.stringify(art)};`, js: bundle('web/case.js') }));
