@@ -15,6 +15,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 import { post } from './lib/bridge.js';
 import { createDock } from './lib/dock.js';
+import { SoftBody } from './jelly-core.js';
 import { createHero } from './lib/hero.js';
 import { createSlide } from './lib/slide.js';
 import { sp, spring } from './lib/spring.js';
@@ -103,7 +104,164 @@ scene.add(new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xffffff, 
 
 let venues = [];
 const islands = [];
-const st = { at: 0, target: 0, hop: null, clock: 0, muted: false, cam: { x: sp(), y: sp(), z: sp() }, diving: false, dive: sp(), jump: null };
+const st = { at: 0, target: 0, hop: null, clock: 0, muted: false, cam: { x: sp(), y: sp(), z: sp() }, diving: false, dive: sp(), jump: null, you: sp(1) };
+
+// Presence (src/lib/presence.ts): who is on which island. Friends stand as small jellies on the tile beside the court; someone
+// coming later stands faint with their time over their head. Your beacon is a pennant in your color on the island you landed on.
+// mode 'meet' (from home): sliding lands you; sliding where you landed plays. mode 'pick' (from a match): sliding picks the court.
+let presence = { you: null, venues: {}, mode: 'meet', demo: false };
+const crowd = new Map(); // `${venue}|${name}` -> { body, holder, island, here, idleAt, tag }
+const SPOTS = [[0.45, 1.36], [-0.25, 1.36], [1.36, 0.45], [-0.95, 1.36], [1.36, -0.25], [1.36, -0.95]]; // later arrivals: outside, along the front edges
+// Who is here plays, so the format reads from where they stand (tile-local; +x is the baseline nearer the camera, the court is
+// 1.5 long and 0.69 wide). One serves; two rally baseline to baseline; three: the first here holds the far side as king, the next
+// challenges, the third waits on the sideline; four play doubles, one up and one back a side; anyone past four waits.
+const SLOTS = {
+  1: [[0.66, 0.08]],
+  2: [[-0.66, -0.08], [0.66, 0.08]],
+  3: [[-0.66, 0], [0.66, 0], [0.42, 0.43]],
+  4: [[-0.66, -0.16], [-0.28, 0.17], [0.66, 0.16], [0.3, -0.17]],
+};
+const WAIT = [[0.42, 0.43], [0.08, 0.43], [-0.26, 0.43]];
+const slotsFor = (n) => (n <= 4 ? SLOTS[n] || [] : [...SLOTS[4], ...WAIT.slice(0, n - 4)]);
+// Who hits to whom: two and three rally the first two; doubles goes crosscourt round the four.
+const RALLY = { 2: [0, 1], 3: [0, 1], 4: [2, 0, 3, 1] };
+const CORNER = new THREE.Vector3(SIDE / 2 - 0.3, 0, SIDE / 2 - 0.3); // where you stand on an island you have not landed on
+const FRIEND = 0.26; // a friend waiting outside the court
+const PLAYER = 0.2; // anyone in the court, sized to it (you shrink to match: YOU_IN)
+const YOU_IN = 0.5;
+const rallies = new Map(); // island index -> { ball, hitters, k, t }
+
+/** The sign on the island's right edge: what the headcount plays, in big type. Empty islands just show their name. */
+const signCache = new Map();
+function headcountTex(text, accent) {
+  const k = `${text}|${accent}`;
+  if (signCache.has(k)) return signCache.get(k);
+  const c = document.createElement('canvas');
+  c.width = 640; c.height = 96;
+  const g = c.getContext('2d');
+  g.fillStyle = '#16181d'; g.fillRect(0, 0, 640, 96);
+  g.fillStyle = accent; g.fillRect(0, 0, 640, 12);
+  g.fillStyle = accent; g.beginPath(); g.arc(44, 56, 13, 0, Math.PI * 2); g.fill();
+  let size = 44;
+  g.font = `800 ${size}px ui-monospace, Menlo, monospace`;
+  while (g.measureText(text).width > 540 && size > 22) { size -= 2; g.font = `800 ${size}px ui-monospace, Menlo, monospace`; }
+  g.fillStyle = '#fffdf0'; g.textBaseline = 'middle';
+  g.fillText(text, 76, 58);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  signCache.set(k, t);
+  return t;
+}
+let youColor = '#d7f205';
+const tagLayer = document.createElement('div');
+tagLayer.id = 'ptags';
+document.body.appendChild(tagLayer);
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+const pennant = (() => {
+  const g = new THREE.Group();
+  g.add(at(cyl(0.012, 0.014, 0.62, ink, 6), 0, 0.31, 0));
+  const cloth = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.26, -0.07, 0), new THREE.Vector3(0, -0.15, 0)]), new THREE.MeshBasicMaterial({ color: youColor, side: THREE.DoubleSide }));
+  cloth.position.y = 0.6;
+  g.add(cloth);
+  g.userData.cloth = cloth;
+  g.visible = false;
+  return g;
+})();
+
+/** Put everyone where the app says they are: add the new, drop the gone, and wake anyone whose time has come. */
+function syncCrowd() {
+  if (!islands.length) return;
+  const seen = new Set();
+  venues.forEach((v, i) => {
+    const room = presence.venues[v.id];
+    const people = room?.people || [];
+    const mine = presence.mode === 'meet' && presence.you === v.id;
+    const players = people.filter((p) => p.here).length + (mine ? 1 : 0);
+    const slots = slotsFor(players);
+    let inCourt = 0;
+    let outside = 0;
+    const hitters = [];
+    // The edge sign: the headcount when there is one, the place's name when there is not.
+    const u = islands[i].userData;
+    if (u.signMat) { const tex = room?.sign ? headcountTex(room.sign, v.accent) : null; u.signMat.map = tex || u.labelMat.map; u.signMat.userData.live = !!tex; u.signMat.needsUpdate = true; }
+    people.forEach((p) => {
+      const id = `${v.id}|${p.name}`;
+      seen.add(id);
+      let c = crowd.get(id);
+      if (!c) {
+        const body = new SoftBody({ cast: p.cast, color: p.color, edge: 0.14 });
+        body.group.scale.setScalar(FRIEND);
+        const holder = new THREE.Group();
+        holder.rotation.y = rad(45); // faces down the camera's diagonal, like yours
+        holder.add(body.group);
+        holder.traverse((o) => { o.userData.island = i; });
+        islands[i].add(holder);
+        const tag = document.createElement('div');
+        tagLayer.appendChild(tag);
+        c = { body, holder, island: i, here: null, idleAt: st.clock + 1 + Math.random() * 3, tag };
+        crowd.set(id, c);
+      }
+      const [x, z] = p.here ? slots[inCourt] : SPOTS[outside % SPOTS.length];
+      if (p.here) hitters[inCourt++] = { pos: new THREE.Vector3(x, 0, z), hit: () => { c.body.kick(0, 2.2, 0); } };
+      else outside += 1;
+      c.holder.position.set(x, 0, z);
+      c.body.group.scale.setScalar(p.here ? PLAYER : FRIEND);
+      if (c.here === false && p.here) { c.body.kick(0, 5, 0); c.body.mood.happy = 1; } // they just got here
+      c.here = p.here;
+      c.body.mat.transparent = !p.here;
+      c.body.mat.opacity = p.here ? 1 : 0.32;
+      c.body.mat.depthWrite = p.here;
+      c.body.mat.needsUpdate = true;
+      c.body.face.visible = p.here;
+      c.tag.className = `ptag${p.here ? '' : ' later'}`;
+      c.tag.textContent = p.here ? p.name : `${p.name} ${p.time}`;
+    });
+    // You: on an island you landed on you take the next place in the court; anywhere else you stand in the corner.
+    const stand = mine ? new THREE.Vector3(slots[inCourt][0], 0, slots[inCourt][1]) : CORNER.clone();
+    if (mine) hitters[inCourt] = { pos: stand.clone(), hit: () => { H.hero.kick(0, 2.6, 0); } };
+    if (!u.stand.equals(stand)) {
+      const from = standOn(i);
+      u.stand.copy(stand);
+      // Already standing here: hop to the new spot instead of snapping to it.
+      if (st.at === i && !st.hop && !st.diving) { const b = u.base.clone().add(stand); st.hop = { from, b, to: i, t: 0, pushed: false, dur: H.jump(from, b) }; post({ type: 'hop' }); }
+    }
+    // The rally: a ball between whoever is hitting. One player alone serves into the far box.
+    const order = players >= 2 ? (RALLY[Math.min(players, 4)] || []).map((k) => hitters[k]).filter(Boolean) : hitters.length ? [hitters[0], { pos: new THREE.Vector3(-0.35, 0, -0.12), hit: () => {} }] : [];
+    let r = rallies.get(i);
+    if (order.length >= 2) {
+      if (!r) { const ballMesh = ball(0.045, new THREE.MeshBasicMaterial({ color: 0xe4ff1a })); islands[i].add(ballMesh); r = { ball: ballMesh, k: 0, t: Math.random() }; rallies.set(i, r); }
+      r.hitters = order;
+      r.serve = players === 1;
+      r.k %= order.length;
+    } else if (r) { islands[i].remove(r.ball); rallies.delete(i); }
+  });
+  for (const [id, c] of crowd) {
+    if (seen.has(id)) continue;
+    islands[c.island].remove(c.holder);
+    c.body.geo.dispose();
+    c.tag.remove();
+    crowd.delete(id);
+  }
+  const b = venues.findIndex((v) => v.id === presence.you);
+  if (pennant.parent) pennant.parent.remove(pennant);
+  pennant.visible = b >= 0 && presence.mode === 'meet';
+  if (pennant.visible) { pennant.position.set(1.62, 0, 0.98); islands[b].add(pennant); }
+}
+
+/** Land on the island you are on (or headed for): that is the beacon. Everyone already there says hello. */
+function land() {
+  const v = venues[st.target];
+  if (!v) return;
+  presence.you = v.id;
+  post({ type: 'beacon', id: v.id });
+  for (const c of crowd.values()) if (c.island === st.target && c.here) { setTimeout(() => { c.body.kick(0, 4.5, 0); c.body.mood.happy = 0.9; }, 200 + Math.random() * 300); }
+  syncCrowd();
+  paint();
+}
+
+window.setPresence = (p) => { presence = { ...presence, ...p }; syncCrowd(); if (islands.length) paint(); };
 
 const line = new THREE.MeshBasicMaterial({ color: 0xfffdf0 });
 const SURROUND = mat(0x3f8f5a);
@@ -1076,6 +1234,7 @@ const WORLD = {
 
 function build(data) {
   H.set(data);
+  if (data.color) { youColor = data.color; pennant.userData.cloth.material.color.set(data.color); }
   venues = window.VENUES.map((v) => ({ ...v, ...(data.venues.find((d) => d.id === v.id) || {}) }));
   const L = COURT_L;
   const W = COURT_L * (10.97 / 23.77);
@@ -1090,8 +1249,9 @@ function build(data) {
     const text = `${String(i + 1).padStart(2, '0')} ${v.short}`;
     const faces = [label(text, false, v.accent), label(text, true, v.accent)];
     const labelMat = new THREE.MeshBasicMaterial({ map: faces[0] });
-    for (const [x, z, ry] of [[0, SIDE / 2 + 0.002, 0], [SIDE / 2 + 0.002, 0, Math.PI / 2]]) {
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(SIDE - 0.3, 0.3), labelMat);
+    const signMat = new THREE.MeshBasicMaterial({ map: faces[0] }); // the right edge: the headcount sign (syncCrowd), else the name
+    for (const [x, z, ry, m] of [[0, SIDE / 2 + 0.002, 0, labelMat], [SIDE / 2 + 0.002, 0, Math.PI / 2, signMat]]) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(SIDE - 0.3, 0.3), m);
       p.position.set(x, -0.2, z); p.rotation.y = ry; g.add(p);
     }
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(SIDE - 0.2, SIDE - 0.2), new THREE.MeshBasicMaterial({ color: new THREE.Color(v.accent), transparent: true, opacity: 0, depthWrite: false }));
@@ -1160,7 +1320,7 @@ function build(data) {
     const end = toWorld(L / 2 - 0.06, count > 1 ? (count - 1) / 2 * pitch : 0).multiplyScalar(scaleA);
     const spot = end.dot(CAM) > 0 ? end : end.multiplyScalar(-1);
     g.traverse((o) => { o.userData.island = i; });
-    g.userData = { anim, boardMeshes, i, base, period: 3.6 + (i % 3) * 0.6, phase: i * 1.7, dip: sp(), sink: sp(), glow: 0, world, rise: sp(), size: sp(i === 0 ? 1 : AWAY), pad, labelMat, faces, boards, spot: spot.setY(0.04), shadow: blob(SIDE * 1.9, 0.5), stand: new THREE.Vector3(SIDE / 2 - 0.3, 0, SIDE / 2 - 0.3) };
+    g.userData = { anim, boardMeshes, i, base, period: 3.6 + (i % 3) * 0.6, phase: i * 1.7, dip: sp(), sink: sp(), glow: 0, world, rise: sp(), size: sp(i === 0 ? 1 : AWAY), pad, labelMat, signMat, faces, boards, spot: spot.setY(0.04), shadow: blob(SIDE * 1.9, 0.5), stand: CORNER.clone() };
     scene.add(g, g.userData.shadow);
     islands.push(g);
   });
@@ -1171,13 +1331,20 @@ function build(data) {
   const s0 = islands[0].userData.base;
   st.cam.x.x = s0.x; st.cam.y.x = s0.y; st.cam.z.x = s0.z;
   dock = createDock({ slots: venues.map((v, k) => ({ i: k, label: DOCK_LABEL[v.key] || v.short, color: v.accent })), onPick: (k) => go(k), post, at: st.target });
+  syncCrowd();
   paint();
   post({ type: 'stage', id: venues[0].id, anthem: venues[0].anthem });
 }
 
 
 // The one control on the page is the slide strip (web/lib/slide.js): slide the ball down the court to jump in.
-const slide = createSlide({ post, onSlid: () => { H.cheer(); post({ type: 'slid' }); setTimeout(enter, 260); } });
+// From home the slide first lands you (your beacon); slid again on the island you landed on, it jumps into the court to play.
+const slide = createSlide({ post, onSlid: () => {
+  H.cheer();
+  post({ type: 'slid' });
+  if (presence.mode === 'meet' && venues[st.target] && presence.you !== venues[st.target].id) setTimeout(land, 200);
+  else setTimeout(enter, 260);
+} });
 
 function paint() {
   const v = venues[st.target];
@@ -1193,7 +1360,20 @@ function paint() {
   $('count').querySelector('b').textContent = String(v.courts.length);
   // Stats only once there is something to say; an empty record is noise.
   $('blurb').textContent = v.played ? [`${v.played} played here`, v.king ? `king: ${v.king}` : null, `you ${v.rec}`].filter(Boolean).join(' · ') : '';
-  slide.setKey(String(st.target + 1), 'JUMP IN', 'SLIDE TO PLAY HERE');
+  const room = presence.venues[v.id];
+  const mine = presence.you === v.id;
+  if (presence.mode !== 'meet') slide.setKey(String(st.target + 1), 'JUMP IN', 'SLIDE TO PLAY HERE');
+  else if (mine) slide.setKey(String(st.target + 1), 'PLAY', 'SLIDE TO KEEP SCORE');
+  else slide.setKey(String(st.target + 1), 'LAND HERE', presence.you ? 'MOVES YOUR BEACON HERE' : 'SLIDE WHEN YOU ARE READY TO PLAY');
+  // What the headcount plays now, and what changes next. The people themselves are in the court with their names over them.
+  const who = $('who');
+  if (who) {
+    who.innerHTML = presence.mode === 'meet' && room
+      ? `<div class="line">${esc(room.now)}${mine ? '<button id="leave">HOP OFF</button>' : ''}</div>${room.next ? `<div class="next">${esc(room.next)}</div>` : ''}${presence.demo && (room.people || []).length ? '<div class="demo">STAND-IN FRIENDS UNTIL REAL ACCOUNTS</div>' : ''}`
+      : '';
+    const leave = $('leave');
+    if (leave) leave.addEventListener('click', () => { presence.you = null; post({ type: 'leave' }); syncCrowd(); paint(); });
+  }
   dock?.mark(st.target);
   const sub = $('sub'); if (sub) sub.textContent = 'your six. the song is on the wall.';
 }
@@ -1261,7 +1441,12 @@ canvas.addEventListener('pointerup', (e) => {
       setMuted(!st.muted);
       return;
     }
-    if (hit && hit.object.userData.island != null) { const i = hit.object.userData.island; if (i === st.target) enter(); else go(i); }
+    if (hit && hit.object.userData.island != null) {
+      const i = hit.object.userData.island;
+      // Tapping the island you are on jumps in, but only where you have landed (or when picking a court): landing is the slide.
+      if (i !== st.target) go(i);
+      else if (presence.mode !== 'meet' || presence.you === venues[i].id) enter();
+    }
   } else if (Math.abs(dy) > 44 && Math.abs(dy) > Math.abs(dx)) go(st.target + (dy < 0 ? 1 : -1));
 });
 
@@ -1281,17 +1466,17 @@ function fighterAt() {
     const { from, b } = st.hop;
     const k = THREE.MathUtils.clamp((st.hop.t - H.crouch()) / (st.hop.dur - H.crouch()), 0, 1);
     // Between arenas there is nothing under it to shade.
-    return { p: H.along(st.hop.t), size: 1, shadow: k < 0.12 || k > 0.88 ? from.clone().lerp(b, k).setY(THREE.MathUtils.lerp(from.y, b.y, k) + 0.04) : null };
+    return { p: H.along(st.hop.t), size: st.you.x, shadow: k < 0.12 || k > 0.88 ? from.clone().lerp(b, k).setY(THREE.MathUtils.lerp(from.y, b.y, k) + 0.04) : null };
   }
   if (st.jump) {
     const k = THREE.MathUtils.clamp((st.jump.t - 0.09) / 0.5, 0, 1);
     const to = islands[st.at].position.clone().add(islands[st.at].userData.spot.clone().multiplyScalar(islands[st.at].userData.size.x));
     const p = st.jump.from.clone().lerp(to, k);
     p.y += 0.9 * 4 * k * (1 - k);
-    return { p, size: THREE.MathUtils.lerp(1, 0.36, k * k * (3 - 2 * k)), shadow: k >= 1 ? to.clone().setY(to.y + 0.01) : null };
+    return { p, size: THREE.MathUtils.lerp(st.you.x, 0.36, k * k * (3 - 2 * k)), shadow: k >= 1 ? to.clone().setY(to.y + 0.01) : null };
   }
   const p = standOn(st.at);
-  return { p, size: 1, shadow: p.clone().setY(p.y + 0.04) };
+  return { p, size: st.you.x, shadow: p.clone().setY(p.y + 0.04) };
 }
 
 function advance(dt) {
@@ -1325,7 +1510,24 @@ function advance(dt) {
     }
   }
   spring(st.dive, st.diving ? 1 : 0, dt, 1.0, 1);
+  // In the court you are player-sized like everyone else; out on the tile, full size.
+  spring(st.you, !st.diving && islands[st.at] && !islands[st.at].userData.stand.equals(CORNER) && (!st.hop || st.hop.to === st.at) ? YOU_IN : 1, dt, 2.2, 0.8);
   if (st.jump) st.jump.t += dt;
+  // Rallies: each shot flies 0.85 s on a low arc (a serve goes up first); the one it reaches swings, and sends it back.
+  for (const [i, r] of rallies) {
+    if (!islands[i].visible) continue;
+    r.t += dt / 0.85;
+    if (r.t >= 1) { r.t -= 1; r.k = (r.k + 1) % r.hitters.length; r.hitters[r.k].hit(); }
+    const a = r.hitters[r.k].pos;
+    const b = r.hitters[(r.k + 1) % r.hitters.length].pos;
+    const k = r.t;
+    r.ball.position.set(THREE.MathUtils.lerp(a.x, b.x, k), 0.14 + (r.serve && r.k === 0 ? 0.55 : 0.32) * 4 * k * (1 - k), THREE.MathUtils.lerp(a.z, b.z, k));
+  }
+  for (const c of crowd.values()) {
+    if (!islands[c.island].visible) continue;
+    if (c.here && st.clock > c.idleAt) { c.idleAt = st.clock + 4 + Math.random() * 4; c.body.kick((Math.random() - 0.5) * 2, 2 + Math.random() * 2, 0); }
+    c.body.simulate(dt, st.clock);
+  }
   H.step(dt, st.clock, fighterAt().p, st.hop ? st.hop.t : null, slide.charge); // carry the jelly along its path
   for (const g of islands) {
     const u = g.userData;
@@ -1374,6 +1576,7 @@ function pose() {
     u.shadow.material.opacity = 0.5 * (1 - u.sink.x);
     const lit = u.glow > 0.5 ? 1 : 0;
     if (u.labelMat.map !== u.faces[lit]) { u.labelMat.map = u.faces[lit]; u.labelMat.needsUpdate = true; }
+    if (!u.signMat.userData.live && u.signMat.map !== u.faces[lit]) { u.signMat.map = u.faces[lit]; u.signMat.needsUpdate = true; }
     u.shadow.position.set(g.position.x + 0.5, WORLD_Y + 0.12, g.position.z + 0.5);
   }
   const f = fighterAt();
@@ -1383,6 +1586,20 @@ function pose() {
   if (f.shadow) footShadow.position.copy(f.shadow);
   footShadow.scale.setScalar(f.size * 0.75);
   footShadow.material.opacity = 0.7;
+  for (const c of crowd.values()) if (islands[c.island].visible) c.body.render(t + c.island);
+  // Name tags over the people on the island you are looking at; the far islands are just little figures.
+  const showTags = !st.diving && !st.hop;
+  const tmp = new THREE.Vector3();
+  for (const c of crowd.values()) {
+    const on = showTags && c.island === st.target && islands[c.island].userData.size.x > 0.9;
+    c.tag.style.opacity = on ? '1' : '0';
+    if (!on) continue;
+    c.holder.getWorldPosition(tmp);
+    tmp.y += 0.62 * islands[c.island].userData.size.x;
+    tmp.project(camera);
+    c.tag.style.transform = `translate(${((tmp.x + 1) / 2) * window.innerWidth}px,${((1 - tmp.y) / 2) * window.innerHeight}px) translate(-50%,-100%)`;
+  }
+  if (pennant.visible) pennant.userData.cloth.rotation.y = 0.35 * Math.sin(t * 3.1);
   slide.render(t);
   dock?.render();
   dustGeo.attributes.position.needsUpdate = true;
@@ -1424,3 +1641,4 @@ window.demoLv = () => setTimeout(() => go(1), 800);
 window.demoBarnes = () => setTimeout(() => go(5), 800);
 window.demoCourts = () => { [1, 2, 3, 4].forEach((i, k) => setTimeout(() => go(i), 1500 + k * 2300)); setTimeout(() => go(2), 11500); setTimeout(() => window.demoSlide(0.95), 14000); };
 post({ type: 'ready' });
+window.courtsState = () => st; // test hook: headless stills read the hop and dive state

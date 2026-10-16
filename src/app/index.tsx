@@ -11,7 +11,7 @@ import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 import { featured, findPro, proLine, proMatch, tourLine, useTour } from '@/lib/tour';
 
-const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter' | 'write' | 'gear' | 'intro', Href> = { play: '/case', courts: '/courts', standings: '/standings', fighter: '/fighter', write: '/ink', gear: '/gear', intro: '/splash' };
+const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter' | 'write' | 'gear' | 'intro', Href> = { play: '/courts', courts: '/courts', standings: '/standings', fighter: '/fighter', write: '/ink', gear: '/gear', intro: '/splash' };
 
 /** Home: a diorama drawn by three.js in a WebView (web/home.js). Your fighter hops between tiles; each tile is a place in the app. */
 export default function Home() {

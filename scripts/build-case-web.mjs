@@ -154,10 +154,24 @@ const courtsCssExtra = `
 #ui{padding-top:calc(env(safe-area-inset-top) + 2px)!important}
 /* The top fade only backs the back button: the space above the arena shows the place around it. */
 #fade{background:linear-gradient(180deg,rgba(239,236,229,.8) 0%,rgba(239,236,229,0) 9%,rgba(239,236,229,0) 60%,rgba(239,236,229,.9) 74%,rgba(239,236,229,.97) 100%)}
+/* The card: everything under the island sits on solid paper, so no text is ever read against the map. */
+#head{background:#f4f1ea;border:2px solid #16181d;border-left:9px solid var(--accent,#e2562f);border-radius:6px;box-shadow:3px 4px 0 #16181d;padding:12px 14px 11px;margin-bottom:12px;pointer-events:auto}
+#head #h2{color:#3b3e47}
+/* Who is here: what the headcount plays, then what changes next. */
+#who{margin-top:10px}
+#who .line{display:flex;align-items:center;justify-content:space-between;gap:10px;font:800 15px var(--mono);letter-spacing:.04em;color:#16181d}
+#who .next{font:800 12.5px var(--mono);letter-spacing:.04em;color:#3b3e47;margin-top:4px}
+#who #leave{all:unset;cursor:pointer;flex:none;font:800 11px var(--mono);letter-spacing:.06em;color:#16181d;border:1.6px solid #16181d;border-radius:3px;padding:4px 7px}
+#who .demo{font:700 10px var(--mono);letter-spacing:.05em;color:#6b665d;margin-top:6px}
+#dock .lbl{opacity:.72}
+#ptags{position:fixed;inset:0;pointer-events:none;overflow:hidden;transition:opacity .25s}
+.ptag{position:absolute;left:0;top:0;font:800 9.5px var(--mono);letter-spacing:.06em;background:#16181d;color:#efece5;padding:3px 6px;border-radius:2px;white-space:nowrap;transition:opacity .2s}
+.ptag.later{background:rgba(239,236,229,.92);color:#16181d;border:1.4px dashed #16181d}
+body.dive #ptags{opacity:0}
 `;
 const courtsBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
 <div class="grow"></div>
-<div id="head"><div id="h1"></div><div id="h2"></div><div id="facts"><span class="fact" id="count"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" rx="1.5" fill="var(--accent,#e2562f)"/><path d="M11 1v12M5.5 3.5v7M16.5 3.5v7M5.5 7h11" stroke="#fffdf0" stroke-width="1.1" fill="none"/></svg><b></b><small>COURTS</small></span><span class="fact" id="lights"><svg viewBox="0 0 22 22" aria-hidden="true"><g class="rays"><path d="M4 9 1 7.5M4 12H1M5 15l-2.5 2" stroke="#e9b535" stroke-width="1.6" stroke-linecap="round"/></g><path d="M12 8v13" stroke="currentColor" stroke-width="1.8"/><rect class="head" x="5" y="3" width="11" height="6" rx="1.5"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b></b></span><button class="fact" id="listen" aria-label="Sound on. Tap to mute."><svg viewBox="0 0 22 22" aria-hidden="true"><path d="M3 8.5h4l5-4v13l-5-4H3z" fill="currentColor"/><g class="waves" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M15 8.2a4 4 0 0 1 0 5.6"/><path d="M17.6 5.8a7.5 7.5 0 0 1 0 10.4"/></g><path class="x" d="M15.5 8.5l5 5M20.5 8.5l-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b id="lstxt">SOUND</b></button></div><div id="blurb"></div></div>
+<div id="head"><div id="h1"></div><div id="h2"></div><div id="who"></div><div id="facts"><span class="fact" id="count"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" rx="1.5" fill="var(--accent,#e2562f)"/><path d="M11 1v12M5.5 3.5v7M16.5 3.5v7M5.5 7h11" stroke="#fffdf0" stroke-width="1.1" fill="none"/></svg><b></b><small>COURTS</small></span><span class="fact" id="lights"><svg viewBox="0 0 22 22" aria-hidden="true"><g class="rays"><path d="M4 9 1 7.5M4 12H1M5 15l-2.5 2" stroke="#e9b535" stroke-width="1.6" stroke-linecap="round"/></g><path d="M12 8v13" stroke="currentColor" stroke-width="1.8"/><rect class="head" x="5" y="3" width="11" height="6" rx="1.5"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b></b></span><button class="fact" id="listen" aria-label="Sound on. Tap to mute."><svg viewBox="0 0 22 22" aria-hidden="true"><path d="M3 8.5h4l5-4v13l-5-4H3z" fill="currentColor"/><g class="waves" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M15 8.2a4 4 0 0 1 0 5.6"/><path d="M17.6 5.8a7.5 7.5 0 0 1 0 10.4"/></g><path class="x" d="M15.5 8.5l5 5M20.5 8.5l-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b id="lstxt">SOUND</b></button></div><div id="blurb"></div></div>
 <div id="enter" role="slider" aria-label="Slide the ball to go in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>
 <div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div>
 </div>`;

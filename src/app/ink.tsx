@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
@@ -15,6 +15,7 @@ import { parseCommand, type Page } from '@/lib/ink-commands';
 import { decode, parse, type Answers, type Card, type Slot } from '@/lib/ink-parse';
 import { layoutLine, pickTurn, recognizeChar, TURNS, turnPiece, type Stroke, type Turn } from '@/lib/ink-recognize';
 import { addMatch, removeMatch, scoreLine, useMatches, winnerOf } from '@/lib/matches';
+import { useHoldTurn } from '@/lib/hold-turn';
 import { goBack } from '@/lib/nav';
 import { saveFighter, useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
@@ -28,6 +29,7 @@ type Msg =
   | { type: 'dropped' };
 
 const PEN_KEY = 'lol.ink.pen';
+const FLIP_KEY = 'lol.ink.flip';
 const PAGE_ROUTES: Record<Page, '/' | '/standings' | '/courts' | '/fighter' | '/gear' | '/case'> = { home: '/', standings: '/standings', courts: '/courts', fighter: '/fighter', gear: '/gear', case: '/case' };
 const INK_LAST = 'lol.ink.last';
 
@@ -109,6 +111,18 @@ export default function Ink() {
 
   // The turn the writing is at, once a read has found it (0 = upright). Live letters are read at this turn too.
   const turnLock = useRef<Turn | null>(null);
+  // How the phone is held (gravity). Held up, it decides the turn right away, like any app rotating; flat on a
+  // table it has no say and the writing decides. `flip` is learned if this device reports gravity the other way.
+  const [flip, setFlip] = useState(false);
+  useEffect(() => { AsyncStorage.getItem(FLIP_KEY).then((v) => setFlip(v === '1')).catch(() => {}); }, []);
+  const held = useHoldTurn(flip);
+  const heldRef = useRef<Turn | null>(null);
+  useEffect(() => {
+    heldRef.current = held;
+    if (held !== null && held !== turnLock.current) { turnLock.current = held; run(`window.setTurn(${held})`); }
+  }, [held, run]);
+  /** A clean page goes back to how the phone is held (or upright), so an old angle never sticks. */
+  const unlockTurn = () => { turnLock.current = heldRef.current; run(`window.setTurn(${heldRef.current ?? 0})`); };
   /** How much sense a reading makes: something loggable, with valid sets, in plain characters. Rotated ink rarely scores. */
   const readingScore = (t: string) => {
     const c = understand(t);
@@ -131,9 +145,14 @@ export default function Ink() {
           const cands = line ? (await recognizeChar(line.strokes, line.w, line.h)).map((c) => c.trim()).filter(Boolean) : [];
           return { turn, cands };
         }));
-        const pick = pickTurn(results, readingScore, turnLock.current);
+        const hold = heldRef.current;
+        const pick = pickTurn(results, readingScore, hold ?? turnLock.current, hold !== null ? 1.5 : 0.6);
         if (pick) {
           // Lock the angle once a turn wins clearly; nobody turns the phone mid-sentence.
+          // The writing clearly reads upside down from the sensor's answer: this device reports gravity the other way.
+          if (hold !== null && pick.margin >= 2 && pick.turn === (hold + 180) % 360) {
+            setFlip((f) => { AsyncStorage.setItem(FLIP_KEY, f ? '0' : '1').catch(() => {}); return !f; });
+          }
           if (pick.margin >= 1 && pick.turn !== turnLock.current) { turnLock.current = pick.turn; run(`window.setTurn(${pick.turn})`); }
           // Trust the recognizer's ranking. A lower reading only wins when it has the same letters and digits as the top one
           // and differs in spacing or punctuation ("6-46-2" vs "6-4 6-2"); it never gets to add or drop a character.
@@ -159,7 +178,7 @@ export default function Ink() {
     const d = c.draft;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     sfx('slam', 0.4);
-    const reset = () => { entries.current = []; answers.current = {}; card.current = null; };
+    const reset = () => { entries.current = []; answers.current = {}; card.current = null; unlockTurn(); };
     // The self-writing demo never touches real standings.
     if (params.demo) { run(`window.saved("DEMO: NOT SAVED")`); reset(); return; }
     if (d.kind === 'match' && d.opp) {
@@ -223,6 +242,7 @@ export default function Ink() {
       case 'erase':
         lineText.current = null;
         entries.current.pop();
+        if (!entries.current.length) unlockTurn();
         answers.current = {};
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         pushLine();

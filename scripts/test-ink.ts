@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { actionToLine, patchCard } from '../src/lib/ink-claude';
 import { parseCommand } from '../src/lib/ink-commands';
+import { turnFromGravity } from '../src/lib/ink-recognize';
 import { decode, parse, takeSets, takeTime, type Slot } from '../src/lib/ink-parse';
 import type { Fighter } from '../src/lib/roster';
 
@@ -111,5 +112,16 @@ assert.equal(ai.lines.at(-1), '@ Linda Vista Community Park');
 ai = fromAi({ action: 'log_gear', gear_item: 'RESTRING', cost: 32, note: '' });
 assert.ok(ai.draft.kind === 'gear' && ai.draft.cost === 32);
 assert.equal(actionToLine({ action: 'unknown', note: 'weather' }, aiCtx), null);
+
+// Which way the phone is held. iOS reports gravity itself (upright: y = -9.8), Android the reaction (y = +9.8).
+assert.equal(turnFromGravity(0, -9.8, 0, 'ios'), 0, 'upright');
+assert.equal(turnFromGravity(9.8, 0, 0, 'ios'), 90, 'turned clockwise: right edge down, the writer is up at the left');
+assert.equal(turnFromGravity(-9.8, 0, 0, 'ios'), 270, 'turned counterclockwise');
+assert.equal(turnFromGravity(0, 9.8, 0, 'ios'), 180, 'upside down');
+assert.equal(turnFromGravity(0, 9.8, 0, 'android'), 0, 'android reports the reaction');
+assert.equal(turnFromGravity(0, -9.8, 0, 'ios', true), 180, 'flip corrects a device that reports the other sign');
+assert.equal(turnFromGravity(0.3, -0.5, -9.7, 'ios'), null, 'flat on a table: no say');
+assert.equal(turnFromGravity(6.9, -6.9, 0, 'ios'), null, 'halfway between two turns: no say');
+assert.equal(turnFromGravity(2, -6, -7, 'ios'), 0, 'tilted back while writing, still upright');
 
 console.log('ink parse: all good');

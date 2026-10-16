@@ -59,6 +59,12 @@
           "cameraPermission": "LobsOfLove uses the camera so you can snap a photo at the start of a match.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "LobsOfLove uses motion to tell which way you are holding the phone, so your writing reads the right way up."
+        }
       ]
     ],
     "experiments": {

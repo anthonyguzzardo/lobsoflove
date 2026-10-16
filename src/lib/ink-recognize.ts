@@ -91,16 +91,42 @@ export function turnPiece(strokes: Stroke[], deg: Turn): Stroke[] {
  * recognizer's own agreement (several of its top guesses saying the same thing) breaks ties, and `prefer` (the turn
  * already locked in) gets a small edge so the angle does not flicker between reads.
  */
-export function pickTurn(results: { turn: Turn; cands: string[] }[], score: (text: string) => number, prefer: Turn | null): { turn: Turn; text: string; margin: number } | null {
+export function pickTurn(results: { turn: Turn; cands: string[] }[], score: (text: string) => number, prefer: Turn | null, preferBonus = 0.6): { turn: Turn; text: string; margin: number } | null {
   const bare = (c: string) => c.toLowerCase().replace(/[^a-z0-9]/g, '');
   const rated = results
     .filter((r) => r.cands.length)
     .map((r) => {
       const top = r.cands[0].trim();
       const agree = r.cands.slice(1, 5).filter((c) => bare(c) === bare(top)).length;
-      return { turn: r.turn, text: top, value: score(top) + agree * 0.4 + (r.turn === prefer ? 0.6 : 0) };
+      return { turn: r.turn, text: top, value: score(top) + agree * 0.4 + (r.turn === prefer ? preferBonus : 0) };
     })
     .sort((a, b) => b.value - a.value);
   if (!rated.length) return null;
   return { turn: rated[0].turn, text: rated[0].text, margin: rated[0].value - (rated[1]?.value ?? 0) };
 }
+
+/**
+ * The turn (degrees clockwise that make the writer's letters upright on the portrait screen), from gravity in device
+ * axes (x right, y toward the top edge, z out of the screen). null when the phone is near flat: lying on a table,
+ * gravity says nothing about where the writer is, so the writing decides instead.
+ *
+ * `down` is the direction gravity pulls, in device axes. iOS reports accelerationIncludingGravity as gravity itself
+ * (upright: y = -9.8); Android reports the reaction (upright: y = +9.8). `flip` corrects the sign if a device
+ * disagrees (src/app/ink.tsx learns it when the writing clearly reads 180 degrees from the sensor).
+ */
+export function turnFromGravity(x: number, y: number, z: number, os: string, flip = false): Turn | null {
+  const sign = (os === 'ios' ? 1 : -1) * (flip ? -1 : 1);
+  const dx = x * sign;
+  const dy = y * sign;
+  const g = Math.hypot(x, y, z) || 1;
+  if (Math.hypot(dx, dy) < g * 0.5) return null; // more than ~60 degrees from upright: flat enough to ignore
+  // The writer's up, in screen axes (x right, y down): opposite of gravity, with the device's y flipped.
+  const ux = -dx;
+  const uy = dy;
+  const a = (Math.atan2(uy, ux) * 180) / Math.PI; // -90 is the top of the screen
+  const turn = (((Math.round((-90 - a) / 90) * 90) % 360) + 360) % 360;
+  // Only commit near an axis (within 30 degrees); in between, keep whatever was there.
+  const off = Math.abs(((((-90 - a) - turn) % 360) + 540) % 360 - 180);
+  return off <= 30 ? (turn as Turn) : null;
+}
+

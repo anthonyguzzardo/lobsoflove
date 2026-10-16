@@ -128,6 +128,7 @@ function endStroke(st) {
       const hit = S.hits.find((h) => b.cx > h.x0 - 12 && b.cx < h.x1 + 12 && b.cy > h.y0 - 24 && b.cy < h.y1 + 24) ?? S.hits.find((h) => b.x0 < h.x1 && b.x1 > h.x0 && b.y0 < h.y1 && b.y1 > h.y0);
       if (hit) { fadeOut([st]); post({ type: 'choose', field: hit.field, value: hit.value }); return; }
     }
+    S.cardDim = false;
     if (isCheck(up)) {
       fadeOut([st]);
       if (S.card.canSave) post({ type: 'save' });
@@ -159,7 +160,7 @@ function movesOn(group) {
   return (ix * iy) / ((a.w + 2 * pad) * (a.h + 2 * pad)) < 0.3;
 }
 
-function dropCard() { if (S.card) { S.cardGone = now(); S.mode = 'write'; } }
+function dropCard() { S.cardDim = false; if (S.card) { S.cardGone = now(); S.mode = 'write'; } }
 
 // ─── Hold to erase ─────────────────────────────────────────────────────────────
 // A finger that lands and stays put is not writing. After HOLD_MS a ring has filled around it and the last character goes;
@@ -225,6 +226,11 @@ cv.addEventListener('pointerdown', (e) => {
   const pen = S.mode === 'write' && !S.live ? (() => { const [ux, uy] = toUser([e.clientX, e.clientY]); return inUserDims(() => hitPen(ux, uy)); })() : 0;
   if (pen) { fingers.delete(e.pointerId); PEN = pen; post({ type: 'pen', size: pen }); return; }
   clearTimeout(charTimer); clearTimeout(idleTimer);
+  // A finger landing on a card: a card that only says something ("keep writing", "reading it...") gets out of the way
+  // at once; a card waiting on a check or a circle dims while the finger moves, and comes back if it was a gesture.
+  if (S.mode === 'card' && S.card) {
+    if (!S.card.canSave && !S.card.questions.length) { dropCard(); post({ type: 'more' }); } else S.cardDim = true;
+  }
   S.live = { id: e.pointerId, pts: [[e.clientX, e.clientY, now()]] };
   startHold(e.pointerId, e.clientX, e.clientY);
 });
@@ -270,6 +276,7 @@ window.showCard = (card) => {
   const fresh = !S.card || S.mode !== 'card' || card.lines.join('|') !== S.card.lines.join('|');
   S.card = card; S.mode = 'card'; S.cardGone = 0;
   if (fresh) S.cardBorn = now();
+  S.cardDim = false;
 };
 window.hideCard = () => dropCard();
 window.saved = (text) => { S.stamp = { text, born: now() }; S.card = null; S.mode = 'write'; S.line = ''; };
@@ -279,8 +286,8 @@ window.clearAll = () => { S.line = ''; S.pending = 0; S.group = []; S.card = nul
 
 // The brush is shared: src/lib/brush.ts holds the look, web/lib/brush.js draws it on a canvas.
 // Pen size: three sizes, picked with the three dots under the line (top right). The app remembers the choice.
-const PENS = [11, 15, 19];
-let PEN = 15;
+const PENS = [9, 12, 15];
+let PEN = 12;
 window.setPen = (w) => { if (PENS.includes(w)) PEN = w; };
 const penSpot = (i) => [W - 30 - (PENS.length - 1 - i) * 34, LINE_Y() + 34];
 function hitPen(x, y) {
@@ -399,14 +406,21 @@ function revealText(text, x, y, font, color, t0, t, align = 'center') {
   g.save();
   g.font = font;
   g.textAlign = align;
-  const w = g.measureText(text).width;
+  // Never run off the sides: shrink to fit the page (to 45% at most), then shorten with an ellipsis.
+  const room = W - 32;
+  let shown = text;
+  let raw = g.measureText(shown).width;
+  while (raw * 0.45 > room && shown.length > 4) { shown = shown.slice(0, -2) + '…'; shown = shown.replace(/……$/, '…'); raw = g.measureText(shown).width; }
+  const sc = Math.min(1, room / Math.max(raw, 1));
+  const w = raw * sc;
   const k = ease.enter(clamp01((t - t0) / 360));
   const left = align === 'center' ? x - w / 2 : x;
   g.beginPath(); g.rect(left - 4, y - 60, (w + 8) * k, 80); g.clip();
+  g.translate(x, y); g.scale(sc, sc);
   g.fillStyle = color;
-  g.fillText(text, x, y);
+  g.fillText(shown, 0, 0);
   g.restore();
-  return { x0: left, x1: left + w, y0: y - 30, y1: y + 6 };
+  return { x0: left, x1: left + w, y0: y - 30 * sc, y1: y + 6 };
 }
 
 function drawCard(t) {
@@ -416,7 +430,7 @@ function drawCard(t) {
   if (S.cardGone) { alpha = 1 - clamp01((t - S.cardGone) / 180); if (alpha <= 0) { S.card = null; S.cardGone = 0; return; } }
   const shake = S.nudge ? Math.sin((t - S.nudge) / 22) * 8 * (1 - clamp01((t - S.nudge) / 360)) : 0;
   g.save();
-  g.globalAlpha = alpha;
+  g.globalAlpha = alpha * (S.cardDim ? 0.22 : 1);
   g.translate(shake, 0);
   const born = S.cardBorn;
   const cx = W / 2;

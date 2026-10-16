@@ -1,6 +1,7 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useCallback, useEffect, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 
 import { BackSwing } from '@/components/back-swing';
@@ -11,13 +12,15 @@ import { ANTHEMS, playAnthem, stopAnthem, toggleMute } from '@/lib/anthems';
 import { courtStats, pickCourt } from '@/lib/courts';
 import { useMatches } from '@/lib/matches';
 import { goBack } from '@/lib/nav';
+import { demoFriends, islandState, setBeacon, useBeacon } from '@/lib/presence';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 import type { ThemeId } from '@/lib/themes';
 
 /**
- * Courts: six favorite venues as to-scale islands, drawn by three.js in a WebView (web/courts.js).
- * Hopping onto a venue starts its song; "Play here" picks it.
+ * Courts: six favorite venues as to-scale islands, drawn by three.js in a WebView (web/courts.js). Hopping between them browses
+ * (and starts each one's song); sliding on one lands you there, which is your beacon: no form, you are just there. Friends stand
+ * on the islands they are at, faint ones for later. Sliding again where you landed goes to the scoreboard.
  */
 export default function Courts() {
   const params = useLocalSearchParams<{ from?: string; demo?: string }>();
@@ -26,6 +29,10 @@ export default function Courts() {
   const scene = useScene();
   const { run } = scene;
   const you = roster.find((f) => f.isYou) ?? roster[0];
+  const beacon = useBeacon();
+  // Re-read the clock every minute, so someone due at 6:30 walks on at 6:30.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 60 * 1000); return () => clearInterval(id); }, []);
   useEffect(() => stopAnthem, []);
   // Coming back from the opponent screen lands you beside the court you picked, not still inside it.
   useFocusEffect(useCallback(() => { run('window.undive && window.undive()'); }, [run]));
@@ -41,6 +48,15 @@ export default function Courts() {
     }),
   });
   useEffect(() => { run(`window.setCourts(${data})`); }, [run, data]);
+
+  const friends = demoFriends(now);
+  const presence = JSON.stringify({
+    you: beacon?.venue ?? null,
+    mode: params.from === 'match' ? 'pick' : 'meet',
+    demo: friends.some((p) => p.demo),
+    venues: Object.fromEntries(venues.map((v) => [v.id, islandState(friends.filter((p) => p.venue === v.key), beacon?.venue === v.id, v.courts.length, now)])),
+  });
+  useEffect(() => { run(`window.setPresence(${presence})`); }, [run, presence]);
 
   return (
     <View style={styles.root}>
@@ -59,10 +75,12 @@ export default function Courts() {
           else if (msg.type === 'mute') toggleMute();
           else if (msg.type === 'back') goBack(); // the page says there was no court to step out of
           else if (msg.type === 'link') { const a = ANTHEMS[msg.anthem as ThemeId]; if (a) void Linking.openURL(a.link); }
+          else if (msg.type === 'beacon') { setBeacon(msg.id); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('go', 0.8); }
+          else if (msg.type === 'leave') { setBeacon(null); sfx('swish', 0.5); }
           else if (msg.type === 'pick') {
             pickCourt(msg.id);
-            // Opened from a match in progress: hand the court back. Opened from home: go pick the opponent next.
-            if (params.from === 'match') goBack(); else router.push('/case');
+            // Opened from a match in progress: hand the court back. Otherwise the people you landed with are who you play: score it.
+            if (params.from === 'match') goBack(); else router.push('/match');
           }
         }}
       />
