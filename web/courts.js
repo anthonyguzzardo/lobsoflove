@@ -88,7 +88,7 @@ const blob = (size, opacity) => {
 };
 
 // Your fighter (web/lib/hero.js): the same jelly as home and the fighter screen. The arenas are far apart, so its hops reach further.
-const H = createHero(scene, { scale: 0.135, unit: STEP });
+const H = createHero(scene, { scale: 0.16, unit: STEP });
 const { mascot } = H;
 const footShadow = blob(0.4, 0.75);
 scene.add(footShadow);
@@ -739,8 +739,8 @@ function worldKit(B, air, seed0, clear) {
   const slab = (color, x0, x1, z0, z1, top, h = 0.3) => B.add(at(new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, h, z1 - z0), mat(color, { roughness: 1 })), (x0 + x1) / 2, top - h / 2, (z0 + z1) / 2));
   const k = {
     rnd,
-    /** The place's ground, out past where it fades into the paper. */
-    ground(color) { B.add(at(new THREE.Mesh(new THREE.PlaneGeometry(900, 900).rotateX(-Math.PI / 2), mat(color, { roughness: 1 })), 0, 0, -150)); },
+    /** The place's ground, out past where it fades into the paper (or only down to z = edge, where a cliff drops away). */
+    ground(color, edge = -600) { B.add(at(new THREE.Mesh(new THREE.PlaneGeometry(900, 300 - edge).rotateX(-Math.PI / 2), mat(color, { roughness: 1 })), 0, 0, (300 + edge) / 2)); },
     /** A flat patch of something on the ground (a lawn, a lot, a beach): its top sits 0.15 m up. */
     patch(color, x0, x1, z0, z1, top = 0.15) { slab(color, x0, x1, z0, z1, top); },
     /** A road along z (at x = c) or along x (at z = c), 9 m wide, with a dashed center line; `cars` drive both ways. */
@@ -820,7 +820,7 @@ function worldKit(B, air, seed0, clear) {
       });
       B.add(trunk, crown);
     },
-    /** Instanced buildings [x, z, w, d, h, wall, roof]: a hip roof, or flat when roof is null. Meters. */
+    /** Instanced buildings [x, z, w, d, h, wall, roof, y0]: a hip roof, or flat when roof is null; y0 lifts it (a roof cap). Meters. */
     houses(list) {
       const n = list.length;
       if (!n) return;
@@ -829,12 +829,12 @@ function worldKit(B, air, seed0, clear) {
       const roof = new THREE.InstancedMesh(new THREE.ConeGeometry(0.71, 1, 4).rotateY(Math.PI / 4).translate(0, 0.5, 0), mat(0xffffff, { roughness: 0.9 }), Math.max(1, roofs.length));
       const m = new THREE.Matrix4(); const q = new THREE.Quaternion(); const c = new THREE.Color();
       let r = 0;
-      list.forEach(([x, z, w, d, h, wall, rf], i) => {
-        m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(w, h, d));
+      list.forEach(([x, z, w, d, h, wall, rf, y0 = 0], i) => {
+        m.compose(new THREE.Vector3(x, y0, z), q, new THREE.Vector3(w, h, d));
         body.setMatrixAt(i, m);
         body.setColorAt(i, c.set(wall));
         if (rf != null) {
-          m.compose(new THREE.Vector3(x, h, z), q, new THREE.Vector3(w * 1.12, Math.min(w, d) * 0.4, d * 1.12));
+          m.compose(new THREE.Vector3(x, y0 + h, z), q, new THREE.Vector3(w * 1.12, Math.min(w, d) * 0.4, d * 1.12));
           roof.setMatrixAt(r, m);
           roof.setColorAt(r, c.set(rf));
           r += 1;
@@ -1025,20 +1025,20 @@ const WORLD = {
     // UCSD North: courts in a eucalyptus grove on the mesa. Up the screen the mesa ends at the sandstone cliffs: the Torrey
     // Pines Gliderport on the edge with paragliders riding the lift, Black's Beach and the Pacific below. Concrete campus
     // buildings in the trees, a bronze Triton in a plaza, North Torrey Pines Road down the right, jets overhead.
-    k.ground(0xb0a682);
-    const EDGE = -100; const CLIFF = 28;
+    const EDGE = -62; const CLIFF = 28;
+    k.ground(0xb0a682, EDGE);
     B.add(at(new THREE.Mesh(new THREE.BoxGeometry(900, CLIFF, 6), mat(0xd9a86c, { roughness: 1 })), 0, -CLIFF / 2, EDGE - 3));
     for (const [y, c] of [[-7, 0xc28e58], [-15, 0xe3b981], [-22, 0xb98250]]) B.add(at(new THREE.Mesh(new THREE.BoxGeometry(900, 2, 6.2), mat(c, { roughness: 1 })), 0, y, EDGE - 3));
     k.patch(0xe8d6ad, -450, 450, EDGE - 26, EDGE - 6, -CLIFF + 0.5); // Black's Beach
     const ocean = sea(B, -CLIFF, EDGE - 24);
     const lineup = surfers(B, [[-60, EDGE - 40], [-80, EDGE - 46], [-104, EDGE - 42], [-124, EDGE - 50], [-44, EDGE - 48]], -CLIFF, ocean.swell);
     // The gliderport: a dirt pad on the edge, a clubhouse, a windsock, its sign.
-    k.patch(0xc8b48a, -130, -70, EDGE, EDGE + 22);
-    k.houses([[-118, EDGE + 11, 14, 9, 4, 0xf0e6d2, 0x7a3a2a]]);
-    B.add(at(cyl(0.1, 0.1, 6, ink, 5), -78, 3, EDGE + 4));
-    const sock = at(cone(0.5, 2.4, mat(0xe2562f), 10), -78, 5.6, EDGE + 4);
+    k.patch(0xc8b48a, -110, -50, EDGE, EDGE + 22);
+    k.houses([[-98, EDGE + 11, 14, 9, 4, 0xf0e6d2, 0x7a3a2a]]);
+    B.add(at(cyl(0.1, 0.1, 6, ink, 5), -58, 3, EDGE + 4));
+    const sock = at(cone(0.5, 2.4, mat(0xe2562f), 10), -58, 5.6, EDGE + 4);
     B.add(sock);
-    sign(B, 'GLIDERPORT', '#ffb347', -96, EDGE + 20, 12, 1.5, FACE);
+    sign(B, 'GLIDERPORT', '#ffb347', -76, EDGE + 20, 12, 1.5, FACE);
     const gliders = [0xe2562f, 0x2f6fd6, 0xe9b535, 0x9b6bff].map((col, n) => {
       const p = new THREE.Group();
       const canopy = new THREE.Mesh(new THREE.TorusGeometry(4.5, 0.7, 6, 16, Math.PI * 0.75), mat(col, { roughness: 0.6, side: THREE.DoubleSide }));
@@ -1067,10 +1067,10 @@ const WORLD = {
     k.patch(0xd9d2c4, -66, -46, -24, -4);
     B.add(T);
     // Concrete campus buildings: stacked slabs with dark window bands.
-    for (const [x, z, w, d, h] of [[-92, -36, 34, 22, 16], [-62, -66, 22, 30, 12]]) { k.houses([[x, z, w, d, h, 0xcfc9bc, null]]); k.windows(x, z, w, d, Array.from({ length: Math.floor(h / 4) }, (_, n) => 2.4 + n * 4)); }
+    for (const [x, z, w, d, h] of [[-96, -30, 34, 22, 16], [-130, -50, 22, 30, 12]]) { k.houses([[x, z, w, d, h, 0xcfc9bc, null]]); k.windows(x, z, w, d, Array.from({ length: Math.floor(h / 4) }, (_, n) => 2.4 + n * 4)); }
     k.road('z', 44, -200, 200, 4);
     const trees = [];
-    k.scatter(-200, 160, EDGE + 5, 160, 9, [[38, 50, -300, 300], [-134, -66, EDGE, EDGE + 26], [-70, -42, -28, 0], [-112, -72, -50, -22], [-76, -48, -84, -48]], (x, z, sy) => { if (k.rnd() < 0.6) trees.push([x, z, sy > 20 ? 10 + k.rnd() * 4 : 18 + k.rnd() * 12]); });
+    k.scatter(-200, 160, EDGE + 5, 160, 9, [[38, 50, -300, 300], [-114, -46, EDGE, EDGE + 26], [-70, -42, -28, 0], [-116, -76, -44, -16], [-144, -116, -68, -32], [-300, 300, -300, EDGE + 3]], (x, z, sy) => { if (Math.abs(V(x, z)[0]) < 16 && sy < -30) return; if (k.rnd() < 0.6) trees.push([x, z, sy > 20 ? 10 + k.rnd() * 4 : 18 + k.rnd() * 12]); });
     k.trees(trees, 'euc');
     return (t) => {
       k.anim(t);
@@ -1080,7 +1080,7 @@ const WORLD = {
       sock.rotation.y = 0.3 * Math.sin(t * 0.7);
       for (const { p, ph } of gliders) {
         const a = t * 0.12 + ph;
-        p.position.set(-90 + 70 * Math.sin(a), 30 + 8 * Math.sin(t * 0.3 + ph), EDGE - 12 + 6 * Math.sin(a * 2));
+        p.position.set(-70 + 70 * Math.sin(a), 30 + 8 * Math.sin(t * 0.3 + ph), EDGE - 12 + 6 * Math.sin(a * 2));
         p.rotation.y = Math.atan2(70 * Math.cos(a), 12 * Math.cos(a * 2)) + Math.PI / 2;
         p.rotation.z = 0.25 * Math.cos(a);
       }
@@ -1095,7 +1095,7 @@ const WORLD = {
     const apts = [];
     for (let x = -300; x < 200; x += 26) for (const z of [-142, -168]) apts.push([x + k.rnd() * 4, z, 20, 16, 9 + k.rnd() * 7, [0xe8dcc4, 0xd9c9a8, 0xf0e6d2, 0xc9b896][Math.floor(k.rnd() * 4)], null]);
     k.houses(apts);
-    k.houses([[-54, -8, 20, 30, 7, 0xd8c7a6, null], [-54, -8, 21, 31, 0.8, 0x9a7a5a, null]]); // rec center
+    k.houses([[-54, -8, 20, 30, 7, 0xd8c7a6, null], [-54, -8, 21, 31, 0.8, 0x9a7a5a, null, 7]]); // rec center
     k.windows(-54, -8, 20, 30, [3.2]);
     k.patch(0x6b6e75, -30, 10, -76, -46); // the lot
     for (let x = -27; x < 8; x += 3) B.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 6), new THREE.MeshBasicMaterial({ color: 0xf4f1ea })), x, 0.18, -61));
@@ -1117,7 +1117,7 @@ const WORLD = {
     k.landmark('balboa', ...P(-10, -150), { h: 55 });
     k.road('z', -120, -300, 200, 3);
     const trees = [];
-    k.scatter(-200, 160, -200, 160, 10, [[-34, 4, -88, -58], [-126, -114, -300, 300]], (x, z, sy) => { if (k.rnd() < 0.55) trees.push([x, z, sy > 20 ? 10 + k.rnd() * 4 : 18 + k.rnd() * 10]); });
+    k.scatter(-200, 160, -200, 160, 10, [[-34, 4, -88, -58], [-126, -114, -300, 300]], (x, z, sy) => { if (Math.abs(V(x, z)[0] + 10) < 20 && sy < -60) return; if (k.rnd() < 0.45) trees.push([x, z, sy > 20 ? 10 + k.rnd() * 4 : 18 + k.rnd() * 10]); });
     k.trees(trees, 'euc');
     return (t) => k.anim(t);
   },
@@ -1134,7 +1134,8 @@ const WORLD = {
       for (let r = 0; r < 3; r += 1) B.add(at(new THREE.Mesh(new THREE.IcosahedronGeometry(1.8 + k.rnd() * 1.2, 0), mat(0x9a8f80, { roughness: 1 })), x - 8 + k.rnd() * 6, 0.8, z - 6 + k.rnd() * 5));
       for (const [ax, fx, fz, len] of [['x', x, z - pd / 2, pw], ['x', x, z + pd / 2, pw], ['z', x - pw / 2, z, pd], ['z', x + pw / 2, z, pd]]) B.add(at(new THREE.Mesh(new THREE.BoxGeometry(ax === 'x' ? len : 0.25, 1.4, ax === 'x' ? 0.25 : len), mat(0x6b5236)), fx, 0.7, fz));
     }
-    k.houses([[-52, -4, 14, 46, 7, 0xe8dcc4, 0xb5543a], [-4, -54, 46, 14, 7, 0xe8dcc4, 0xb5543a]]); // the school's two wings
+    k.houses([[-52, -4, 14, 46, 7, 0xe8dcc4, null], [-52, -4, 15, 47, 0.7, 0xb5543a, null, 7], [-4, -54, 46, 14, 7, 0xe8dcc4, null], [-4, -54, 47, 15, 0.7, 0xb5543a, null, 7]]); // the school's two wings
+    k.windows(-52, -4, 14, 46, [2.2, 5]); k.windows(-4, -54, 46, 14, [2.2, 5]);
     const trees = [];
     k.scatter(-200, 160, -200, 160, 11, [[40, 50, -300, 300], [-60, -44, -28, 20], [-28, 20, -62, -46], [-80, -16, -80, -16], [-130, -50, -122, -48]], (x, z) => { if (k.rnd() < 0.6) trees.push([x, z, 9 + k.rnd() * 6]); });
     k.trees(trees, 'round');
@@ -1148,10 +1149,10 @@ const WORLD = {
     const alongX = [-46, 46, -150]; const alongZ = [-50, 50, -150];
     for (const z of alongX) k.road('x', z, -300, 200, 2);
     for (const x of alongZ) k.road('z', x, -300, 200, 2);
-    k.houses([[-20, -66, 26, 18, 9, 0xd9c9a8, null], [-20, -66, 27, 19, 0.8, 0x8a2c34, null]]); // the gym
+    k.houses([[-20, -66, 26, 18, 9, 0xd9c9a8, null], [-20, -66, 27, 19, 0.8, 0x8a2c34, null, 9]]); // the gym
     k.windows(-20, -66, 26, 18, [4]);
-    k.patch(0xb3ab9c, -104, -66, -36, -6); // the water tower's lot
-    k.landmark('northpark', -85, -21, { h: 38 });
+    k.patch(0xb3ab9c, -94, -58, -76, -42); // the water tower's lot
+    k.landmark('northpark', -76, -59, { h: 38 });
     const wall = [0xe8dcc4, 0xc9a96e, 0x8fa3a8, 0xd98c6a, 0x6f8a6c, 0xf0e6d2, 0xa9b8c9, 0xd9c26a];
     const roof = [0x5a4a3c, 0x6b5a4a, 0x7a3a2a, 0x4a4d55];
     const homes = [];
@@ -1159,7 +1160,7 @@ const WORLD = {
       const [sx, sy] = V(x, z);
       if (sy < -190 || Math.abs(sx) > 50 - sy * 0.3 || (sy > 20 && Math.abs(sx) < 34)) continue;
       if (alongX.some((s) => Math.abs(z - s) < 12) || alongZ.some((s) => Math.abs(x - s) < 11)) continue;
-      if ((x > -46 && x < 46 && z > -42 && z < 42) || (x > -108 && x < -62 && z > -40 && z < -2) || (x > -36 && x < -4 && z > -78 && z < -54)) continue;
+      if ((x > -46 && x < 46 && z > -42 && z < 42) || (x > -98 && x < -54 && z > -80 && z < -38) || (x > -36 && x < -4 && z > -78 && z < -54)) continue;
       if (k.rnd() < 0.85) homes.push([x + (k.rnd() - 0.5) * 2, z, 9 + k.rnd() * 3, 11 + k.rnd() * 3, 4 + k.rnd() * 1.5, wall[Math.floor(k.rnd() * wall.length)], roof[Math.floor(k.rnd() * roof.length)]]);
     }
     k.houses(homes);
@@ -1565,13 +1566,13 @@ function pose() {
   const look = new THREE.Vector3(st.cam.x.x, st.cam.y.x + 0.05 * z, st.cam.z.x);
   const FIT = 4.4;
   const far = FIT / (2 * Math.tan(rad(13)) * Math.min(camera.aspect, 0.8));
-  const dist = THREE.MathUtils.lerp(far, 3.2, z);
-  const dir = new THREE.Vector3(Math.sin(rad(45) + orbit), THREE.MathUtils.lerp(0.82, 0.36, z), Math.cos(rad(45) + orbit)).normalize();
+  const dist = THREE.MathUtils.lerp(far, 5.4, z);
+  const dir = new THREE.Vector3(Math.sin(rad(45) + orbit), THREE.MathUtils.lerp(0.82, 0.55, z), Math.cos(rad(45) + orbit)).normalize();
   camera.position.copy(look).add(dir.multiplyScalar(dist));
   camera.lookAt(look);
-  scene.fog.near = dist + 5; scene.fog.far = dist + 24;
-  // The court sits a little above the middle of the screen: the dock covers the bottom.
-  camera.setViewOffset(window.innerWidth, window.innerHeight, 0, window.innerHeight * (0.07 * (1 - z) - 0.1 * z), window.innerWidth, window.innerHeight);
+  scene.fog.near = dist + 10; scene.fog.far = dist + 40;
+  // The court sits below the middle of the screen, just above the dock, so the top two thirds show the place behind it.
+  camera.setViewOffset(window.innerWidth, window.innerHeight, 0, window.innerHeight * (-0.13 * (1 - z) - 0.04 * z), window.innerWidth, window.innerHeight);
   sun.position.copy(look).add(new THREE.Vector3(-5, 9, 4));
   sun.target.position.copy(look);
   sun.target.updateMatrixWorld();
