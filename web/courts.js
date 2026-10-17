@@ -14,7 +14,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 import { post } from './lib/bridge.js';
-import { createDock } from './lib/dock.js';
+import { COURT_ICONS } from './lib/court-icons.js';
+import { createHexDock } from './lib/hexdock.js';
 import { SoftBody } from './jelly-core.js';
 import { createHero } from './lib/hero.js';
 import { createSlide } from './lib/slide.js';
@@ -42,7 +43,7 @@ scene.add(sun);
 const FWD = new THREE.Vector3(-1, 0, -1).normalize();
 const RIGHT = new THREE.Vector3(1, 0, -1).normalize();
 const STEP = 4.7;
-const SIDE = 3.5; // every arena sits on the same size tile; the venue's surroundings live in its world below
+const SIDE = 2.45; // the concrete apron each court sits on, flat on its place's ground (no floating tile)
 const COURT_L = 1.5; // a court is drawn 1.5 units long, so one unit is about 15.8 m
 const M = 23.77 / COURT_L;
 const CAM = new THREE.Vector3(1, 0, 1).normalize();
@@ -104,14 +105,14 @@ scene.add(new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xffffff, 
 
 let venues = [];
 const islands = [];
-const st = { at: 0, target: 0, hop: null, clock: 0, muted: false, cam: { x: sp(), y: sp(), z: sp() }, diving: false, dive: sp(), jump: null, you: sp(1) };
+const st = { at: 0, target: 0, hop: null, clock: 0, muted: false, cam: { x: sp(), y: sp(), z: sp() }, diving: false, dive: sp(), jump: null, you: sp(1), land: sp(0) };
 
 // Presence (src/lib/presence.ts): who is on which island. Friends stand as small jellies on the tile beside the court; someone
 // coming later stands faint with their time over their head. Your beacon is a pennant in your color on the island you landed on.
 // mode 'meet' (from home): sliding lands you; sliding where you landed plays. mode 'pick' (from a match): sliding picks the court.
 let presence = { you: null, venues: {}, mode: 'meet', demo: false };
 const crowd = new Map(); // `${venue}|${name}` -> { body, holder, island, here, idleAt, tag }
-const SPOTS = [[0.45, 1.36], [-0.25, 1.36], [1.36, 0.45], [-0.95, 1.36], [1.36, -0.25], [1.36, -0.95]]; // later arrivals: outside, along the front edges
+const SPOTS = [[0.35, 0.92], [-0.3, 0.92], [1.08, 0.62], [-0.9, 0.92], [1.08, -0.62], [-1.0, 0.62]]; // later arrivals: outside, along the front edges
 // Who is here plays, so the format reads from where they stand (tile-local; +x is the baseline nearer the camera, the court is
 // 1.5 long and 0.69 wide). One serves; two rally baseline to baseline; three: the first here holds the far side as king, the next
 // challenges, the third waits on the sideline; four play doubles, one up and one back a side; anyone past four waits.
@@ -218,6 +219,7 @@ function syncCrowd() {
       c.tag.className = `ptag${p.here ? '' : ' later'}`;
       c.tag.textContent = p.here ? p.name : `${p.name} ${p.time}`;
     });
+    dock?.people(i, [...(mine ? [{ color: youColor, here: true }] : []), ...people.map((p) => ({ color: p.color, here: p.here }))]);
     // You: on an island you landed on you take the next place in the court; anywhere else you stand in the corner.
     const stand = mine ? new THREE.Vector3(slots[inCourt][0], 0, slots[inCourt][1]) : CORNER.clone();
     if (mine) hitters[inCourt] = { pos: stand.clone(), hit: () => { H.hero.kick(0, 2.6, 0); } };
@@ -634,8 +636,10 @@ const FLAVOR = {
  * current venue's world is up; hopping drops the old one away into the paper and raises the next. Nothing here is bound by the tile.
  * Each world is built facing the camera: local x runs to screen right, local -z runs up the screen (away from you).
  */
-const WORLD_Y = -3.2;
-const AWAY = 0.36; // the arenas you are not on shrink to this, so the world below stays in view
+const WORLD_Y = 0.09; // the place's ground, just under the court
+const CLEAR = 1.5; // nothing grows or stands within this of the court (the old tile hid what was under it)
+const NEAR = 3.2; // no flat lots or lawns within this: the ground around the court is just the place's ground
+const AWAY = 0.001; // the arenas you are not on shrink away to nothing: there is one stage, and one court on it at a time
 const facing = () => { const f = new THREE.Group(); f.rotation.y = Math.PI / 4; return f; };
 
 /**
@@ -644,6 +648,37 @@ const facing = () => { const f = new THREE.Group(); f.rotation.y = Math.PI / 4; 
  * either side of the arena, and a little under it (z above -2). Everything is also laid out well past that so no edge ever shows.
  * Trees and houses are instanced so a whole neighbourhood is a handful of draw calls.
  */
+/**
+ * The worlds were drawn as backdrops behind a tile that hid their front half, so that half is bare. Now the court sits on the
+ * ground, fill it with the world's own back half, mirrored across the court (camera side), and kept 3 units off it so nothing
+ * stands between you and the court.
+ */
+const frontOf = (items) => items.filter(([x, z]) => x + z < -1).map(([x, z, ...rest]) => [-z, -x, ...rest]).filter(([x, z]) => Math.hypot(x, z) > 3);
+
+/**
+ * The court pops up in the middle of its place, so the place gives it room: anything that overlaps where the court and its
+ * people stand (the court, its lights, the strip either side where friends wait) is taken out. Ground that covers the whole
+ * spot stays; that is what the court stands on.
+ */
+const SHIFT = { barnes: CAM.clone().multiplyScalar(-6) };
+const SPOT = new THREE.Box3(new THREE.Vector3(-1.35, -1, -1.2), new THREE.Vector3(1.35, 5, 1.2));
+function clearSpot(world) {
+  world.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  // Walk down to things: a mesh, or a small group that is one thing (a car, a bench). Big groups are containers: look inside.
+  const visit = (o) => {
+    if (o.isInstancedMesh) return; // trees and houses already keep clear (CLEAR)
+    box.setFromObject(o);
+    if (box.isEmpty() || !box.intersectsBox(SPOT)) return;
+    const w = box.max.x - box.min.x; const d = box.max.z - box.min.z;
+    if (!o.isMesh && (w > 3 || d > 3)) { [...o.children].forEach(visit); return; }
+    // Flat ground running under the middle of the court (a lawn, Barnes's beach) is what it stands on: it stays.
+    const ground = box.max.y - box.min.y < 0.35 && box.min.x < 0 && box.max.x > 0 && box.min.z < 0 && box.max.z > 0;
+    if (!ground) o.visible = false;
+  };
+  [...world.children].forEach(visit);
+}
+
 function worldKit(B, g, seed0) {
   let seed = seed0;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
@@ -653,7 +688,12 @@ function worldKit(B, g, seed0) {
   const k = {
     rnd,
     ground(color) { B.add(at(new THREE.Mesh(new THREE.PlaneGeometry(70, 70).rotateX(-Math.PI / 2), mat(color, { roughness: 1 })), 0, 0, -12)); },
-    patch(color, x0, x1, z0, z1, y = 0.01) { flat(color, x0, x1, z0, z1, y); },
+    // A flat patch (a lot, a lawn) beside the court is left out; one the court stands on (it covers the middle) is its ground.
+    patch(color, x0, x1, z0, z1, y = 0.01) {
+      const near = !(x1 < -NEAR || x0 > NEAR || z1 < -NEAR || z0 > NEAR);
+      const under = x0 < 0 && x1 > 0 && z0 < 0 && z1 > 0;
+      if (!near || under) flat(color, x0, x1, z0, z1, y);
+    },
     /** A road along z (at x = c) or along x (at z = c), with a dashed center line; `cars` drive both ways. */
     road(axis, c, a0, a1, cars = 0, width = 0.5) {
       const len = a1 - a0; const mid = (a0 + a1) / 2;
@@ -680,7 +720,8 @@ function worldKit(B, g, seed0) {
      * Instanced trees. 'euc' is a eucalyptus: a tall, thin, pale trunk that leans, bare most of the way up, with a few small
      * drooping blue-grey clumps hung high and off to the sides. 'round' is a park shade tree: short trunk, full rounded crown.
      */
-    trees(points, kind = 'round') {
+    trees(all, kind = 'round') {
+      const points = [...all, ...frontOf(all)].filter(([x, z]) => Math.max(Math.abs(x), Math.abs(z)) > CLEAR);
       const n = points.length;
       if (!n) return;
       const euc = kind === 'euc';
@@ -718,7 +759,8 @@ function worldKit(B, g, seed0) {
       B.add(trunk, crown);
     },
     /** Instanced houses: [x, z, w, d, h, wall, roof]; roof is a hip roof, or flat when roof is null. */
-    houses(list) {
+    houses(every) {
+      const list = every.filter(([x, z, w, d]) => Math.abs(x) - w / 2 > CLEAR || Math.abs(z) - d / 2 > CLEAR);
       const n = list.length;
       if (!n) return;
       const body = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), mat(0xffffff, { roughness: 0.9 }), n);
@@ -1242,18 +1284,13 @@ function build(data) {
   const PW = W + 6.4 / M;
   venues.forEach((v, i) => {
     const g = new THREE.Group();
-    const base = FWD.clone().multiplyScalar(i * STEP).add(RIGHT.clone().multiplyScalar(i % 2 ? 0.55 : -0.55)).setY(0.1 + 0.14 * ((i * 7) % 3));
-    const slab = rbox(SIDE, 0.4, SIDE, 0.06, mat(0xf4f1ea));
-    slab.position.y = -0.2;
-    g.add(slab);
+    const base = new THREE.Vector3(0, 0.12, 0); // center stage: every court takes the same spot, on the ground, when it is up
+    // No slab: the court stands straight on its place's ground, and pops up out of it when it is picked.
     const text = `${String(i + 1).padStart(2, '0')} ${v.short}`;
     const faces = [label(text, false, v.accent), label(text, true, v.accent)];
     const labelMat = new THREE.MeshBasicMaterial({ map: faces[0] });
     const signMat = new THREE.MeshBasicMaterial({ map: faces[0] }); // the right edge: the headcount sign (syncCrowd), else the name
-    for (const [x, z, ry, m] of [[0, SIDE / 2 + 0.002, 0, labelMat], [SIDE / 2 + 0.002, 0, Math.PI / 2, signMat]]) {
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(SIDE - 0.3, 0.3), m);
-      p.position.set(x, -0.2, z); p.rotation.y = ry; g.add(p);
-    }
+    // No edge labels: the court sits on the ground now, so there is no tile edge to print on. (The materials stay for the swap.)
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(SIDE - 0.2, SIDE - 0.2), new THREE.MeshBasicMaterial({ color: new THREE.Color(v.accent), transparent: true, opacity: 0, depthWrite: false }));
     pad.rotation.x = -Math.PI / 2; pad.position.y = 0.004; g.add(pad);
 
@@ -1313,7 +1350,12 @@ function build(data) {
     g.add(a);
     // Everything the venue has besides its court lives in its world below, not on the tile.
     const world = new THREE.Group();
-    const anim = WORLD[v.key]?.(world, g);
+    // Some places are slid over so the court lands on their ground (Barnes: on the park, not out in the river mouth).
+    const inner = new THREE.Group();
+    const anim = WORLD[v.key]?.(inner, g);
+    if (SHIFT[v.key]) inner.position.copy(SHIFT[v.key]);
+    world.add(inner);
+    clearSpot(world);
     world.visible = false;
     scene.add(world);
     // Where the player stands once inside: the baseline nearer the camera.
@@ -1330,7 +1372,7 @@ function build(data) {
   }
   const s0 = islands[0].userData.base;
   st.cam.x.x = s0.x; st.cam.y.x = s0.y; st.cam.z.x = s0.z;
-  dock = createDock({ slots: venues.map((v, k) => ({ i: k, label: DOCK_LABEL[v.key] || v.short, color: v.accent })), onPick: (k) => go(k), post, at: st.target });
+  dock = createHexDock({ slots: venues.map((v, k) => ({ i: k, label: DOCK_LABEL[v.key] || v.short, color: v.accent, icon: COURT_ICONS[v.key] })), onPick: (k) => go(k), post, at: st.target });
   syncCrowd();
   paint();
   post({ type: 'stage', id: venues[0].id, anthem: venues[0].anthem });
@@ -1368,8 +1410,9 @@ function paint() {
   // What the headcount plays now, and what changes next. The people themselves are in the court with their names over them.
   const who = $('who');
   if (who) {
+    const demo = presence.demo && (room?.people || []).length ? '<span class="demo">STAND-INS</span>' : '';
     who.innerHTML = presence.mode === 'meet' && room
-      ? `<div class="line">${esc(room.now)}${mine ? '<button id="leave">HOP OFF</button>' : ''}</div>${room.next ? `<div class="next">${esc(room.next)}</div>` : ''}${presence.demo && (room.people || []).length ? '<div class="demo">STAND-IN FRIENDS UNTIL REAL ACCOUNTS</div>' : ''}`
+      ? `<div class="line">${esc(room.now)}${demo}</div>${room.next || mine ? `<div class="row"><span class="next">${esc(room.next)}</span>${mine ? '<button id="leave">HOP OFF</button>' : ''}</div>` : ''}`
       : '';
     const leave = $('leave');
     if (leave) leave.addEventListener('click', () => { presence.you = null; post({ type: 'leave' }); syncCrowd(); paint(); });
@@ -1458,7 +1501,7 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-const standOn = (i) => islands[i].position.clone().add(islands[i].userData.stand.clone().multiplyScalar(islands[i].userData.size.x));
+const standOn = (i) => islands[i].position.clone().add(islands[i].userData.stand.clone().setY(islands[i].userData.stand.y * Math.max(0, islands[i].userData.size.x)));
 
 /** Where the fighter is: resting on its arena, partway through a hop, or jumping down into the court (shrinking to player size). */
 function fighterAt() {
@@ -1489,7 +1532,8 @@ function advance(dt) {
     const to = st.target;
     const from = standOn(st.at);
     const b = islands[to].userData.base.clone().add(islands[to].userData.stand); // where it will stand once that arena is full size
-    st.hop = { from, b, to, t: 0, pushed: false, dur: H.jump(from, b) };
+    // Changing courts: you jump straight up, the court under you lifts away, the next rises into its place, and you land on it.
+    st.hop = { from, b, to, t: 0, pushed: false, dur: H.jump(from, b, 1.5) };
     post({ type: 'hop' });
   }
   if (st.hop) {
@@ -1510,6 +1554,10 @@ function advance(dt) {
     }
   }
   spring(st.dive, st.diving ? 1 : 0, dt, 1.0, 1);
+  // Landed: you are with people now, not travelling. The place's world drops away into the paper, the other islands sink, and the
+  // camera comes in until the court fills the width (1.1 Hz, ratio 1). Hopping off, or onward, brings it all back.
+  const landedNow = presence.mode === 'meet' && !!venues[st.at] && presence.you === venues[st.at].id && st.target === st.at && !(st.hop && st.hop.to !== st.at);
+  spring(st.land, landedNow ? 1 : 0, dt, 1.1, 1);
   // In the court you are player-sized like everyone else; out on the tile, full size.
   spring(st.you, !st.diving && islands[st.at] && !islands[st.at].userData.stand.equals(CORNER) && (!st.hop || st.hop.to === st.at) ? YOU_IN : 1, dt, 2.2, 0.8);
   if (st.jump) st.jump.t += dt;
@@ -1535,9 +1583,9 @@ function advance(dt) {
     // The arena you are headed for grows to full size; the one you are leaving stays full size under your feet until you have
     // pushed off it, then shrinks back with the rest.
     const under = u.i === st.at && !(st.hop && st.hop.pushed);
-    spring(u.size, under || u.i === (st.hop ? st.hop.to : st.at) ? 1 : AWAY, dt, 1.6, 0.8);
-    spring(u.rise, u.i === (st.hop ? st.hop.to : st.at) ? 1 : 0, dt, 0.9, 1); // the ground of where you are rises; the last one falls away
-    spring(u.sink, st.diving && u.i !== st.at ? 1 : 0, dt, 1.4, 0.9);
+    spring(u.size, under || u.i === (st.hop ? st.hop.to : st.at) ? 1 : AWAY, dt, 2.3, 0.45); // a springy pop, overshooting a little
+    spring(u.rise, u.i === (st.hop ? st.hop.to : st.at) && !landedNow ? 1 : 0, dt, 0.9, 1); // the ground of where you are rises; the last one falls away
+    spring(u.sink, (st.diving || landedNow) && u.i !== st.at ? 1 : 0, dt, 1.4, 0.9);
     for (const tex of u.boards) tex.offset.x += dt * 0.07 * tex.repeat.x;
     u.glow += ((u.i === st.target ? 1 : 0) - u.glow) * Math.min(1, dt / 0.08);
   }
@@ -1547,7 +1595,7 @@ function advance(dt) {
     const f = fighterAt().p;
     const k = THREE.MathUtils.clamp((st.hop.t - H.crouch()) / (st.hop.dur - H.crouch()), 0, 1);
     const ground = THREE.MathUtils.lerp(islands[st.at].position.y, islands[st.hop.to].position.y, k);
-    focus = new THREE.Vector3().lerpVectors(islands[st.at].position, islands[st.hop.to].position, k).setY(ground + 0.7 * Math.max(0, f.y - ground));
+    focus = new THREE.Vector3().lerpVectors(islands[st.at].position, islands[st.hop.to].position, k).setY(ground + 0.15 * Math.max(0, f.y - ground));
   }
   const camHz = st.hop ? 2.4 : 1.3; // keeps up with a jump, settles softly after
   spring(st.cam.x, focus.x, dt, camHz, 1);
@@ -1565,15 +1613,15 @@ function pose() {
   for (const g of islands) {
     const u = g.userData;
     g.position.copy(u.base);
-    g.scale.setScalar(u.size.x);
+    g.scale.set(1, u.size.x, 1); // pops up out of the ground (and sinks back into it); never shrinks across
     u.shadow.scale.setScalar(u.size.x);
-    g.position.y += 0.035 * Math.sin((t * Math.PI * 2) / u.period + u.phase) * (1 - st.dive.x) - u.dip.x - 7 * u.sink.x;
-    g.visible = u.sink.x < 0.97;
+    g.position.y += -u.dip.x - 7 * u.sink.x; // on the ground: no bob
+    g.visible = u.sink.x < 0.97 && u.size.x > 0.01;
     u.world.position.set(u.base.x, WORLD_Y - 12 * (1 - u.rise.x), u.base.z);
     u.world.visible = u.rise.x > 0.01;
     if (u.anim && (g.visible || u.world.visible)) u.anim(t);
-    u.pad.material.opacity = 0.1 * u.glow * (1 - st.dive.x);
-    u.shadow.material.opacity = 0.5 * (1 - u.sink.x);
+    u.pad.material.opacity = 0; // no tinted square around the court: it stands on plain ground
+    u.shadow.material.opacity = 0; // on the ground, nothing below to shade
     const lit = u.glow > 0.5 ? 1 : 0;
     if (u.labelMat.map !== u.faces[lit]) { u.labelMat.map = u.faces[lit]; u.labelMat.needsUpdate = true; }
     if (!u.signMat.userData.live && u.signMat.map !== u.faces[lit]) { u.signMat.map = u.faces[lit]; u.signMat.needsUpdate = true; }
@@ -1610,10 +1658,10 @@ function pose() {
   const look = new THREE.Vector3(st.cam.x.x, st.cam.y.x + 0.2 * (1 - z) + 0.08 * z, st.cam.z.x);
   const narrow = camera.aspect < 0.62 ? 1 : 0.84;
   const dir = new THREE.Vector3(Math.sin(rad(45) + orbit), THREE.MathUtils.lerp(0.82, 0.4, z), Math.cos(rad(45) + orbit)).normalize();
-  camera.position.copy(look).add(dir.multiplyScalar(THREE.MathUtils.lerp(19.5 * narrow, 4.5, z)));
+  camera.position.copy(look).add(dir.multiplyScalar(THREE.MathUtils.lerp(THREE.MathUtils.lerp(14 * narrow, 12, st.land.x), 4.5, z)));
   camera.lookAt(look);
   // Inside, the frame drops so the court sits mid-screen and the walls and lights fill the top, not empty tile at the bottom.
-  camera.setViewOffset(window.innerWidth, window.innerHeight, 0, window.innerHeight * (0.13 * (1 - z) - 0.16 * z), window.innerWidth, window.innerHeight);
+  camera.setViewOffset(window.innerWidth, window.innerHeight, 0, window.innerHeight * (0.1 * (1 - z) - 0.16 * z), window.innerWidth, window.innerHeight);
   sun.position.copy(look).add(new THREE.Vector3(-5, 9, 4));
   sun.target.position.copy(look);
   sun.target.updateMatrixWorld();

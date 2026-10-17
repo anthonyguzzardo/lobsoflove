@@ -152,18 +152,56 @@ const courtsCssExtra = `
 #songline #open{all:unset;font:700 11px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 #songline #open b{font-weight:800}
 #ui{padding-top:calc(env(safe-area-inset-top) + 2px)!important}
-/* The top fade only backs the back button: the space above the arena shows the place around it. */
-#fade{background:linear-gradient(180deg,rgba(239,236,229,.8) 0%,rgba(239,236,229,0) 9%,rgba(239,236,229,0) 60%,rgba(239,236,229,.9) 74%,rgba(239,236,229,.97) 100%)}
-/* The card: everything under the island sits on solid paper, so no text is ever read against the map. */
-#head{background:#f4f1ea;border:2px solid #16181d;border-left:9px solid var(--accent,#e2562f);border-radius:6px;box-shadow:3px 4px 0 #16181d;padding:12px 14px 11px;margin-bottom:12px;pointer-events:auto}
-#head #h2{color:#3b3e47}
-/* Who is here: what the headcount plays, then what changes next. */
-#who{margin-top:10px}
-#who .line{display:flex;align-items:center;justify-content:space-between;gap:10px;font:800 15px var(--mono);letter-spacing:.04em;color:#16181d}
-#who .next{font:800 12.5px var(--mono);letter-spacing:.04em;color:#3b3e47;margin-top:4px}
-#who #leave{all:unset;cursor:pointer;flex:none;font:800 11px var(--mono);letter-spacing:.06em;color:#16181d;border:1.6px solid #16181d;border-radius:3px;padding:4px 7px}
-#who .demo{font:700 10px var(--mono);letter-spacing:.05em;color:#6b665d;margin-top:6px}
-#dock .lbl{opacity:.72}
+/* The top fade only backs the back button. Nothing hazes the bottom: the strip and the honeycomb sit straight on the scene. */
+#fade{background:linear-gradient(180deg,rgba(239,236,229,.8) 0%,rgba(239,236,229,0) 9%)}
+/* Layout: the top row beside the back button (112 x 50 at left 12) carries the place and what is happening there; the bottom
+   is one slim slide strip. No card, no dock: tap or swipe the islands to travel. Everything else stays off this screen. */
+#head,#h2,#facts,#blurb{display:none!important}
+/* The slide strip is off on courts for now; the user has a better idea for landing and playing. */
+#enter{display:none!important}
+#head{position:fixed;left:134px;right:12px;top:calc(env(safe-area-inset-top) + 4px);min-height:50px;box-sizing:border-box;margin:0;background:#f4f1ea;border:2px solid #16181d;border-left:6px solid var(--accent,#e2562f);border-radius:10px;box-shadow:2px 3px 0 #16181d;padding:5px 9px 5px 10px;display:flex;flex-direction:column;justify-content:center;pointer-events:auto}
+#head #h1{font-size:13px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#who:empty{display:none}
+#who{margin-top:2px}
+#who .line{font:800 11px var(--mono);letter-spacing:.03em;color:#16181d;line-height:1.25}
+#who .row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:1px}
+#who .next{font:700 9.5px var(--mono);letter-spacing:.03em;color:#3b3e47;line-height:1.25}
+#who #leave{all:unset;cursor:pointer;flex:none;font:800 9px var(--mono);letter-spacing:.06em;color:#16181d;border:1.4px solid #16181d;border-radius:3px;padding:2px 5px;margin-left:auto}
+#who .demo{font:700 8.5px var(--mono);letter-spacing:.04em;color:#7a7468;margin-left:6px}
+#enter{height:54px;margin:0 0 2px}
+#ballw{top:7px;width:40px;height:40px}
+#ktxt{left:60px;right:64px}
+#klbl{font-size:17px}#ksub{font-size:9.5px;margin-top:2px}
+#goal{font-size:18px}
+/* The honeycomb dock (web/lib/hexdock.js): flat-topped hexes interlocking in one zigzag row, each showing who is there. */
+#dock.hex{display:block;position:relative;--w:min(92px,calc((100vw - 32px) / 4.75));--h:calc(var(--w) * .866);height:calc(var(--h) * 1.5 + 26px);margin:2px 0 0;padding:0}
+#dock.hex .cell{all:unset;position:absolute;cursor:pointer;width:var(--w);height:var(--h);left:calc(50% - var(--w) * 4.75 / 2 + var(--k) * var(--w) * .75);top:calc(24px + var(--down) * var(--h) / 2);filter:drop-shadow(0 4px 0 #cfc8ba) drop-shadow(0 8px 8px rgba(40,34,26,.16));transition:transform .32s cubic-bezier(.34,1.56,.64,1)}
+#dock.hex .hx{position:absolute;inset:0;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:#16181d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+#dock.hex .hx:before{content:"";position:absolute;inset:2px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:#f4f1ea;transition:background .2s}
+#dock.hex .cell.on .hx:before{background:color-mix(in srgb,var(--pc) 34%,#fffdf0)}
+#dock.hex .cell.on .hx{background:var(--pc)}
+#dock.hex .cell{--ic:var(--pc)}
+#dock.hex .hx{gap:2px}
+#dock.hex .ic{position:relative;display:block;width:calc(var(--w) * .5);height:calc(var(--w) * .5)}
+#dock.hex .ic svg{display:block;width:100%;height:100%;overflow:visible}
+/* The name: a dark tag that rises over the cell while it is pressed, so dragging across the honeycomb reads out each place. */
+#dock.hex .name{position:absolute;left:50%;bottom:calc(100% + 16px);transform:translate(-50%,6px) scale(.9);opacity:0;pointer-events:none;font:800 11px var(--mono);letter-spacing:.06em;white-space:nowrap;background:#16181d;color:#fffdf0;padding:4px 8px;border-radius:3px;box-shadow:2px 2px 0 var(--pc);transition:opacity .12s,transform .16s cubic-bezier(.34,1.56,.64,1);z-index:5}
+#dock.hex .cell.press{z-index:6}#dock.hex .cell.press .name{opacity:1;transform:translate(-50%,0) scale(1)}
+#dock.hex .dots{position:relative;display:flex;gap:3px;min-height:7px;order:2}
+#dock.hex .dots i{width:7px;height:7px;border-radius:50%;background:var(--dc);box-shadow:0 0 0 1.3px #16181d}
+#dock.hex .dots i.later{background:none;box-shadow:none;border:1.3px dashed #16181d;width:5px;height:5px}
+#dock.hex .cell.busy{animation:hbob 1.6s ease-in-out infinite}
+#dock.hex .cell:nth-child(odd).busy{animation-delay:-.5s}
+@keyframes hbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+#dock.hex{touch-action:none;user-select:none;-webkit-user-select:none}
+#dock.hex .cell.press{transform:translateY(5px) scale(.95)!important;animation:none;filter:drop-shadow(0 1px 0 #cfc8ba) drop-shadow(0 3px 4px rgba(40,34,26,.14));transition:transform .08s ease-out,filter .08s}
+#dock.hex .cell.press .hx:before{background:color-mix(in srgb,var(--pc) 35%,#f4f1ea)}
+#dock.hex .cell.on.press .hx:before{background:color-mix(in srgb,var(--pc) 34%,#fffdf0)}
+#dock.hex .cell.load{transform:translateY(4px);transition:transform .13s cubic-bezier(.7,0,.84,0)}
+#dock.hex .cell.land{transform:translateY(3px)}
+#dock.hex .cell.kick{animation:kick .3s cubic-bezier(.34,1.56,.64,1)}
+#dock.hex #dshadow{top:0;bottom:auto}
+#dock.hex #dball{z-index:3}
 #ptags{position:fixed;inset:0;pointer-events:none;overflow:hidden;transition:opacity .25s}
 .ptag{position:absolute;left:0;top:0;font:800 9.5px var(--mono);letter-spacing:.06em;background:#16181d;color:#efece5;padding:3px 6px;border-radius:2px;white-space:nowrap;transition:opacity .2s}
 .ptag.later{background:rgba(239,236,229,.92);color:#16181d;border:1.4px dashed #16181d}

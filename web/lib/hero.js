@@ -61,7 +61,7 @@ export function createHero(scene, { scale = 0.42, unit = 2 } = {}) {
   let plan = null; // the jump in progress
 
   /** Work out a jump from a to b in this play style: crouch, push, flight time, arc height. */
-  function makePlan(a, b) {
+  function makePlan(a, b, lift = 0) {
     const st = style();
     const d = Math.hypot(b.x - a.x, b.z - a.z);
     const power = d / unit; // 1 for the next place over
@@ -70,7 +70,8 @@ export function createHero(scene, { scale = 0.42, unit = 2 } = {}) {
     const leg = st.double ? d / 2 : d; // the goblin covers it in two skips
     // Apex of a true ballistic arc over that span, capped so the steep styles stay believable on a long jump (a lower apex
     // under the same gravity just means a flatter, faster arc), and the flight time that apex takes to rise and fall.
-    const peak = Math.min((leg * Math.tan(th)) / 4, unit * (0.5 + 0.35 * power));
+    // `lift` sets a minimum apex: a jump straight up while the ground is swapped out underneath (the courts stage).
+    const peak = Math.max(lift, Math.min((leg * Math.tan(th)) / 4, unit * (0.5 + 0.35 * power)));
     const T = Math.sqrt((8 * peak) / g);
     return {
       a: a.clone(), b: b.clone(), d, power,
@@ -86,8 +87,8 @@ export function createHero(scene, { scale = 0.42, unit = 2 } = {}) {
     mascot,
     hero,
     /** Crouch and launch from a to b. Returns the whole jump's length in seconds (crouch plus flight). */
-    jump(a, b) {
-      plan = makePlan(a, b);
+    jump(a, b, lift = 0) {
+      plan = makePlan(a, b, lift);
       if (plan.st.sly) hero.mood.sly = 1;
       return plan.pre + plan.T;
     },
