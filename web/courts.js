@@ -1,15 +1,14 @@
-// Courts: six small arenas, one per favorite venue. Each shows that venue's one signature court at regulation proportions and on its
-// real compass bearing (from OpenStreetMap via scripts/build-venues.mjs), walled in, with the venue's song running along the back walls
-// like a sponsor board. The mascot hops between arenas; sliding the ball drops the camera down into the court.
-// Same paper, ink and clay language as web/home.js, after docs/mo-design/vids/claude-bot-jumper-video.mov.
+// Courts: six places, each its own world. Each shows the venue's courts at regulation size, fenced, with the venue's song along
+// the back windscreen, and the place around them (cliffs and ocean, skate park, zoo, streets, river mouth) built at real size in
+// meters, so a 24 m court, a 10 m house and a 2 m player all read true. Picking another place swaps the whole world.
+// Same paper, ink and clay language as web/home.js.
 //
 // Motion spec. Springs are damped oscillators integrated at 1/120 s.
-// - Hop: your fighter hops island to island in its own play style (web/lib/hero.js), stretched for the distance.
-//   The landed tile dips 0.07 and returns at 2.6 Hz, ratio 0.5.
-// - Dive: the other arenas sink 7 units (1.4 Hz, ratio 0.9), the mascot hops onto the baseline and shrinks to player size, and the camera
-//   comes down from 17.5 back and steep to 5 back and low at 1.0 Hz, ratio 1. The page reports the pick 1.5 s in.
-// - Wall boards scroll 0.07 of their length a second.
-// - Camera follows at 1.3 Hz, ratio 1, and orbits 0.5 degrees on a 9 s sine. Islands bob 0.035 on 3.4 to 4.6 s sines.
+// - Change place: your fighter jumps 3.5 units straight up in its own play style (web/lib/hero.js); the place drops 24 units
+//   into the paper (2.6 Hz, ratio 1); once it is gone the next rises (2.0 Hz, ratio 0.7) and you land on it.
+// - Dive: the camera comes down from fitting 4.4 units across the screen to 5.4 back and low at 1.0 Hz, ratio 1. The page
+//   reports the pick 2.6 s in.
+// - Wall boards scroll 0.07 of their length a second. Camera follows at 1.3 Hz, ratio 1, and orbits 0.6 degrees on a 9 s sine.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
