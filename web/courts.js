@@ -638,12 +638,13 @@ const FLAVOR = {
  *
  * Scale: one world unit is M meters (the court is COURT_L units long). Everything around the court is built in meters inside a
  * group scaled 1 / M, so a house is a house: ~10 m across, ~6 m to the ridge; a shade tree 10 to 14 m; a eucalyptus 20 to 30 m.
- * The scenery is built facing the camera: x runs to screen right, -z runs up the screen (away from you). The court itself
- * (built in `enclosure`) runs along the place's world x, so it lies on the screen diagonal.
+ * Everything is laid on the court's own grid (x along the court, z across it), so streets, buildings and fences all run on the
+ * same two diagonals as the court, like a model on a table. The camera looks in from +x +z: `V(x, z)` gives where a point lands
+ * on screen as [right, down] meters from the court's center.
  *
- * Layout bands, in that facing frame: the court's apron spans about +-26 m. Behind it (z < -26) is where the place's character
- * lives, up to about -170 where it fades into the paper. In front (z > 26, under the dock) stays low: lawn, paths, the odd
- * bench, so nothing tall stands between you and the court.
+ * Layout bands, on screen: the court's apron spans about +-26 m across. The screen's width is about +-35 m at the court and
+ * widens with distance; up the screen (V down < -26) is where the place's character lives, to about -170 where it fades into
+ * the paper. Below the court (under the dock) stays low: lawn, paths, the odd bench, so nothing tall stands in front of it.
  */
 const mt = (meters) => meters / M;
 const DROP = 24; // how far a place sinks (units) when you leave it: past the fog, into the paper
@@ -651,8 +652,8 @@ const APRON = { x: mt(23), z: mt(14), top: mt(0.45) }; // the concrete pad the c
 const FENCE = { x: mt(18.29), z: mt(9.14), h: mt(3.6), screen: mt(2.6) }; // 36.6 x 18.3 m enclosure, windscreens 2.6 m high
 const STAND_Y = APRON.top + mt(0.3); // where feet go: on the court's surface
 const TILE = 3.5; // the size the landmark props (FLAVOR) were drawn at
-const facing = () => { const f = new THREE.Group(); f.rotation.y = Math.PI / 4; f.scale.setScalar(1 / M); return f; };
-const toCourt = (x, z) => [0.7071 * (x + z), 0.7071 * (z - x)]; // facing-frame meters to the court's frame
+const metersGroup = () => { const f = new THREE.Group(); f.scale.setScalar(1 / M); return f; };
+const V = (x, z) => [0.7071 * (x - z), 0.7071 * (x + z)]; // court-frame meters to screen [right, down] meters
 
 /** One fenced court, in world units: apron, surface, lines, net, fence and windscreens, benches, and lights if it has them. */
 function enclosure(colors, { song = null, accent = '#ffffff', mural: hasMural = false, stands = null, lights = false, boards = [], boardMeshes = [] } = {}) {
@@ -763,16 +764,19 @@ function worldKit(B, air, seed0, clear) {
     },
     /** True where scenery may stand: off the court's apron (plus `pad` m) and outside every keep-out box [x0, x1, z0, z1]. */
     free(x, z, keepOut = [], pad = 5) {
-      const [cx, cz] = toCourt(x, z);
-      if (Math.abs(cx) < 23 + pad && cz > clear[0] - 14 - pad && cz < clear[1] + 14 + pad) return false;
+      if (x > clear.x0 - 23 - pad && x < clear.x1 + 23 + pad && z > clear.z0 - 14 - pad && z < clear.z1 + 14 + pad) return false;
       return !keepOut.some(([x0, x1, z0, z1]) => x > x0 && x < x1 && z > z0 && z < z1);
     },
-    /** Points on a jittered grid that are free. In front of the court (z > 20) only the far sides, so nothing hides it. */
+    /**
+     * Points on a jittered grid that are free and on screen. Below the court (screen down > 20) only out at the sides, so
+     * nothing hides it; `fn` gets the screen depth too, to keep what stands down there short.
+     */
     scatter(x0, x1, z0, z1, step, keepOut, fn) {
       for (let x = x0; x < x1; x += step) for (let z = z0; z < z1; z += step) {
         const jx = x + (rnd() - 0.5) * step * 0.7; const jz = z + (rnd() - 0.5) * step * 0.7;
-        if (jz > 20 && Math.abs(jx) < 34) continue;
-        if (k.free(jx, jz, keepOut)) fn(jx, jz);
+        const [sx, sy] = V(jx, jz);
+        if ((sy > 20 && Math.abs(sx) < 34) || sy < -190 || sy > 110 || Math.abs(sx) > 50 - sy * 0.3) continue;
+        if (k.free(jx, jz, keepOut)) fn(jx, jz, sy);
       }
     },
     /**
@@ -1008,29 +1012,33 @@ function sea(B, y, zNear, amp = 0.35) {
   };
 }
 
+/** Court-frame meters for a spot on screen [right, down] meters from the court's center: for placing single things by eye. */
+const P = (sx, sy) => [0.7071 * (sx + sy), 0.7071 * (sy - sx)];
+const FACE = Math.PI / 4; // turns a sign or a front to face the camera
+
 /**
- * What each place builds around its court. `k` is the kit (meters, facing the camera), `k.courts` lists neighbouring courts
- * in the court's own frame (meters along its width), already laid down beside it.
+ * What each place builds around its court and its bank of neighbouring courts. `k` is the kit; B is the place's meters group
+ * (the court's frame). Up the screen is -x -z; the coast at UCSD and Barnes runs along x, so the sea fills the top right.
  */
 const WORLD = {
   ucsd(k, B) {
     // UCSD North: courts in a eucalyptus grove on the mesa. Up the screen the mesa ends at the sandstone cliffs: the Torrey
     // Pines Gliderport on the edge with paragliders riding the lift, Black's Beach and the Pacific below. Concrete campus
-    // buildings in the trees to the left, a bronze Triton in a plaza, North Torrey Pines Road to the right, jets overhead.
+    // buildings in the trees, a bronze Triton in a plaza, North Torrey Pines Road down the right, jets overhead.
     k.ground(0xb0a682);
-    const EDGE = -125; const CLIFF = 28;
+    const EDGE = -100; const CLIFF = 28;
     B.add(at(new THREE.Mesh(new THREE.BoxGeometry(900, CLIFF, 6), mat(0xd9a86c, { roughness: 1 })), 0, -CLIFF / 2, EDGE - 3));
     for (const [y, c] of [[-7, 0xc28e58], [-15, 0xe3b981], [-22, 0xb98250]]) B.add(at(new THREE.Mesh(new THREE.BoxGeometry(900, 2, 6.2), mat(c, { roughness: 1 })), 0, y, EDGE - 3));
     k.patch(0xe8d6ad, -450, 450, EDGE - 26, EDGE - 6, -CLIFF + 0.5); // Black's Beach
     const ocean = sea(B, -CLIFF, EDGE - 24);
-    const lineup = surfers(B, [[-30, EDGE - 40], [-12, EDGE - 46], [6, EDGE - 42], [24, EDGE - 50], [-44, EDGE - 48]], -CLIFF, ocean.swell);
+    const lineup = surfers(B, [[-60, EDGE - 40], [-80, EDGE - 46], [-104, EDGE - 42], [-124, EDGE - 50], [-44, EDGE - 48]], -CLIFF, ocean.swell);
     // The gliderport: a dirt pad on the edge, a clubhouse, a windsock, its sign.
-    k.patch(0xc8b48a, 18, 70, EDGE, EDGE + 22);
-    k.houses([[56, EDGE + 12, 12, 8, 4, 0xf0e6d2, 0x7a3a2a]]);
-    B.add(at(cyl(0.1, 0.1, 6, ink, 5), 26, 3, EDGE + 5));
-    const sock = at(cone(0.5, 2.4, mat(0xe2562f), 10), 26, 5.6, EDGE + 5);
+    k.patch(0xc8b48a, -130, -70, EDGE, EDGE + 22);
+    k.houses([[-118, EDGE + 11, 14, 9, 4, 0xf0e6d2, 0x7a3a2a]]);
+    B.add(at(cyl(0.1, 0.1, 6, ink, 5), -78, 3, EDGE + 4));
+    const sock = at(cone(0.5, 2.4, mat(0xe2562f), 10), -78, 5.6, EDGE + 4);
     B.add(sock);
-    sign(B, 'GLIDERPORT', '#ffb347', 40, EDGE + 21, 12, 1.5);
+    sign(B, 'GLIDERPORT', '#ffb347', -96, EDGE + 20, 12, 1.5, FACE);
     const gliders = [0xe2562f, 0x2f6fd6, 0xe9b535, 0x9b6bff].map((col, n) => {
       const p = new THREE.Group();
       const canopy = new THREE.Mesh(new THREE.TorusGeometry(4.5, 0.7, 6, 16, Math.PI * 0.75), mat(col, { roughness: 0.6, side: THREE.DoubleSide }));
@@ -1041,7 +1049,7 @@ const WORLD = {
       B.add(p);
       return { p, ph: n * 1.6 };
     });
-    // Triton: an original bronze figure on a stone pedestal in a paved plaza, coiled fish tail, trident raised. ~7 m with plinth.
+    // Triton: an original bronze figure on a stone pedestal in a paved plaza, coiled fish tail, trident raised; 7 m with plinth.
     const T = new THREE.Group();
     const bronze = mat(0x5f7d66, { metalness: 0.5, roughness: 0.45 });
     T.add(at(cyl(0.14, 0.16, 0.16, mat(0xd9d2c4), 18), 0, 0.08, 0));
@@ -1054,15 +1062,15 @@ const WORLD = {
     for (const x of [-0.03, 0, 0.03]) T.add(at(cone(0.008, 0.06, bronze, 5), 0.1 + x, 0.9, 0));
     T.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.01, 0.01), bronze), 0.1, 0.86, 0));
     T.scale.setScalar(7.5);
-    T.position.set(-40, 0.15, -52);
-    k.patch(0xd9d2c4, -50, -30, -62, -42);
+    T.rotation.y = FACE;
+    T.position.set(-56, 0.15, -14);
+    k.patch(0xd9d2c4, -66, -46, -24, -4);
     B.add(T);
     // Concrete campus buildings: stacked slabs with dark window bands.
-    const conc = 0xcfc9bc;
-    for (const [x, z, w, d, h] of [[-62, -88, 34, 22, 16], [-24, -100, 30, 18, 12], [-78, -50, 20, 30, 12]]) { k.houses([[x, z, w, d, h, conc, null]]); k.windows(x, z, w, d, Array.from({ length: Math.floor(h / 4) }, (_, n) => 2.4 + n * 4)); }
-    k.road('z', 44, EDGE + 22, 140, 4);
+    for (const [x, z, w, d, h] of [[-92, -36, 34, 22, 16], [-62, -66, 22, 30, 12]]) { k.houses([[x, z, w, d, h, 0xcfc9bc, null]]); k.windows(x, z, w, d, Array.from({ length: Math.floor(h / 4) }, (_, n) => 2.4 + n * 4)); }
+    k.road('z', 44, -200, 200, 4);
     const trees = [];
-    k.scatter(-120, 120, EDGE + 6, 120, 9, [[38, 50, -200, 200], [16, 72, EDGE, EDGE + 24], [-52, -28, -64, -40], [-82, -42, -102, -74], [-42, -6, -112, -88], [-90, -66, -68, -32]], (x, z) => { if (k.rnd() < 0.6) trees.push([x, z, z > 20 ? 10 + k.rnd() * 4 : 18 + k.rnd() * 12]); });
+    k.scatter(-200, 160, EDGE + 5, 160, 9, [[38, 50, -300, 300], [-134, -66, EDGE, EDGE + 26], [-70, -42, -28, 0], [-112, -72, -50, -22], [-76, -48, -84, -48]], (x, z, sy) => { if (k.rnd() < 0.6) trees.push([x, z, sy > 20 ? 10 + k.rnd() * 4 : 18 + k.rnd() * 12]); });
     k.trees(trees, 'euc');
     return (t) => {
       k.anim(t);
@@ -1072,129 +1080,122 @@ const WORLD = {
       sock.rotation.y = 0.3 * Math.sin(t * 0.7);
       for (const { p, ph } of gliders) {
         const a = t * 0.12 + ph;
-        p.position.set(60 * Math.sin(a), 30 + 8 * Math.sin(t * 0.3 + ph), EDGE - 12 + 6 * Math.sin(a * 2));
-        p.rotation.y = Math.atan2(60 * Math.cos(a), 12 * Math.cos(a * 2)) + Math.PI / 2;
+        p.position.set(-90 + 70 * Math.sin(a), 30 + 8 * Math.sin(t * 0.3 + ph), EDGE - 12 + 6 * Math.sin(a * 2));
+        p.rotation.y = Math.atan2(70 * Math.cos(a), 12 * Math.cos(a * 2)) + Math.PI / 2;
         p.rotation.z = 0.25 * Math.cos(a);
       }
     };
   },
   lindavista(k, B) {
-    // Linda Vista Community Park: the big skate park and its footbridge behind the court, a row of palms, the rec center to the
-    // left with its lot, Linda Vista Road and apartments beyond. The police helicopter circles.
+    // Linda Vista Community Park: the big skate park and its footbridge behind the court, a corner of palms, the rec center
+    // to the left, its lot to the right, Linda Vista Road and apartments beyond. The police helicopter circles.
     k.ground(0x9db27a);
-    k.landmark('lindavista', 6, -78, { w: 86 });
-    k.road('x', -128, -300, 300, 4, 11);
-    k.patch(0xd9d4c9, -300, 300, -122, -134 + 22 - 10); // sidewalk along the road
+    k.landmark('lindavista', -66, -66, { w: 80 });
+    k.road('x', -122, -400, 300, 4, 11);
     const apts = [];
-    for (let x = -140; x < 140; x += 26) for (const z of [-150, -176]) apts.push([x + k.rnd() * 4, z, 20, 16, 9 + k.rnd() * 7, [0xe8dcc4, 0xd9c9a8, 0xf0e6d2, 0xc9b896][Math.floor(k.rnd() * 4)], null]);
+    for (let x = -300; x < 200; x += 26) for (const z of [-142, -168]) apts.push([x + k.rnd() * 4, z, 20, 16, 9 + k.rnd() * 7, [0xe8dcc4, 0xd9c9a8, 0xf0e6d2, 0xc9b896][Math.floor(k.rnd() * 4)], null]);
     k.houses(apts);
-    // Rec center and its lot, left of the court.
-    k.houses([[-52, -18, 20, 30, 7, 0xd8c7a6, null], [-52, -18, 21, 31, 0.8, 0x9a7a5a, null]]);
-    k.windows(-52, -18, 20, 30, [3.2]);
-    k.patch(0x6b6e75, 34, 70, -44, -6);
-    for (let z = -41; z < -8; z += 3) B.add(at(new THREE.Mesh(new THREE.BoxGeometry(6, 0.05, 0.18), new THREE.MeshBasicMaterial({ color: 0xf4f1ea })), 52, 0.18, z));
-    for (const [x, z] of [[40, -38], [46, -29], [58, -20]]) { const car = at(rbox(1.9, 1.3, 4.6, 0.4, mat([0xd9443a, 0x2f6fd6, 0xf4f1ea][Math.round(x) % 3], { roughness: 0.4 })), x, 0.8, z); car.rotation.y = Math.PI / 2; B.add(car); }
-    k.patch(0xd9d4c9, -2, 2, 24, 140); // the path down from the court
-    for (let x = -66; x <= 66; x += 13) if (Math.abs(x) > 6) k.palm(x, -50 - (Math.abs(x) % 2) * 3, 13 + k.rnd() * 5, (k.rnd() - 0.5) * 0.3);
+    k.houses([[-54, -8, 20, 30, 7, 0xd8c7a6, null], [-54, -8, 21, 31, 0.8, 0x9a7a5a, null]]); // rec center
+    k.windows(-54, -8, 20, 30, [3.2]);
+    k.patch(0x6b6e75, -30, 10, -76, -46); // the lot
+    for (let x = -27; x < 8; x += 3) B.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 6), new THREE.MeshBasicMaterial({ color: 0xf4f1ea })), x, 0.18, -61));
+    for (const [x, z, c] of [[-24, -66, 0xd9443a], [-12, -56, 0x2f6fd6], [3, -66, 0xf4f1ea]]) B.add(at(rbox(1.9, 1.3, 4.6, 0.4, mat(c, { roughness: 0.4 })), x, 0.8, z));
+    k.patch(0xd9d4c9, 23, 200, -2, 2); // the path out from the court
+    for (let x = -110; x <= -30; x += 12) k.palm(x, -38, 13 + k.rnd() * 5, (k.rnd() - 0.5) * 0.3);
+    for (let z = -110; z <= -50; z += 12) k.palm(-38, z, 13 + k.rnd() * 5, (k.rnd() - 0.5) * 0.3);
     const trees = [];
-    k.scatter(-130, 130, -118, 120, 12, [[-64, -40, -36, 0], [32, 72, -46, -4], [-48, 56, -110, -46]], (x, z) => { if (k.rnd() < 0.55) trees.push([x, z, 9 + k.rnd() * 5]); });
+    k.scatter(-200, 160, -116, 160, 12, [[-66, -42, -26, 10], [-32, 12, -78, -44], [-110, -22, -110, -22]], (x, z) => { if (k.rnd() < 0.55) trees.push([x, z, 9 + k.rnd() * 5]); });
     k.trees(trees, 'round');
     return (t) => k.anim(t);
   },
   balboa(k, B) {
-    // Balboa Tennis Club at Morley Field: a bank of courts in rows (green windscreens), the clubhouse, eucalyptus between the
-    // blocks, the parking lot, and the California Tower over Balboa Park in the distance.
+    // Balboa Tennis Club at Morley Field: two rows of courts with green windscreens, the clubhouse, eucalyptus round the
+    // blocks, and the California Tower over Balboa Park in the distance.
     k.ground(0x86a865);
-    k.patch(0xd9d4c9, 30, 54, -10, 20); // clubhouse terrace
-    k.houses([[42, 5, 16, 12, 5, 0xf0e6d2, 0xb5543a]]);
-    k.patch(0x5d6068, -70, -34, 30, 70); // lot
-    k.landmark('balboa', -30, -165, { h: 58 });
-    k.road('x', -132, -300, 300, 3);
+    k.patch(0xd9d4c9, -30, 0, -84, -62); // clubhouse terrace
+    k.houses([[-16, -76, 18, 12, 5, 0xf0e6d2, 0xb5543a]]);
+    k.landmark('balboa', ...P(-10, -150), { h: 55 });
+    k.road('z', -120, -300, 200, 3);
     const trees = [];
-    k.scatter(-130, 130, -125, 120, 10, [[30, 56, -12, 22], [-72, -32, 28, 72]], (x, z) => { if (k.rnd() < 0.55) trees.push([x, z, z > 20 ? 10 + k.rnd() * 4 : 18 + k.rnd() * 10]); });
+    k.scatter(-200, 160, -200, 160, 10, [[-34, 4, -88, -58], [-126, -114, -300, 300]], (x, z, sy) => { if (k.rnd() < 0.55) trees.push([x, z, sy > 20 ? 10 + k.rnd() * 4 : 18 + k.rnd() * 10]); });
     k.trees(trees, 'euc');
     return (t) => k.anim(t);
   },
   roosevelt(k, B) {
     // Roosevelt, behind the zoo: the concrete arched hitting walls behind the court, the zoo train and its elephants beyond,
-    // zoo enclosures with ponds and rocks, Park Boulevard down the right, the middle school's long wings on the left.
+    // zoo enclosures with ponds and rocks, Park Boulevard down the right, the middle school's long wing on the left.
     k.ground(0x7fa060);
-    k.landmark('roosevelt', 0, -62, { w: 70 });
-    k.road('z', 52, -200, 160, 4, 10);
-    for (const [x, z, pw, pd] of [[-70, -128, 36, 26], [-28, -132, 34, 28], [12, -128, 32, 26], [-8, -168, 60, 26]]) {
+    k.landmark('roosevelt', -48, -48, { w: 60 });
+    k.road('z', 45, -300, 200, 4, 10);
+    for (const [x, z, pw, pd] of [[-100, -64, 30, 26], [-72, -94, 30, 26], [-112, -104, 36, 30]]) {
       k.patch(0x6d8a4c, x - pw / 2, x + pw / 2, z - pd / 2, z + pd / 2);
       const pond = new THREE.Mesh(new THREE.CircleGeometry(5, 20).rotateX(-Math.PI / 2), mat(0x4f9bc4, { roughness: 0.3 }));
       pond.position.set(x + 5, 0.2, z + 3); pond.scale.set(1.3, 1, 0.8); B.add(pond);
       for (let r = 0; r < 3; r += 1) B.add(at(new THREE.Mesh(new THREE.IcosahedronGeometry(1.8 + k.rnd() * 1.2, 0), mat(0x9a8f80, { roughness: 1 })), x - 8 + k.rnd() * 6, 0.8, z - 6 + k.rnd() * 5));
       for (const [ax, fx, fz, len] of [['x', x, z - pd / 2, pw], ['x', x, z + pd / 2, pw], ['z', x - pw / 2, z, pd], ['z', x + pw / 2, z, pd]]) B.add(at(new THREE.Mesh(new THREE.BoxGeometry(ax === 'x' ? len : 0.25, 1.4, ax === 'x' ? 0.25 : len), mat(0x6b5236)), fx, 0.7, fz));
     }
-    // Roosevelt Middle School: long two-storey wings with red tile roofs.
-    k.houses([[-60, -36, 14, 44, 7, 0xe8dcc4, 0xb5543a], [-60, 14, 14, 36, 7, 0xe8dcc4, 0xb5543a], [-84, -8, 30, 12, 7, 0xe8dcc4, 0xb5543a]]);
+    k.houses([[-52, -4, 14, 46, 7, 0xe8dcc4, 0xb5543a], [-4, -54, 46, 14, 7, 0xe8dcc4, 0xb5543a]]); // the school's two wings
     const trees = [];
-    k.scatter(-130, 130, -190, 120, 11, [[44, 60, -300, 300], [-92, -50, -60, 34], [-90, 40, -185, -112], [-40, 40, -84, -42]], (x, z) => { if (k.rnd() < 0.6) trees.push([x, z, 9 + k.rnd() * 6]); });
+    k.scatter(-200, 160, -200, 160, 11, [[40, 50, -300, 300], [-60, -44, -28, 20], [-28, 20, -62, -46], [-80, -16, -80, -16], [-130, -50, -122, -48]], (x, z) => { if (k.rnd() < 0.6) trees.push([x, z, 9 + k.rnd() * 6]); });
     k.trees(trees, 'round');
     return (t) => k.anim(t);
   },
   northpark(k, B) {
-    // North Park: the rec center's lawn in a grid of streets lined with craftsman bungalows and palms, the gym beside the court,
-    // and the North Park water tower standing over its lot up the street.
+    // North Park: the rec center's lawn in a grid of streets lined with craftsman bungalows and palms, the gym across the
+    // street, and the North Park water tower standing over its lot a block up.
     k.ground(0xc9c2b4);
-    k.patch(0x8fae6a, -44, 44, -44, 44); // the rec center lawn
-    const streetsZ = [-56, 56, 130, -130]; const streetsX = [-56, -124, 56];
-    for (const x of streetsZ) k.road('z', x, -260, 140, 2);
-    for (const z of streetsX) k.road('x', z, -200, 200, 2);
-    k.houses([[30, -30, 18, 26, 9, 0xd9c9a8, null], [30, -30, 19, 27, 0.8, 0x8a2c34, null]]); // the gym
-    k.windows(30, -30, 18, 26, [4]);
-    k.patch(0xb3ab9c, -48, -14, -112, -68); // the water tower's lot
-    k.landmark('northpark', -31, -90, { h: 38 });
+    k.patch(0x8fae6a, -42, 42, -40, 40); // the rec center lawn
+    const alongX = [-46, 46, -150]; const alongZ = [-50, 50, -150];
+    for (const z of alongX) k.road('x', z, -300, 200, 2);
+    for (const x of alongZ) k.road('z', x, -300, 200, 2);
+    k.houses([[-20, -66, 26, 18, 9, 0xd9c9a8, null], [-20, -66, 27, 19, 0.8, 0x8a2c34, null]]); // the gym
+    k.windows(-20, -66, 26, 18, [4]);
+    k.patch(0xb3ab9c, -104, -66, -36, -6); // the water tower's lot
+    k.landmark('northpark', -85, -21, { h: 38 });
     const wall = [0xe8dcc4, 0xc9a96e, 0x8fa3a8, 0xd98c6a, 0x6f8a6c, 0xf0e6d2, 0xa9b8c9, 0xd9c26a];
     const roof = [0x5a4a3c, 0x6b5a4a, 0x7a3a2a, 0x4a4d55];
     const homes = [];
-    const lots = [];
-    for (let x = -190; x < 190; x += 14) for (let z = -250; z < 130; z += 16) lots.push([x, z]);
-    for (const [x, z] of lots) {
-      const onStreet = streetsZ.some((s) => Math.abs(x - s) < 10) || streetsX.some((s) => Math.abs(z - s) < 11);
-      if (onStreet || (x > -46 && x < 46 && z > -46 && z < 46) || (x > -50 && x < -12 && z > -114 && z < -66) || (z > 20 && Math.abs(x) < 70)) continue;
+    for (let x = -290; x < 190; x += 14) for (let z = -290; z < 190; z += 16) {
+      const [sx, sy] = V(x, z);
+      if (sy < -190 || Math.abs(sx) > 50 - sy * 0.3 || (sy > 20 && Math.abs(sx) < 34)) continue;
+      if (alongX.some((s) => Math.abs(z - s) < 12) || alongZ.some((s) => Math.abs(x - s) < 11)) continue;
+      if ((x > -46 && x < 46 && z > -42 && z < 42) || (x > -108 && x < -62 && z > -40 && z < -2) || (x > -36 && x < -4 && z > -78 && z < -54)) continue;
       if (k.rnd() < 0.85) homes.push([x + (k.rnd() - 0.5) * 2, z, 9 + k.rnd() * 3, 11 + k.rnd() * 3, 4 + k.rnd() * 1.5, wall[Math.floor(k.rnd() * wall.length)], roof[Math.floor(k.rnd() * roof.length)]]);
     }
     k.houses(homes);
-    for (const x of streetsZ) for (let z = -240; z < 120; z += 26) if (!(z > 10 && Math.abs(x) < 70)) k.palm(x + 6.5, z + k.rnd() * 6, 12 + k.rnd() * 5, (k.rnd() - 0.5) * 0.3);
+    for (const x of alongZ) for (let z = -290; z < 190; z += 24) { const [sx, sy] = V(x + 7, z); if (!(sy > 10 && Math.abs(sx) < 40) && sy > -190) k.palm(x + 7, z + k.rnd() * 6, 12 + k.rnd() * 5, (k.rnd() - 0.5) * 0.3); }
     const trees = [];
-    k.scatter(-40, 40, -40, 40, 12, [], (x, z) => { if (k.rnd() < 0.5) trees.push([x, z, 9 + k.rnd() * 4]); });
+    k.scatter(-40, 40, -38, 38, 10, [], (x, z) => { if (k.rnd() < 0.5) trees.push([x, z, 9 + k.rnd() * 4]); });
     k.trees(trees, 'round');
     return (t) => k.anim(t);
   },
   barnes(k, B) {
-    // Barnes, where the San Diego River runs out to the ocean in Ocean Beach. The court on the park; behind it a row of palms,
-    // the beach and the sea. The river runs out between its two rock jetties on the left (a sailboat heads out the channel),
-    // the OB pier reaches out on the right past the shops on Abbott Street, and Point Loma lies across the water.
-    const SHORE = -78;
+    // Barnes, where the San Diego River runs out to the ocean in Ocean Beach. The court on the park; up the screen a line of
+    // palms, the beach and the sea. The river runs out between its two rock jetties (a sailboat heads out the channel), Ocean
+    // Beach's shops and pier across the river on the left, and Point Loma lying across the water.
+    const SHORE = -62;
     k.ground(0x8fae6a);
-    k.patch(0xe8d6ad, -450, 450, SHORE - 2, -52); // the beach
+    k.patch(0xe8d6ad, -450, 450, SHORE - 2, -40); // the beach
     const ocean = sea(B, 0.05, SHORE);
-    const RX = -64; // the river, running inland between the jetties
-    B.add(at(new THREE.Mesh(new THREE.BoxGeometry(18, 0.3, 260), mat(0x3a86b5, { roughness: 0.3 })), RX, 0.12, SHORE + 130));
-    const rnd = k.rnd;
+    const RX = -78; // the river, running inland between the jetties
+    B.add(at(new THREE.Mesh(new THREE.BoxGeometry(18, 0.3, 300), mat(0x3a86b5, { roughness: 0.3 })), RX, 0.12, SHORE + 150));
     const T = k.tile();
-    const jetties = [jetty(T, (RX - 12) / M, (SHORE + 6) / M, (SHORE - 72) / M, rnd), jetty(T, (RX + 12) / M, (SHORE + 6) / M, (SHORE - 68) / M, rnd)];
-    for (let x = -46; x < 140; x += 14 + k.rnd() * 4) k.palm(x, -46 - k.rnd() * 4, 13 + k.rnd() * 5, (k.rnd() - 0.5) * 0.4);
-    // Ocean Beach on the right: Abbott Street, a row of bright storefronts, the OCEAN BEACH sign, a lifeguard tower, the pier.
-    const OB = 60;
-    k.road('z', OB, -50, 140, 2, 8);
+    const jetties = [jetty(T, (RX - 12) / M, (SHORE + 6) / M, (SHORE - 76) / M, k.rnd), jetty(T, (RX + 12) / M, (SHORE + 6) / M, (SHORE - 70) / M, k.rnd)];
+    for (let x = -62; x < 120; x += 13 + k.rnd() * 4) k.palm(x, -34 - k.rnd() * 3, 13 + k.rnd() * 5, (k.rnd() - 0.5) * 0.4);
+    // Ocean Beach, across the river: Abbott Street, a row of bright storefronts, the OCEAN BEACH sign, the pier.
+    const OB = -112;
+    k.road('z', OB, -50, 200, 2, 8);
     const tones = [0x5fb8b0, 0xe8755a, 0xf2c14e, 0xb39ddb, 0xf4f1ea, 0x7ec8e3, 0xe86a92];
     const shops = [];
-    for (let z = -40, n = 0; z < 130; z += 9, n += 1) shops.push([OB + 11, z, 8, 8.5, 5 + ((n * 0.37) % 1) * 3, tones[n % tones.length], null]);
-    for (let z = -36, n = 3; z < 130; z += 11, n += 1) shops.push([OB + 22, z, 10, 10, 4.5 + ((n * 0.29) % 1) * 2.5, tones[n % tones.length], n % 2 ? 0x7a3a2a : null]);
+    for (let z = -40, n = 0; z < 160; z += 9, n += 1) shops.push([OB + 11, z, 8, 8.5, 5 + ((n * 0.37) % 1) * 3, tones[n % tones.length], null]);
+    for (let z = -36, n = 3; z < 160; z += 11, n += 1) shops.push([OB - 12, z, 10, 10, 4.5 + ((n * 0.29) % 1) * 2.5, tones[n % tones.length], n % 2 ? 0x7a3a2a : null]);
     k.houses(shops);
-    const obSign = new THREE.Group();
-    obSign.add(at(new THREE.Mesh(new THREE.PlaneGeometry(10, 2.2), new THREE.MeshBasicMaterial({ map: signTex('OCEAN BEACH', '#ff6fb1'), side: THREE.DoubleSide })), 0, 7, 0));
-    for (const dx of [-5, 5]) obSign.add(at(cyl(0.15, 0.15, 8, ink, 5), dx, 4, 0));
-    obSign.position.set(OB, 0, -44); B.add(obSign);
+    sign(B, 'OCEAN BEACH', '#ff6fb1', OB, -46, 11, 5, FACE);
     const tower = new THREE.Group();
     for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) tower.add(at(cyl(0.1, 0.1, 3, mat(0xd9d4c9), 4), x, 1.5, z));
     tower.add(at(rbox(2.6, 1.7, 2.6, 0.3, mat(0x3a7fc4)), 0, 3.6, 0));
     tower.add(at(cone(2.0, 1.0, mat(0xf4f1ea), 4).rotateY(Math.PI / 4), 0, 5, 0));
-    tower.position.set(30, 0.15, -64); B.add(tower);
+    tower.position.set(-20, 0.15, -52); B.add(tower);
     // Dog Beach, at the river mouth: dogs tearing back and forth on the sand.
     const dogs = [0x8a5a3c, 0xe9d8b4, 0x2a2d35].map((col, n) => {
       const d = new THREE.Group();
@@ -1204,10 +1205,10 @@ const WORLD = {
       B.add(d);
       return { d, n };
     });
-    const lineup = surfers(B, [[14, -104], [28, -114], [4, -122], [22, -130]], 0.05, ocean.swell);
+    const lineup = surfers(B, [[-30, -90], [-12, -100], [-48, -108], [6, -116]], 0.05, ocean.swell);
     // The OB pier: a long concrete deck on piles, a T at the end, lamps, the cafe.
     const pierMat = mat(0xd9d4c9);
-    const PX = OB + 8; const PY = 6; const P0 = SHORE + 20; const P1 = SHORE - 190;
+    const PX = OB - 2; const PY = 6; const P0 = SHORE + 20; const P1 = SHORE - 190;
     B.add(at(rbox(4, 0.8, P0 - P1, 0.2, pierMat), PX, PY, (P0 + P1) / 2));
     B.add(at(rbox(30, 0.8, 4, 0.2, pierMat), PX, PY, P1));
     for (let z = P0 - 6; z > P1; z -= 9) for (const dx of [-1.4, 1.4]) B.add(at(cyl(0.3, 0.3, PY + 2, pierMat, 5), PX + dx, (PY - 2) / 2, z));
@@ -1216,10 +1217,9 @@ const WORLD = {
     B.add(at(rbox(4.2, 0.5, 7.6, 0.2, mat(0x3a7fc4)), PX, PY + 3.6, P0 - 60));
     // Point Loma across the water: a long brushy ridge, the old lighthouse on its high point, its lamp blinking.
     const PL = new THREE.Group();
-    PL.position.set(-150, 0, -300);
-    PL.rotation.y = -0.5;
+    PL.position.set(-240, 0, -170);
     const ridge = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x7d8a55, { roughness: 1 }));
-    ridge.scale.set(60, 40, 220);
+    ridge.scale.set(70, 40, 220);
     PL.add(ridge);
     PL.add(at(rbox(8, 5, 6, 0.5, mat(0xf4f1ea)), 0, 41, 20));
     PL.add(at(cyl(1.4, 1.6, 9, mat(0xf4f1ea), 10), 0, 46, 20));
@@ -1236,7 +1236,7 @@ const WORLD = {
     B.add(boat);
     const OUT = 30;
     const trees = [];
-    k.scatter(-130, 46, -44, 120, 12, [[RX - 12, RX + 12, -100, 200]], (x, z) => { if (k.rnd() < 0.4) trees.push([x, z, 9 + k.rnd() * 4]); });
+    k.scatter(-200, 160, -30, 160, 12, [[RX - 12, RX + 12, -300, 300], [-130, -90, -300, 300]], (x, z) => { if (k.rnd() < 0.4) trees.push([x, z, 9 + k.rnd() * 4]); });
     k.trees(trees, 'round');
     return (t) => {
       k.anim(t);
@@ -1245,22 +1245,29 @@ const WORLD = {
       lineup(t);
       lamp.visible = t % 4 < 0.6;
       const u = (t / OUT) % 1;
-      const bx = RX + Math.max(0, u - 0.45) * 160;
-      const bz = SHORE + 20 - Math.min(u, 0.45) * 260;
+      const bx = RX + Math.max(0, u - 0.45) * 200;
+      const bz = SHORE + 20 - Math.min(u, 0.45) * 220;
       boat.position.set(bx, ocean.swell(bx, bz, t), bz);
-      boat.rotation.set(0.06 * Math.sin(t * 1.3 + 1), u > 0.45 ? -Math.PI / 2 : 0, 0.05 * Math.sin(t * 1.3));
+      boat.rotation.set(0.06 * Math.sin(t * 1.3 + 1), u > 0.45 ? Math.PI / 2 : 0, 0.05 * Math.sin(t * 1.3));
       boat.visible = u > 0.02 && u < 0.97;
       for (const { d, n } of dogs) {
         const a = t * (1.4 + n * 0.3) + n * 2;
-        d.position.set(RX - 24 + 10 * Math.sin(a), 0.15 + 0.3 * Math.abs(Math.sin(a * 6)), SHORE + 10 + n * 4);
+        d.position.set(RX + 20 + 10 * Math.sin(a), 0.15 + 0.3 * Math.abs(Math.sin(a * 6)), SHORE + 12 + n * 4);
         d.rotation.y = Math.cos(a) > 0 ? 0 : Math.PI;
       }
     };
   },
 };
 
-/** Neighbouring courts in each place's bank, across the main court's width (meters in the court's frame, +z toward the camera). */
-const BANK = { ucsd: [-18.3, 18.3], balboa: [-36.6, -18.3, 18.3], barnes: [-18.3], northpark: [-18.3, 18.3], lindavista: [-18.3], roosevelt: [-18.3] };
+/** Neighbouring courts in each place's bank: [x, z] meters in the court's frame (18.3 m apart side by side, 40.6 end to end). */
+const BANK = {
+  ucsd: [[0, -18.3], [0, 18.3]],
+  balboa: [[0, -36.6], [0, -18.3], [0, 18.3], [-40.6, -36.6], [-40.6, -18.3], [-40.6, 0], [-40.6, 18.3]],
+  barnes: [[0, -18.3]],
+  northpark: [[0, -18.3], [0, 18.3]],
+  lindavista: [[0, -18.3]],
+  roosevelt: [[0, -18.3]],
+};
 
 function build(data) {
   H.set(data);
@@ -1278,11 +1285,12 @@ function build(data) {
     g.add(arena);
     // The place: its bank of courts, then its world, then anything that flies over it.
     const bank = BANK[v.key] || [];
-    for (const z of bank) { const n = enclosure(colors); n.position.z = mt(z); g.add(n); }
-    const B = facing();
+    for (const [x, z] of bank) { const n = enclosure(colors); n.position.set(mt(x), 0, mt(z)); g.add(n); }
+    const B = metersGroup();
     const air = new THREE.Group();
     air.scale.setScalar(2.5); // the landmark props' aircraft were drawn small: this makes a jet ~15 m and the helicopter ~10 m
-    const k = worldKit(B, air, 11 + i * 13, [Math.min(0, ...bank), Math.max(0, ...bank)]);
+    const xs = [0, ...bank.map((b) => b[0])]; const zs = [0, ...bank.map((b) => b[1])];
+    const k = worldKit(B, air, 11 + i * 13, { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) });
     const anim = WORLD[v.key]?.(k, B);
     k.done();
     if (v.key === 'ucsd') k.landmark('ucsd', 0, -400, { h: 1 }); // only for its jets: the props themselves sit out past the fog
