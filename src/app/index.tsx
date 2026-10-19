@@ -1,10 +1,12 @@
 import { type Href, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SceneView, useScene } from '@/components/scene-view';
 import { HOME_HTML } from '@/generated/home-html';
+import { toAnswer, useCloud } from '@/lib/cloud';
 import { dueList, useCloset } from '@/lib/gear';
 import { computeSeason, scoreLine, useMatches, winnerOf } from '@/lib/matches';
 import { useRoster } from '@/lib/roster';
@@ -22,6 +24,9 @@ export default function Home() {
   const tour = useTour();
   const scene = useScene();
   const { run } = scene;
+  const cloud = useCloud();
+  const insets = useSafeAreaInsets();
+  const waiting = toAnswer(matches).length;
 
   const you = roster.find((f) => f.isYou) ?? roster[0];
   const { rows } = computeSeason(roster, matches);
@@ -64,6 +69,18 @@ export default function Home() {
           if (msg.type === 'go') { sfx('go', 0.8); router.push(ROUTES[msg.to as keyof typeof ROUTES]); }
         }}
       />
+      {cloud.status !== 'off' ? (
+        <View style={[styles.pills, { top: insets.top + 10 }]} pointerEvents="box-none">
+          {waiting ? (
+            <Pressable onPress={() => { sfx('go', 0.8); router.push('/confirm'); }} accessibilityRole="button" style={[styles.pill, styles.hot]}>
+              <Text style={[styles.pillText, { color: '#f4f1e6' }]}>{waiting} TO CONFIRM</Text>
+            </Pressable>
+          ) : null}
+          <Pressable onPress={() => { sfx('go', 0.8); router.push('/crew'); }} accessibilityRole="button" style={styles.pill}>
+            <Text style={styles.pillText}>{cloud.crew ? cloud.crew.name : 'CREW'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -90,4 +107,8 @@ function seasonLine(rows: ReturnType<typeof computeSeason>['rows'], youId: strin
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
+  pills: { position: 'absolute', right: 14, flexDirection: 'row', gap: 8 },
+  pill: { backgroundColor: '#f6f5f2', borderColor: '#1a1a1a', borderWidth: 2, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  hot: { backgroundColor: '#ff3d7f', borderColor: '#1a1a1a' },
+  pillText: { color: '#1a1a1a', fontSize: 11, fontWeight: '900', letterSpacing: 1.4, maxWidth: 140 },
 });

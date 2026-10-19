@@ -1,12 +1,13 @@
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { LolSplash } from '@/components/lol-splash';
 import { C } from '@/constants/arcade';
+import { startCloud } from '@/lib/cloud';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 const hideNativeSplash = () => { void SplashScreen.hideAsync().catch(() => {}); };
@@ -16,6 +17,8 @@ const theme = { ...DarkTheme, colors: { ...DarkTheme.colors, background: C.bg, c
 export default function RootLayout() {
   const [showIntro, setShowIntro] = useState(true);
   const finishIntro = useCallback(() => { hideNativeSplash(); setShowIntro(false); }, []);
+  // Sign in and load the crew in the background; every screen works from this phone's data until it lands.
+  useEffect(() => { void startCloud(); }, []);
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <ThemeProvider value={theme}>

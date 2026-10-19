@@ -90,6 +90,10 @@ export default function MatchScreen() {
       Alert.alert('Pick a court', 'Every match is played somewhere. Tap the sign on the fence.');
       return;
     }
+    if (opp.isYou) {
+      Alert.alert('Nobody to play', 'Add a friend to your crew first, by invite or by name.', [{ text: 'Not now' }, { text: 'Crew', onPress: () => router.push('/crew') }]);
+      return;
+    }
     sealing.current = true;
     try {
       // Every match ends with a photo at the court. Backing out of the camera leaves the board as it was; the strip re-arms itself.
