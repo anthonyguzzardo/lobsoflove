@@ -1333,7 +1333,7 @@ function paint() {
   $('lights').classList.toggle('off', !v.lights);
   $('count').querySelector('b').textContent = String(v.courts.length);
   // Stats only once there is something to say; an empty record is noise.
-  $('blurb').textContent = v.played ? [`${v.played} played here`, v.king ? `king: ${v.king}` : null, `you ${v.rec}`].filter(Boolean).join(' · ') : '';
+  $('blurb').textContent = v.played ? [`${v.played} played here`, v.king ? `held by ${v.king}` : null, `you ${v.rec}`].filter(Boolean).join(' · ') : '';
   const room = presence.venues[v.id];
   const mine = presence.you === v.id;
   if (presence.mode !== 'meet') slide.setKey(String(st.target + 1), 'JUMP IN', 'SLIDE TO PLAY HERE');

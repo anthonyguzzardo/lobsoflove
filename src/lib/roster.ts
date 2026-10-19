@@ -15,6 +15,8 @@ export type Fighter = {
   isYou?: boolean;
   /** Placeholder slot until a real friend joins. */
   demo?: boolean;
+  /** In a crew: a friend someone added by name who has not installed the app yet. Their matches wait for them to confirm. */
+  pretender?: boolean;
 };
 
 export const CAST: Record<CastId, { label: string; tagline: string }> = {
@@ -56,6 +58,10 @@ const SEED: Fighter[] = [
 
 const KEY = 'lol.roster.v1';
 let roster: Fighter[] = SEED;
+/** The shared roster while you are in a crew (src/lib/cloud.ts). The phone's own roster stays saved underneath it. */
+let crew: Fighter[] | null = null;
+/** Where an edit to your own fighter goes while you are in a crew. */
+let pushYou: ((f: Fighter) => void) | null = null;
 let loaded = false;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
@@ -76,9 +82,29 @@ async function load() {
 }
 
 export function saveFighter(next: Fighter) {
-  roster = roster.map((f) => (f.id === next.id ? next : f));
+  // Your own fighter is kept on the phone too, so leaving a crew keeps the one you made.
+  if (next.isYou || roster.some((f) => f.id === next.id)) {
+    roster = roster.map((f) => (f.isYou && next.isYou ? { ...next, id: f.id } : f.id === next.id ? next : f));
+    AsyncStorage.setItem(KEY, JSON.stringify(roster)).catch(() => {});
+  }
+  if (crew && next.isYou) {
+    crew = crew.map((f) => (f.isYou ? { ...next, id: f.id } : f));
+    pushYou?.(next);
+  }
   emit();
-  AsyncStorage.setItem(KEY, JSON.stringify(roster)).catch(() => {});
+}
+
+/** Your fighter as saved on this phone, even while a crew roster is showing. */
+export async function localYou(): Promise<Fighter> {
+  await load();
+  return roster.find((f) => f.isYou) ?? you;
+}
+
+/** Called by the crew sync: the shared roster (or null to go back to this phone's), and where edits to you go. */
+export function setCrewRoster(next: Fighter[] | null, onSaveYou: ((f: Fighter) => void) | null = null) {
+  crew = next;
+  pushYou = onSaveYou;
+  emit();
 }
 
 export function useRoster(): Fighter[] {
@@ -88,7 +114,7 @@ export function useRoster(): Fighter[] {
       void load();
       return () => listeners.delete(l);
     },
-    () => roster,
-    () => roster,
+    () => crew ?? roster,
+    () => crew ?? roster,
   );
 }

@@ -12,7 +12,7 @@ db/
 ├── sql/
 │   ├── dbLOL_Tables.sql         # canonical CREATE TABLE for every table (current state, no ALTERs)
 │   ├── dbLOL_Security.sql       # GRANTs, RLS policies, helper functions
-│   ├── rpc/                     # rpc_<domain>.sql (none yet)
+│   ├── rpc/                     # rpc_<domain>.sql: rpc_crew.sql (every shared-season write)
 │   └── migrations/NNN_*.sql     # deployable change history; the user runs these in the SQL Editor
 ├── supabase/
 │   ├── config.toml              # exposes the lol schema; per-function verify_jwt (always false, commented)
@@ -30,13 +30,21 @@ Direct SQL (the db.<ref> host is IPv6-only; use the IPv4 session pooler), passwo
 Exposed schemas were set with `alter role authenticator set pgrst.db_schemas = 'public, graphql_public, lol'` +
 `notify pgrst, 'reload config'` (also `notify pgrst, 'reload schema'` after DDL). Keep the Dashboard's Exposed schemas in step.
 
-Applied migrations: 001 (2026-10-15).
+Applied migrations: 001 (2026-10-15). Written, not yet applied: 002 (shared season) + rpc/rpc_crew.sql.
+Anonymous sign-ins must be ON (Dashboard -> Authentication -> Providers); every phone signs in anonymously.
 
 ## Tables
 
 | Table | Kind | Purpose |
 |---|---|---|
 | `lol.th_ink_reads` | history, server-only | One row per AI read: device, line, chosen action, tokens. Also the daily cap. |
+| `lol.tb_crews` | normal | A friend group: name, 6-letter invite code, founder. |
+| `lol.tb_players` | normal | A fighter. `user_id` null = pretender (added by name, claimable by `claim_token`). |
+| `lol.tm_crew_players` | matrix | Who is in which crew, with role (commissioner, player). One crew per player for now. |
+| `lol.tb_matches` | normal | Reported by p1; counts once p2 confirms. Client picks `match_id`. |
+| `lol.tb_beacons` | normal | One row per player: the court they are at now. |
+
+Writes (rpc/rpc_crew.sql): `fn_save_me`, `fn_create_crew`, `fn_join_crew(code, claim)`, `fn_add_pretender`, `fn_report_match`, `fn_answer_match`, `fn_withdraw_match`, `fn_set_beacon`. Scenario test recipe: local Postgres 17 with a stub `auth.uid()` reading `current_setting('test.uid')`.
 
 ## Edge functions
 

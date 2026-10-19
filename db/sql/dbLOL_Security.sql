@@ -21,3 +21,56 @@ ALTER TABLE lol.th_ink_reads ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON lol.th_ink_reads FROM authenticated, anon;
 GRANT SELECT, INSERT ON lol.th_ink_reads TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE lol.th_ink_reads_ink_read_id_seq TO service_role;
+
+-- ----------------------------------------------------------------------------
+-- Shared season tables (migration 002): SELECT through RLS for crew members,
+-- every write through the SECURITY DEFINER functions in rpc/rpc_crew.sql.
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION lol.fn_my_player_id() RETURNS UUID
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = lol, pg_temp AS $$
+    SELECT player_id FROM lol.tb_players WHERE user_id = auth.uid()
+$$;
+
+CREATE OR REPLACE FUNCTION lol.fn_my_crew_ids() RETURNS SETOF UUID
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = lol, pg_temp AS $$
+    SELECT cp.crew_id FROM lol.tm_crew_players cp
+    JOIN lol.tb_players p ON p.player_id = cp.player_id
+    WHERE p.user_id = auth.uid()
+$$;
+
+-- -------------------------------------------------------------- security ----
+
+ALTER TABLE lol.tb_crews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lol.tb_players ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lol.tm_crew_players ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lol.tb_matches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lol.tb_beacons ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON lol.tb_crews, lol.tb_players, lol.tm_crew_players, lol.tb_matches, lol.tb_beacons FROM anon, authenticated;
+GRANT SELECT ON lol.tb_crews, lol.tb_players, lol.tm_crew_players, lol.tb_matches, lol.tb_beacons TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON lol.tb_crews, lol.tb_players, lol.tm_crew_players, lol.tb_matches, lol.tb_beacons TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE lol.tm_crew_players_crew_player_id_seq TO service_role;
+
+DROP POLICY IF EXISTS crews_select_member ON lol.tb_crews;
+CREATE POLICY crews_select_member ON lol.tb_crews FOR SELECT TO authenticated
+    USING (crew_id IN (SELECT lol.fn_my_crew_ids()));
+
+DROP POLICY IF EXISTS players_select_self_or_crew ON lol.tb_players;
+CREATE POLICY players_select_self_or_crew ON lol.tb_players FOR SELECT TO authenticated
+    USING (user_id = auth.uid() OR player_id IN (
+        SELECT cp.player_id FROM lol.tm_crew_players cp WHERE cp.crew_id IN (SELECT lol.fn_my_crew_ids())));
+
+DROP POLICY IF EXISTS crew_players_select_member ON lol.tm_crew_players;
+CREATE POLICY crew_players_select_member ON lol.tm_crew_players FOR SELECT TO authenticated
+    USING (crew_id IN (SELECT lol.fn_my_crew_ids()));
+
+DROP POLICY IF EXISTS matches_select_member ON lol.tb_matches;
+CREATE POLICY matches_select_member ON lol.tb_matches FOR SELECT TO authenticated
+    USING (crew_id IN (SELECT lol.fn_my_crew_ids()));
+
+DROP POLICY IF EXISTS beacons_select_member ON lol.tb_beacons;
+CREATE POLICY beacons_select_member ON lol.tb_beacons FOR SELECT TO authenticated
+    USING (crew_id IN (SELECT lol.fn_my_crew_ids()));
+
+REVOKE ALL ON FUNCTION lol.fn_my_player_id(), lol.fn_my_crew_ids() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION lol.fn_my_player_id(), lol.fn_my_crew_ids() TO authenticated;

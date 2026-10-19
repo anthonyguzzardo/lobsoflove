@@ -12,7 +12,7 @@ import { ANTHEMS, playAnthem, stopAnthem, toggleMute } from '@/lib/anthems';
 import { courtStats, pickCourt } from '@/lib/courts';
 import { useMatches } from '@/lib/matches';
 import { goBack } from '@/lib/nav';
-import { demoFriends, islandState, setBeacon, useBeacon } from '@/lib/presence';
+import { demoFriends, islandState, setBeacon, useBeacon, useCrewPeople } from '@/lib/presence';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 import type { ThemeId } from '@/lib/themes';
@@ -30,6 +30,8 @@ export default function Courts() {
   const { run } = scene;
   const you = roster.find((f) => f.isYou) ?? roster[0];
   const beacon = useBeacon();
+  // In a crew these are your real friends' beacons; out of one, labeled stand-ins so the islands are never empty.
+  const crewPeople = useCrewPeople();
   // Re-read the clock every minute, so someone due at 6:30 walks on at 6:30.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 60 * 1000); return () => clearInterval(id); }, []);
@@ -49,7 +51,7 @@ export default function Courts() {
   });
   useEffect(() => { run(`window.setCourts(${data})`); }, [run, data]);
 
-  const friends = demoFriends(now);
+  const friends = crewPeople ?? demoFriends(now);
   const presence = JSON.stringify({
     you: beacon?.venue ?? null,
     mode: params.from === 'match' ? 'pick' : 'meet',

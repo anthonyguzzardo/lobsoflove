@@ -15,10 +15,29 @@ export type Beacon = { venue: string; at: number };
 
 const KEY = 'lol.beacon.v1';
 /** A beacon older than this is a session that is over. */
-const BEACON_HOURS = 3;
+export const BEACON_HOURS = 3;
 
 let beacon: Beacon | null = null;
 let loaded = false;
+/** Real friends at the courts while you are in a crew (src/lib/cloud.ts); null means use the stand-ins. */
+let crewPeople: Person[] | null = null;
+/** Where your beacon goes while you are in a crew. */
+let pushBeacon: ((venue: string | null) => void) | null = null;
+
+/** Called by the crew sync: who is at which court, and where your own beacon goes. */
+export function setCrewPresence(people: Person[] | null, onBeacon: typeof pushBeacon = null) {
+  crewPeople = people;
+  pushBeacon = onBeacon;
+  emit();
+}
+
+export function useCrewPeople(): Person[] | null {
+  return useSyncExternalStore(
+    (l) => { listeners.add(l); return () => listeners.delete(l); },
+    () => crewPeople,
+    () => crewPeople,
+  );
+}
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -39,6 +58,7 @@ async function load() {
 export function setBeacon(venue: string | null) {
   beacon = venue ? { venue, at: Date.now() } : null;
   emit();
+  pushBeacon?.(venue);
   if (beacon) AsyncStorage.setItem(KEY, JSON.stringify(beacon)).catch(() => {});
   else AsyncStorage.removeItem(KEY).catch(() => {});
 }

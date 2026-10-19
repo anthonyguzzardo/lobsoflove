@@ -19,7 +19,19 @@ export type Match = {
   playedAt: number;
   /** How long it lasted, when the player wrote it down. */
   minutes?: number;
+  /**
+   * In a crew a match counts once the opponent confirms it. Absent on matches kept only on this phone, which always count.
+   * Disputed matches never count.
+   */
+  status?: 'pending' | 'confirmed' | 'disputed';
+  /** Who entered the score (a roster id). The other player is the one who confirms. */
+  reportedBy?: string;
 };
+
+/** True when a match counts toward the season, the belts and the records. */
+export const counts = (m: Match) => m.status === undefined || m.status === 'confirmed';
+/** Waiting on the opponent. */
+export const isPending = (m: Match) => m.status === 'pending';
 
 /**
  * Season points. A win is 100. A loss still pays for showing up, but less each time inside a week (25, 15, then 5), so losing a lot
@@ -56,8 +68,12 @@ function rank(rows: Map<string, Row>): Record<string, number> {
   return Object.fromEntries(sorted.map((r, i) => [r.id, i + 1]));
 }
 
-/** Replays every match in order so the upset bonus uses the standings as they were before that match. */
-export function computeSeason(roster: Fighter[], matches: Match[]): { rows: Row[]; awards: Record<string, Award> } {
+/**
+ * Replays every match in order so the upset bonus uses the standings as they were before that match. Only matches that count are
+ * replayed; `include` adds one pending match, so its card can show what it will be worth once confirmed.
+ */
+export function computeSeason(roster: Fighter[], all: Match[], opts: { include?: string } = {}): { rows: Row[]; awards: Record<string, Award> } {
+  const matches = all.filter((m) => counts(m) || m.id === opts.include);
   const rows = new Map<string, Row>(roster.map((f) => [f.id, { id: f.id, points: 0, wins: 0, losses: 0, streak: 0 }]));
   const awards: Record<string, Award> = {};
   const lossesAt = new Map<string, number[]>();
@@ -98,6 +114,26 @@ export function computeSeason(roster: Fighter[], matches: Match[]): { rows: Row[
 
 const KEY = 'lol.matches.v1';
 let matches: Match[] = [];
+/** The crew's shared matches while you are in a crew (src/lib/cloud.ts). This phone's own log stays saved underneath. */
+let crew: Match[] | null = null;
+/** Where new and removed matches go while you are in a crew. */
+let sink: { add: (m: Match) => void; remove: (id: string) => void } | null = null;
+
+/** Called by the crew sync: the shared matches (or null to go back to this phone's log), and where writes go. */
+export function setCrewMatches(next: Match[] | null, to: typeof sink = null) {
+  crew = next;
+  sink = to;
+  emit();
+}
+
+/** A random v4 id. The server takes the app's id, so the card can open before the server has answered. */
+export function newId(): string {
+  const h = [...Array(32)].map(() => Math.floor(Math.random() * 16).toString(16));
+  h[12] = '4';
+  h[16] = ((parseInt(h[16], 16) & 3) | 8).toString(16);
+  const s = h.join('');
+  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
+}
 let loaded = false;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
@@ -118,6 +154,14 @@ async function load() {
 /** Stamps the id and time (now, unless the player wrote when it was), stores the match, and returns its id. */
 export function addMatch(input: Omit<Match, 'id' | 'playedAt'> & { playedAt?: number }): string {
   const playedAt = input.playedAt ?? Date.now();
+  if (crew && sink) {
+    // In a crew: it shows at once as waiting on the opponent, and goes to the server.
+    const m: Match = { ...input, id: newId(), playedAt, status: 'pending', reportedBy: input.p1 };
+    crew = [...crew, m];
+    emit();
+    sink.add(m);
+    return m.id;
+  }
   const m: Match = { ...input, id: `m${Date.now()}`, playedAt };
   matches = [...matches, m];
   emit();
@@ -127,6 +171,12 @@ export function addMatch(input: Omit<Match, 'id' | 'playedAt'> & { playedAt?: nu
 
 /** Deletes a match (the "undo last match" command). */
 export function removeMatch(id: string) {
+  if (crew && sink) {
+    crew = crew.filter((m) => m.id !== id);
+    emit();
+    sink.remove(id);
+    return;
+  }
   matches = matches.filter((m) => m.id !== id);
   emit();
   AsyncStorage.setItem(KEY, JSON.stringify(matches)).catch(() => {});
@@ -139,8 +189,8 @@ export function useMatches(): Match[] {
       void load();
       return () => listeners.delete(l);
     },
-    () => matches,
-    () => matches,
+    () => crew ?? matches,
+    () => crew ?? matches,
   );
 }
 

@@ -21,7 +21,8 @@ export default function MatchCard() {
   const insets = useSafeAreaInsets();
   const shot = useRef<ViewShotRef>(null);
   const match = matches.find((m) => m.id === id);
-  const award = computeSeason(roster, matches).awards[id];
+  // A match you just reported is still waiting on your opponent: show what it will be worth once they confirm.
+  const award = computeSeason(roster, matches, { include: id }).awards[id];
   const byId = (x: string) => roster.find((f) => f.id === x);
   const w = award ? byId(award.winner) : undefined;
   const l = award ? byId(award.loser) : undefined;
@@ -45,6 +46,9 @@ export default function MatchCard() {
         <View style={styles.top}>
           <Text style={styles.brand}>LOBSOFLOVE</Text>
           <Text style={styles.meta}>{match.court.toUpperCase()} · {new Date(match.playedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase()}</Text>
+          {match.status && match.status !== 'confirmed' ? (
+            <Text style={styles.wait}>{match.status === 'disputed' ? 'DISPUTED. THIS ONE DOES NOT COUNT.' : `WAITING ON ${(byId(match.reportedBy === match.p1 ? match.p2 : match.p1)?.name ?? 'THEM').toUpperCase()} TO CONFIRM`}</Text>
+          ) : null}
         </View>
         <View style={styles.bottom}>
           <View style={styles.row}>
@@ -86,6 +90,7 @@ const styles = StyleSheet.create({
   top: { padding: 16 },
   brand: { ...heavy, color: C.ball, fontSize: 20, letterSpacing: 0.5 },
   meta: { color: C.text, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginTop: 2 },
+  wait: { color: C.p2, fontSize: 11, fontWeight: '900', letterSpacing: 1.5, marginTop: 6 },
   bottom: { backgroundColor: 'rgba(11,15,26,0.9)', padding: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   col: { flex: 1 },
