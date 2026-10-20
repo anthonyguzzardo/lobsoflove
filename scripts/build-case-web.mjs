@@ -410,6 +410,8 @@ const crewCss = homeCss + `
 .tag.pre i{opacity:.6}
 .tag.chalk b{background:transparent;box-shadow:none;border:none;color:var(--clay);padding:0}
 #panel{pointer-events:auto!important}
+/* The crew's name is tappable: it renames the crew. */
+body.crewpage #h1{pointer-events:auto;text-decoration:underline dotted 3px;text-underline-offset:6px;cursor:pointer}
 #alt{all:unset;display:block;text-align:center;font:800 11px var(--mono);letter-spacing:.14em;text-decoration:underline;margin:0 0 12px;opacity:.75}
 #alt:active{transform:translateY(2px)}
 #lasso{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}

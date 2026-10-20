@@ -22,6 +22,7 @@ import { useHoldTurn } from '@/lib/hold-turn';
 import { goBack } from '@/lib/nav';
 import { CAST_IDS, COLORS, saveFighter, useRoster } from '@/lib/roster';
 import { addPretender, createCrew, joinCrew, useCloud } from '@/lib/cloud';
+import { answerAsk, currentAsk } from '@/lib/ink-ask';
 import { sfx } from '@/lib/sfx';
 
 type Msg =
@@ -56,6 +57,9 @@ export default function Ink() {
   const params = useLocalSearchParams<{ demo?: string; say?: string; for?: string }>();
   // Opened from the crew's chalk spot: the page asks for one friend's name, and whatever is written is read as adding them.
   const friend = params.for === 'friend';
+  // Opened by another page for one answer (src/lib/ink-ask.ts): whatever is typed or written is that answer, as is.
+  const [ask] = useState(() => (params.for === 'ask' ? currentAsk() : null));
+  const askValue = (t: string) => { const v = t.trim().slice(0, ask?.max ?? 140); return ask?.upper ? v.toUpperCase() : v; };
   const roster = useRoster();
   const cloud = useCloud();
   const matches = useMatches();
@@ -86,6 +90,7 @@ export default function Ink() {
 
   /** A command if it reads as one ("change fighter to servebot"), else a match or gear entry. */
   const understand = (t: string): Card => {
+    if (ask) return { text: t, lines: [ask.label, askValue(t) || '...'], questions: [], warn: null, canSave: !!askValue(t), draft: { kind: 'none' } };
     const last = [...matches].sort((a, b) => b.playedAt - a.playedAt)[0];
     const lastMatch = last ? { id: last.id, label: `${winnerOf(last) === last.p1 ? 'W' : 'L'} vs ${roster.find((f) => f.id === last.p2)?.name ?? '?'}  ${scoreLine(last.sets)}` } : null;
     const crew = cloud.status === 'off' ? undefined : cloud.crew?.name ?? null;
@@ -127,7 +132,7 @@ export default function Ink() {
     } else {
       c = understand(t);
       // Not a score, gear or a fixed command: ask the AI reader, and say so on the card while it thinks.
-      if (c.draft.kind === 'none' && !friend && AI_READER_READY && t.trim().length >= 3 && !offline.current) {
+      if (c.draft.kind === 'none' && !friend && !ask && AI_READER_READY && t.trim().length >= 3 && !offline.current) {
         if (asking.current !== t) askAi(t);
         c = { ...c, lines: [`"${t}"`, 'reading it...'], canSave: false };
       }
@@ -209,6 +214,7 @@ export default function Ink() {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     sfx('slam', 0.4);
     const reset = () => { entries.current = []; answers.current = {}; card.current = null; unlockTurn(); };
+    if (ask) { answerAsk(c.text); run('window.saved("SAVED")'); reset(); setTimeout(goBack, 450); return; }
     // The self-writing demo never touches real standings.
     if (params.demo) { run(`window.saved("DEMO: NOT SAVED")`); reset(); return; }
     if (d.kind === 'match' && d.opp) {
@@ -248,6 +254,7 @@ export default function Ink() {
 
   const onReady = () => {
     pushLine();
+    if (ask) run(`window.setHints(${JSON.stringify({ title: ask.label, examples: ask.examples?.length ? ask.examples : ['...'] })})`);
     if (friend) run(`window.setHints(${JSON.stringify({ title: "WRITE YOUR FRIEND'S NAME", examples: ['maya', 'jo', 'big dave', 'sam'] })})`);
     AsyncStorage.getItem(PEN_KEY).then((v) => { if (v) run(`window.setPen(${Number(v)})`); }).catch(() => {});
     // Test hook: /ink?say=change fighter to servebot skips the handwriting and shows the card for that sentence.
@@ -329,6 +336,8 @@ export default function Ink() {
     const t = typed.trim();
     if (!t) return;
     setTyped('');
+    // Answering a page's question: sending it is the answer. No card, no extra tap.
+    if (ask) { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); answerAsk(t); goBack(); return; }
     setChat((cs) => [...cs, { who: 'you', text: t }]);
     entries.current = [{ space: true }];
     answers.current = {};
@@ -336,7 +345,8 @@ export default function Ink() {
     run(`window.setLine(${JSON.stringify(t)}, 0)`);
     showCard();
   };
-  const hint = friend ? "type their name: maya" : 'type it: beat dave 6-4 6-2';
+  const hint = ask ? (ask.examples?.[0] ?? '') : friend ? 'type their name: maya' : 'type it: beat dave 6-4 6-2';
+  const label = ask ? ask.label : friend ? 'ADD A FRIEND' : null;
 
   // Where you are: the split chooser first, then typing or writing (each can switch to the other).
   const [mode, setMode] = useState<'pick' | 'type' | 'write'>(params.say || params.demo ? 'write' : 'pick');
@@ -358,13 +368,13 @@ export default function Ink() {
         <View style={[styles.pick, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <View style={styles.pickHead}>
             <Pressable onPress={goBack} hitSlop={12}><Text style={styles.back}>{'<'} BACK</Text></Pressable>
-            <Text style={styles.title}>{friend ? 'ADD A FRIEND' : 'SAY IT'}</Text>
+            <Text style={styles.title}>{label ?? 'SAY IT'}</Text>
           </View>
           <View style={styles.halves}>
             <Pressable style={({ pressed }) => [styles.half, styles.halfType, pressed && styles.halfPressed]} onPress={() => pickMode('type')}>
               <KeysIcon size={86} light />
               <Text style={[styles.halfWord, styles.light]}>TYPE</Text>
-              <Text style={[styles.halfSub, styles.light]}>{friend ? 'their name, on the keyboard' : 'like texting the app'}</Text>
+              <Text style={[styles.halfSub, styles.light]}>{ask ? 'on the keyboard' : friend ? 'their name, on the keyboard' : 'like texting the app'}</Text>
             </Pressable>
             <Pressable style={({ pressed }) => [styles.half, pressed && styles.halfPressed]} onPress={() => pickMode('write')}>
               <PenIcon size={86} />
@@ -378,7 +388,7 @@ export default function Ink() {
         <View style={[styles.chat, { paddingTop: insets.top + 8 }]}>
           <View style={styles.head}>
             <Pressable onPress={() => setMode('pick')} hitSlop={12}><Text style={styles.back}>{'<'} BACK</Text></Pressable>
-            <Text style={styles.title}>{friend ? 'ADD A FRIEND' : 'TYPE IT'}</Text>
+            <Text style={styles.title}>{label ?? 'TYPE IT'}</Text>
             <Pressable onPress={() => pickMode('write')} hitSlop={10} style={styles.switch}><PenIcon size={18} /><Text style={styles.switchText}>WRITE INSTEAD</Text></Pressable>
           </View>
           <ScrollView ref={chatScroll} style={styles.log} contentContainerStyle={styles.logIn} onContentSizeChange={() => chatScroll.current?.scrollToEnd({ animated: true })} keyboardShouldPersistTaps="handled">
@@ -389,10 +399,10 @@ export default function Ink() {
                   <Pressable onPress={save} hitSlop={8}><Text style={styles.saveIt}>SAVE IT</Text></Pressable>
                 ) : null}
               </View>
-            )) : <Text style={styles.empty}>{friend ? 'type your friend\'s name' : 'type it like a text: a score, a time, a restring'}</Text>}
+            )) : <Text style={styles.empty}>{ask ? ask.label.toLowerCase() : friend ? 'type your friend\'s name' : 'type it like a text: a score, a time, a restring'}</Text>}
           </ScrollView>
           <View style={[styles.bar, { paddingBottom: Math.max(10, insets.bottom) }]}>
-            <TextInput style={styles.field} value={typed} onChangeText={setTyped} onSubmitEditing={send} placeholder={hint} placeholderTextColor="rgba(22,24,29,0.35)" returnKeyType="send" autoCapitalize="none" autoCorrect={!friend} autoFocus />
+            <TextInput style={styles.field} value={typed} onChangeText={setTyped} onSubmitEditing={send} placeholder={hint} placeholderTextColor="rgba(22,24,29,0.35)" returnKeyType="send" autoCapitalize={ask?.upper ? 'characters' : ask ? 'sentences' : 'none'} autoCorrect={!friend && !ask?.upper} maxLength={ask?.max} autoFocus />
             <Pressable onPress={send} hitSlop={8} style={[styles.send, !typed.trim() && { opacity: 0.35 }]}><Text style={styles.sendText}>SEND</Text></Pressable>
           </View>
         </View>

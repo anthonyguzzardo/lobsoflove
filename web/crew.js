@@ -251,8 +251,8 @@ function panel() {
     st.sel.clear();
     if (d.mode === 'solo') {
       h1.textContent = 'JUST YOU'; h2.textContent = 'FOR NOW';
-      blurb.textContent = 'Slide to make your crew and send the link to your group chat. Whoever taps it is in, with their own fighter.';
-      slide.setKey('01', 'START A CREW', 'MAKES IT AND SENDS THE LINK'); action = { type: 'start' };
+      blurb.textContent = 'Slide, give it a name, and send the link to your group chat. Whoever taps it is in, with their own fighter.';
+      slide.setKey('01', 'START A CREW', 'NAME IT, THEN SEND THE LINK'); action = { type: 'start' };
     } else if (d.mode === 'error') {
       h1.textContent = 'CAN’T REACH'; h2.textContent = 'THE SEASON'; blurb.textContent = d.error || '';
       slide.setKey('01', 'TRY AGAIN', 'SLIDE TO RECONNECT'); action = { type: 'retry' };
@@ -334,6 +334,9 @@ $('manage').addEventListener('click', () => {
   panel();
 });
 $('msg').addEventListener('click', () => post({ type: 'editmsg', text: st.message || '' }));
+// Tap the crew's name to rename it (the app asks on the TYPE / WRITE page).
+$('h1').addEventListener('click', () => { if (st.mode === 'crew') post({ type: 'rename' }); });
+document.body.classList.add('crewpage');
 
 const slide = createSlide({
   post,

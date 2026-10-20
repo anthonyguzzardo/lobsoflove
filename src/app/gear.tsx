@@ -5,7 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { BackSwing } from '@/components/back-swing';
 import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
@@ -17,6 +17,7 @@ import {
 import { type Match, useMatches } from '@/lib/matches';
 import { goBack } from '@/lib/nav';
 import { sfx } from '@/lib/sfx';
+import { askInk } from '@/lib/ink-ask';
 
 type Msg =
   | { type: 'doors' | 'knock' | 'grab' | 'fling' | 'tick' | 'ping' | 'wrap' | 'kick' | 'pop' | 'land' | 'thud' | 'squeak' | 'crack' }
@@ -110,8 +111,6 @@ export default function Closet() {
   const scene = useScene();
   const { run } = scene;
   const focused = useRef<string | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [text, setText] = useState('');
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
 
@@ -119,13 +118,11 @@ export default function Closet() {
   useEffect(() => { run(`window.setCloset(${data})`); }, [run, data]);
 
   const byId = (id: string) => itemsRef.current.find((i) => i.id === id);
-  const startEdit = (id: string) => { const it = byId(id); if (!it) return; setText(it.name === DEFAULT_NAME[it.kind] ? '' : it.name); setEditing(id); };
-  const commit = () => {
-    if (!editing) return;
-    const it = byId(editing);
-    if (it) renameItem(editing, text.trim().toUpperCase() || DEFAULT_NAME[it.kind]);
-    setEditing(null);
-    void Haptics.selectionAsync();
+  /** Naming a piece of gear happens on the TYPE / WRITE page; the answer renames it here. */
+  const startEdit = (id: string) => {
+    const it = byId(id);
+    if (!it) return;
+    askInk({ label: 'WHAT IS IT CALLED', max: 22, upper: true, examples: [PLACEHOLDER[it.kind]] }, (t) => { renameItem(id, t || DEFAULT_NAME[it.kind]); void Haptics.selectionAsync(); });
   };
   const add = async (kind: 'racket' | 'shoes') => {
     const photo = await pickPhoto();
@@ -194,49 +191,11 @@ export default function Closet() {
         }}
       />
       <BackSwing floating onBack={back} />
-      {editing ? (
-        <KeyboardAvoidingView style={styles.sheet} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={commit} accessibilityLabel="Done" />
-          <View style={[styles.card, { marginBottom: 12 }]}>
-            <Text style={styles.label}>WHAT IS IT CALLED</Text>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              autoFocus
-              maxLength={22}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              placeholder={PLACEHOLDER[items.find((i) => i.id === editing)?.kind ?? 'racket']}
-              placeholderTextColor="rgba(22,24,29,0.35)"
-              returnKeyType="done"
-              onSubmitEditing={commit}
-              style={styles.input}
-              selectionColor="#e2562f"
-            />
-            <View style={styles.row}>
-              <Text style={styles.count}>{text.length} / 22</Text>
-              <Pressable onPress={commit} style={({ pressed }) => [styles.done, pressed && styles.donePressed]} accessibilityRole="button">
-                <Text style={styles.doneText}>DONE</Text>
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      ) : null}
     </View>
   );
 }
 
-const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
-  sheet: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(239,236,229,0.92)', justifyContent: 'flex-end', paddingHorizontal: 16 },
-  card: { backgroundColor: '#fffdf8', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#16181d', shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 5 } },
-  label: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: '#e2562f' },
-  input: { fontFamily: MONO, fontWeight: '800', fontSize: 24, color: '#16181d', paddingVertical: 10, borderBottomWidth: 2.5, borderBottomColor: '#16181d' },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
-  count: { fontFamily: MONO, fontWeight: '700', fontSize: 12, color: '#16181d', opacity: 0.55 },
-  done: { backgroundColor: '#16181d', borderRadius: 4, paddingHorizontal: 16, paddingVertical: 10, shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 4 } },
-  donePressed: { transform: [{ translateY: 4 }], shadowOffset: { width: 0, height: 0 } },
-  doneText: { fontFamily: MONO, fontWeight: '800', fontSize: 14, letterSpacing: 1.4, color: '#efece5' },
 });

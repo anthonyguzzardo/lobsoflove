@@ -1,23 +1,23 @@
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Share, StyleSheet, View } from 'react-native';
 
 import { BackSwing } from '@/components/back-swing';
-import { InkButton } from '@/components/ink-button';
 import { type Cue, SceneView, useScene } from '@/components/scene-view';
-import { MONO, P, paperCard } from '@/constants/paper';
+import { P } from '@/constants/paper';
 import venues from '@/data/venues.json';
 import { CREW_HTML } from '@/generated/crew-html';
 import {
-  answerCallup, type Callup, callupLink, cancelCallup, crewNow, createCrew, deleteCrew, inviteLink, leaveCrew, postCallup, removePretender,
+  answerCallup, type Callup, callupLink, cancelCallup, crewNow, renameCrew, createCrew, deleteCrew, inviteLink, leaveCrew, postCallup, removePretender,
   startCloud, useCloud,
 } from '@/lib/cloud';
 import { useMatches } from '@/lib/matches';
 import { useBeacon } from '@/lib/presence';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
+import { askInk } from '@/lib/ink-ask';
 
 const CUES: Record<string, Cue> = {
   poke: (m) => { void Haptics.impactAsync(m.pretender ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium); sfx(m.pretender ? 'drip' : m.cast === 'grunter' ? 'grunt' : 'squeak', 0.7); },
@@ -37,7 +37,6 @@ const shortName = (id: string | null | undefined) => {
   return v ? v.short.replace(/ NORTH$/, '').replace(/\b\w+/g, (w) => w[0] + w.slice(1).toLowerCase()).replace(/^Ucsd/, 'UCSD') : null;
 };
 /** Your court: your home court if it is one of ours, else the first venue. */
-const venueFor = (f: { homeCourt: string }) => venues.find((v) => v.name === f.homeCourt)?.id ?? venues[0].id;
 /** When to say, from the clock: before 4 pm "after 5", into the evening "now", late "tomorrow after 5". */
 const when = (d = new Date()) => (d.getHours() < 16 ? 'after 5' : d.getHours() < 20 ? 'now' : 'tomorrow after 5');
 
@@ -56,13 +55,12 @@ export default function CrewScreen() {
   const scene = useScene();
   const { run } = scene;
   const you = roster.find((f) => f.isYou) ?? roster[0];
-  // An unnamed fighter is just "YOU": name the crew after your court instead of "YOU'S CREW".
-  const suggest = (you.name && you.name !== 'YOU' ? `${you.name}'S CREW` : `${shortName(venueFor(you)) ?? 'THE'} CREW`).toUpperCase().slice(0, 40);
+  // What the name prompt suggests: your fighter's name if it has one. Never a court: a crew is people, not a place.
+  const suggest = (you.name && you.name !== 'YOU' ? `${you.name}'S CREW` : 'THE CREW').toUpperCase().slice(0, 40);
   const inCrew = cloud.status === 'crew' && !!cloud.crew;
   // The court a call-up is for: where you are, else where you played last, else your home court's venue.
   const lastCourt = [...matches].sort((a, b) => b.playedAt - a.playedAt)[0]?.courtId;
   const venue = beacon?.venue ?? lastCourt ?? venues.find((v) => v.name === you.homeCourt)?.id ?? venues[0].id;
-  const [edit, setEdit] = useState<string | null>(null);
   const edited = useRef(false);
 
   // The call-up that matters: one sent to you you have not said out to, else your own live one.
@@ -109,7 +107,9 @@ export default function CrewScreen() {
         setMessage(`${FORMAT[Math.min(n + 1, 8)]} at ${court} ${when()}? Need ${n} more.`);
         break;
       }
-      case 'editmsg': setEdit(msg.text ?? ''); break;
+      // The call-up message is retyped (or rewritten) on the TYPE / WRITE page.
+      case 'rename': askInk({ label: 'RENAME THE CREW', max: 40, upper: true, examples: [cloud.crew?.name ?? suggest] }, (t) => { if (t) renameCrew(t).then(() => run('window.cheer()'), fail); }); break;
+      case 'editmsg': askInk({ label: 'THE MESSAGE', max: 140, examples: [msg.text || 'Doubles at Balboa after 5?'] }, (t) => { if (t) { edited.current = true; setMessage(t); } }); break;
       case 'alt':
         if (msg.act === 'write') router.push('/ink');
         else if (msg.act === 'out') answerCallup(msg.id, false).then(() => run('window.nope()'), fail);
@@ -121,7 +121,8 @@ export default function CrewScreen() {
 
   const handleSlid = (a: { [k: string]: any }) => {
     // Making the crew sends the link straight away: there is nothing else to set up.
-    if (a.action === 'start') createCrew(suggest).then(() => { run('window.cheer()'); setTimeout(() => invite(), 600); }, fail);
+    // Starting a crew: name it (typed or written), then it is made and the link goes straight to the share sheet.
+    if (a.action === 'start') askInk({ label: 'NAME YOUR CREW', max: 40, upper: true, examples: [suggest] }, (t) => createCrew(t || suggest).then(() => { run('window.cheer()'); setTimeout(() => invite(), 600); }, fail));
     else if (a.action === 'retry') void startCloud();
     else if (a.action === 'invite') invite();
     else if (a.action === 'callup') {
@@ -143,13 +144,6 @@ export default function CrewScreen() {
     }
   };
 
-  const commit = () => {
-    if (edit === null) return;
-    const t = edit.trim();
-    if (t) { edited.current = true; setMessage(t); }
-    setEdit(null);
-  };
-
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
@@ -167,28 +161,10 @@ export default function CrewScreen() {
         onMessage={onMessage}
       />
       <BackSwing floating />
-      {edit !== null ? (
-        <KeyboardAvoidingView style={styles.sheet} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={commit} accessibilityLabel="Done" />
-          <View style={[paperCard, { marginBottom: 12 }]}>
-            <Text style={styles.label}>THE MESSAGE</Text>
-            <TextInput value={edit} onChangeText={setEdit} autoFocus multiline maxLength={140} placeholder="Say it your way" placeholderTextColor={P.faint} selectionColor={P.red} style={styles.input} returnKeyType="done" blurOnSubmit onSubmitEditing={commit} />
-            <View style={styles.row}>
-              <Text style={styles.count}>{edit.length} / 140</Text>
-              <InkButton label="DONE" onPress={commit} />
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: P.paper },
-  sheet: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(239,236,229,0.92)', justifyContent: 'flex-end', paddingHorizontal: 16 },
-  label: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: P.red },
-  input: { fontFamily: MONO, fontWeight: '800', fontSize: 18, color: P.ink, paddingVertical: 10, borderBottomWidth: 2.5, borderBottomColor: P.ink, minHeight: 60 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
-  count: { fontFamily: MONO, fontWeight: '700', fontSize: 12, color: P.ink, opacity: 0.55 },
 });

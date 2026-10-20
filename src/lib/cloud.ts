@@ -322,6 +322,14 @@ export async function createCrew(name: string) {
   await loadCrew();
 }
 
+/** Rename your crew (anyone in it can). */
+export async function renameCrew(name: string) {
+  if (!db) throw new Error('No backend configured.');
+  const { error } = await db.rpc('fn_rename_crew', { p_name: name });
+  fail(error);
+  await loadCrew();
+}
+
 /** Join by invite code. With a claim token you also become the pretender someone added for you, with their matches. */
 export async function joinCrew(code: string, claim?: string | null) {
   await startCloud();

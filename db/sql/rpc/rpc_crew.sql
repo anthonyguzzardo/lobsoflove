@@ -191,17 +191,30 @@ BEGIN
     END IF;
 END $$;
 
+-- Rename your crew (any member). Migration 005.
+CREATE OR REPLACE FUNCTION lol.fn_rename_crew(p_name TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = lol, pg_temp AS $$
+DECLARE v_me UUID := lol.fn_my_player_id(); v_crew UUID; v_name TEXT := left(upper(trim(coalesce(p_name, ''))), 40);
+BEGIN
+    IF v_name = '' THEN RAISE EXCEPTION 'a crew needs a name' USING ERRCODE = '22023'; END IF;
+    SELECT crew_id INTO v_crew FROM lol.tm_crew_players WHERE player_id = v_me LIMIT 1;
+    IF v_crew IS NULL THEN RAISE EXCEPTION 'you are not in a crew' USING ERRCODE = '42501'; END IF;
+    UPDATE lol.tb_crews SET crew_name = v_name, dttm_modified_utc = now() WHERE crew_id = v_crew;
+    RETURN true;
+END $$;
+
 REVOKE ALL ON FUNCTION
      lol.fn_new_code(INT), lol.fn_save_me(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT), lol.fn_create_crew(TEXT)
     ,lol.fn_join_crew(TEXT, TEXT), lol.fn_add_pretender(TEXT, TEXT, TEXT)
     ,lol.fn_report_match(UUID, UUID, JSONB, TEXT, TEXT, TIMESTAMPTZ, INT, BOOLEAN)
-    ,lol.fn_answer_match(UUID, BOOLEAN), lol.fn_withdraw_match(UUID), lol.fn_set_beacon(TEXT)
+    ,lol.fn_answer_match(UUID, BOOLEAN), lol.fn_withdraw_match(UUID), lol.fn_set_beacon(TEXT), lol.fn_rename_crew(TEXT)
 FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION
      lol.fn_save_me(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT), lol.fn_create_crew(TEXT)
     ,lol.fn_join_crew(TEXT, TEXT), lol.fn_add_pretender(TEXT, TEXT, TEXT)
     ,lol.fn_report_match(UUID, UUID, JSONB, TEXT, TEXT, TIMESTAMPTZ, INT, BOOLEAN)
-    ,lol.fn_answer_match(UUID, BOOLEAN), lol.fn_withdraw_match(UUID), lol.fn_set_beacon(TEXT)
+    ,lol.fn_answer_match(UUID, BOOLEAN), lol.fn_withdraw_match(UUID), lol.fn_set_beacon(TEXT), lol.fn_rename_crew(TEXT)
 TO authenticated;
 
 COMMIT;

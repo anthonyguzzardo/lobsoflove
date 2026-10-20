@@ -30,7 +30,7 @@ Direct SQL (the db.<ref> host is IPv6-only; use the IPv4 session pooler), passwo
 Exposed schemas were set with `alter role authenticator set pgrst.db_schemas = 'public, graphql_public, lol'` +
 `notify pgrst, 'reload config'` (also `notify pgrst, 'reload schema'` after DDL). Keep the Dashboard's Exposed schemas in step.
 
-Applied migrations: 001 (2026-10-15). 002 (shared season) + rpc/rpc_crew.sql applied by the user 2026-10-19. 003 applied by the user 2026-10-19. 004 (push notifications, pg_net) live as of 2026-10-20 (checked against the database).
+Applied migrations: 001 (2026-10-15). 002 (shared season) + rpc/rpc_crew.sql applied by the user 2026-10-19. 003 applied by the user 2026-10-19. 004 (push notifications, pg_net) live as of 2026-10-20 (checked against the database). 005 (fn_rename_crew) applied 2026-10-20.
 Anonymous sign-ins must be ON (Dashboard -> Authentication -> Providers); every phone signs in anonymously. ON as of 2026-10-20.
 
 ## Tables
@@ -47,7 +47,7 @@ Anonymous sign-ins must be ON (Dashboard -> Authentication -> Providers); every 
 | `lol.tm_callup_players` | matrix | Who a call-up went to and their answer (in, out). |
 | `lol.tb_push_tokens` | normal, server-only | Expo push token per phone. Triggers on tb_matches (confirm your match) and tm_callup_players (called up) post to Expo through pg_net. |
 
-Writes (rpc/rpc_crew.sql): `fn_save_me`, `fn_create_crew`, `fn_join_crew(code, claim)`, `fn_add_pretender`, `fn_report_match`, `fn_answer_match`, `fn_withdraw_match`, `fn_set_beacon`. rpc/rpc_callup.sql: `fn_post_callup`, `fn_answer_callup`, `fn_cancel_callup`, `fn_delete_crew` (commissioner), `fn_leave_crew`, `fn_remove_pretender`; internal `fn_wipe_crew`. Scenario test recipe: local Postgres 17 with a stub `auth.uid()` reading `current_setting('test.uid')`.
+Writes (rpc/rpc_crew.sql): `fn_save_me`, `fn_create_crew`, `fn_join_crew(code, claim)`, `fn_add_pretender`, `fn_report_match`, `fn_answer_match`, `fn_withdraw_match`, `fn_set_beacon`, `fn_rename_crew` (any member). rpc/rpc_callup.sql: `fn_post_callup`, `fn_answer_callup`, `fn_cancel_callup`, `fn_delete_crew` (commissioner), `fn_leave_crew`, `fn_remove_pretender`; internal `fn_wipe_crew`. Scenario test recipe: local Postgres 17 with a stub `auth.uid()` reading `current_setting('test.uid')`.
 
 ## Edge functions
 
