@@ -146,3 +146,41 @@ CREATE TABLE IF NOT EXISTS lol.tb_beacons
     ,modified_by                  VARCHAR(50)            NOT NULL DEFAULT CURRENT_USER
 );
 CREATE INDEX IF NOT EXISTS idx_beacons_crew_id ON lol.tb_beacons (crew_id);
+
+-- ----------------------------------------------------------------------------
+-- Call-ups (migration 003): "need N at this court", posted to the friends the
+-- caller circled. tm_callup_players: one row per invited player, answer_code
+-- in|out (null until answered). Enough in and status_code goes open -> on.
+-- Expires 12 h after posting. Writes only through the functions in migration 003.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS lol.tb_callups
+(
+     callup_id                    UUID                   PRIMARY KEY DEFAULT gen_random_uuid()
+    ,crew_id                      UUID                   NOT NULL
+    ,caller_player_id             UUID                   NOT NULL
+    ,venue_code                   VARCHAR(40)            NULL
+    ,need                         INT                    NOT NULL       -- players besides the caller
+    ,message                      VARCHAR(200)           NOT NULL DEFAULT ''
+    ,status_code                  VARCHAR(12)            NOT NULL DEFAULT 'open'
+    ,dttm_expires_utc             TIMESTAMPTZ            NOT NULL
+    ,dttm_created_utc             TIMESTAMPTZ            NOT NULL DEFAULT NOW()
+    ,created_by                   VARCHAR(50)            NOT NULL DEFAULT CURRENT_USER
+    ,dttm_modified_utc            TIMESTAMPTZ            NOT NULL DEFAULT NOW()
+    ,modified_by                  VARCHAR(50)            NOT NULL DEFAULT CURRENT_USER
+    ,CHECK (status_code IN ('open', 'on', 'off'))
+    ,CHECK (need BETWEEN 1 AND 7)
+);
+CREATE INDEX IF NOT EXISTS idx_callups_crew_id_dttm_created_utc ON lol.tb_callups (crew_id, dttm_created_utc);
+
+CREATE TABLE IF NOT EXISTS lol.tm_callup_players
+(
+     callup_player_id             BIGSERIAL              PRIMARY KEY
+    ,callup_id                    UUID                   NOT NULL
+    ,player_id                    UUID                   NOT NULL
+    ,answer_code                  VARCHAR(8)             NULL           -- null until they answer: in | out
+    ,dttm_answered_utc            TIMESTAMPTZ            NULL
+    ,created_by                   VARCHAR(50)            NOT NULL DEFAULT CURRENT_USER
+    ,UNIQUE (callup_id, player_id)
+    ,CHECK (answer_code IS NULL OR answer_code IN ('in', 'out'))
+);
+CREATE INDEX IF NOT EXISTS idx_callup_players_player_id ON lol.tm_callup_players (player_id);

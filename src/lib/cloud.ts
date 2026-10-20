@@ -33,6 +33,11 @@ const OUTBOX_KEY = 'lol.outbox.v1';
 const PHOTOS_KEY = 'lol.crewphotos.v1';
 
 export type Crew = { id: string; name: string; code: string; role: string };
+/** "Need N at this court": who called it, who it went to and what they said. Ids are roster ids ('you' for you). */
+export type Callup = {
+  id: string; caller: string; venue: string | null; need: number; message: string; status: 'open' | 'on' | 'off';
+  expiresAt: number; createdAt: number; answers: Record<string, 'in' | 'out' | null>;
+};
 export type CloudState = {
   /** off: no backend configured. solo: signed in, not in a crew. crew: the season is shared. */
   status: 'off' | 'starting' | 'solo' | 'crew' | 'error';
@@ -40,9 +45,11 @@ export type CloudState = {
   crew: Crew | null;
   /** Claim tokens for the pretenders in your crew, by roster id, for their invite links. */
   claims: Record<string, string>;
+  /** Live call-ups in your crew (not expired, not called off), newest first. */
+  callups: Callup[];
 };
 
-let state: CloudState = { status: CLOUD_READY ? 'starting' : 'off', error: null, crew: null, claims: {} };
+let state: CloudState = { status: CLOUD_READY ? 'starting' : 'off', error: null, crew: null, claims: {}, callups: [] };
 const listeners = new Set<() => void>();
 const set = (patch: Partial<CloudState>) => { state = { ...state, ...patch }; listeners.forEach((l) => l()); };
 
@@ -65,6 +72,11 @@ type MatchRow = {
   minutes: number | null; dttm_played_utc: string; reported_by_player_id: string; status_code: 'pending' | 'confirmed' | 'disputed';
 };
 type BeaconRow = { player_id: string; venue_code: string; dttm_at_utc: string };
+type CallupRow = {
+  callup_id: string; caller_player_id: string; venue_code: string | null; need: number; message: string;
+  status_code: 'open' | 'on' | 'off'; dttm_expires_utc: string; dttm_created_utc: string;
+};
+type AnswerRow = { callup_id: string; player_id: string; answer_code: 'in' | 'out' | null };
 
 let meId: string | null = null;
 const toLocal = (id: string) => (id === meId ? YOU : id);
@@ -159,6 +171,8 @@ export async function refresh() {
   const err = members.error ?? players.error ?? ms.error ?? bs.error;
   if (err) { set({ error: err.message }); return; }
   const inCrew = new Set((members.data as { player_id: string }[]).map((r) => r.player_id));
+  // The crew was deleted, or you left it from another phone: back to solo.
+  if (!inCrew.has(meId)) { await loadCrew(); return; }
   const rows = (players.data as PlayerRow[]).filter((p) => inCrew.has(p.player_id));
   // You first, then real friends, then pretenders: the order the case picker and standings fall back on.
   rows.sort((a, b) => Number(b.player_id === meId) - Number(a.player_id === meId) || Number(a.user_id === null) - Number(b.user_id === null));
@@ -179,8 +193,24 @@ export async function refresh() {
   setCrewPresence(people, sendBeacon);
   set({
     error: null,
+    callups: await loadCallups(crew.id),
     claims: Object.fromEntries(rows.filter((p) => p.claim_token).map((p) => [toLocal(p.player_id), p.claim_token!])),
   });
+}
+
+/** Call-ups need migration 003; before it is run the tables are missing and there are simply none. */
+async function loadCallups(crewId: string): Promise<Callup[]> {
+  if (!db) return [];
+  const { data: cs, error } = await db.from('tb_callups').select('*').eq('crew_id', crewId).neq('status_code', 'off')
+    .gt('dttm_expires_utc', new Date().toISOString()).order('dttm_created_utc', { ascending: false });
+  if (error || !cs?.length) return [];
+  const ids = (cs as CallupRow[]).map((c) => c.callup_id);
+  const { data: as } = await db.from('tm_callup_players').select('callup_id, player_id, answer_code').in('callup_id', ids);
+  return (cs as CallupRow[]).map((c) => ({
+    id: c.callup_id, caller: toLocal(c.caller_player_id), venue: c.venue_code, need: c.need, message: c.message, status: c.status_code,
+    expiresAt: Date.parse(c.dttm_expires_utc), createdAt: Date.parse(c.dttm_created_utc),
+    answers: Object.fromEntries(((as ?? []) as AnswerRow[]).filter((a) => a.callup_id === c.callup_id).map((a) => [toLocal(a.player_id), a.answer_code])),
+  }));
 }
 
 function subscribe(crewId: string) {
@@ -193,6 +223,9 @@ function subscribe(crewId: string) {
     .on('postgres_changes', on('tb_beacons', `crew_id=eq.${crewId}`), refreshSoon)
     .on('postgres_changes', on('tm_crew_players', `crew_id=eq.${crewId}`), refreshSoon)
     .on('postgres_changes', on('tb_players'), refreshSoon)
+    .on('postgres_changes', on('tb_callups', `crew_id=eq.${crewId}`), refreshSoon)
+    .on('postgres_changes', on('tm_callup_players'), refreshSoon)
+    .on('postgres_changes', on('tb_crews'), refreshSoon)
     .subscribe();
 }
 
@@ -200,8 +233,9 @@ async function loadCrew() {
   if (!db || !meId) return;
   const { data: link } = await db.from('tm_crew_players').select('crew_id, role_code').eq('player_id', meId).limit(1).maybeSingle();
   if (!link) {
+    if (channel && db) { void db.removeChannel(channel); channel = null; }
     setCrewRoster(null); setCrewMatches(null); setCrewPresence(null);
-    set({ status: 'solo', crew: null, claims: {} });
+    set({ status: 'solo', crew: null, claims: {}, callups: [] });
     return;
   }
   const { data: c, error } = await db.from('tb_crews').select('crew_id, crew_name, invite_code').eq('crew_id', link.crew_id).single();
@@ -317,6 +351,67 @@ export function inviteLink(forId?: string): string | null {
   const claim = forId ? state.claims[forId] : undefined;
   return Linking.createURL(`join/${state.crew.code}`, claim ? { queryParams: { claim } } : undefined);
 }
+
+/**
+ * Call up the friends you circled (roster ids; empty means the whole crew): need `need` besides you, at `venue`, with a message.
+ * Returns the call-up id for its link.
+ */
+export async function postCallup(players: string[], need: number, venue: string | null, message: string): Promise<string> {
+  if (!db) throw new Error('No backend configured.');
+  const { data, error } = await db.rpc('fn_post_callup', { p_venue_code: venue, p_need: need, p_message: message, p_players: players.map(toServer) });
+  if (error) throw new Error(/fn_post_callup/.test(error.message) ? 'Run migration 003 in Supabase first.' : error.message);
+  await refresh();
+  return data as string;
+}
+
+/** In or out of a friend's call-up. Returns 'on' once enough are in. */
+export async function answerCallup(id: string, inn: boolean): Promise<string> {
+  if (!db) throw new Error('No backend configured.');
+  const { data, error } = await db.rpc('fn_answer_callup', { p_callup_id: id, p_in: inn });
+  fail(error);
+  await refresh();
+  return data as string;
+}
+
+export async function cancelCallup(id: string) {
+  if (!db) return;
+  const { error } = await db.rpc('fn_cancel_callup', { p_callup_id: id });
+  fail(error);
+  await refresh();
+}
+
+/** Leave your crew (your matches stay on their record). If you were the last real member, the crew is gone. */
+export async function leaveCrew() {
+  if (!db) return;
+  const { error } = await db.rpc('fn_leave_crew');
+  fail(error);
+  await loadCrew();
+}
+
+/** The commissioner deletes the crew for everyone, with its matches, call-ups and pretenders. */
+export async function deleteCrew() {
+  if (!db) return;
+  const { error } = await db.rpc('fn_delete_crew');
+  fail(error);
+  await loadCrew();
+}
+
+/** Take a pretender you added back out of the crew. */
+export async function removePretender(id: string) {
+  if (!db) return;
+  const { error } = await db.rpc('fn_remove_pretender', { p_player: toServer(id) });
+  fail(error);
+  await refresh();
+}
+
+/** The link that opens a call-up; for anyone not in the crew it also joins them. */
+export function callupLink(id: string): string | null {
+  if (!state.crew) return null;
+  return Linking.createURL(`callup/${id}`, { queryParams: { crew: state.crew.code } });
+}
+
+/** Call-ups a friend sent you that you have not answered. */
+export const toCallupAnswer = (cs: Callup[]) => cs.filter((c) => c.caller !== YOU && c.status !== 'off' && c.answers[YOU] === null);
 
 /** Matches someone reported against you that are waiting on your answer. */
 export const toAnswer = (ms: Match[]) => ms.filter((m) => m.status === 'pending' && m.p2 === YOU && m.reportedBy !== YOU);

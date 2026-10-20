@@ -5,17 +5,21 @@ import type { Answers, Card, Question } from '@/lib/ink-parse';
 import { sim } from '@/lib/ink-parse';
 import { CAST, CAST_IDS, COLORS, type CastId, type Fighter } from '@/lib/roster';
 
-export type Page = 'home' | 'standings' | 'courts' | 'fighter' | 'gear' | 'case';
+export type Page = 'home' | 'standings' | 'courts' | 'fighter' | 'gear' | 'case' | 'crew';
 export type Command =
   | { kind: 'cast'; cast: CastId }
   | { kind: 'color'; color: string; word: string }
   | { kind: 'name'; name: string }
   | { kind: 'court'; id: string; name: string; home: boolean }
   | { kind: 'undo'; matchId: string }
-  | { kind: 'open'; page: Page };
+  | { kind: 'open'; page: Page }
+  | { kind: 'found'; name: string }
+  | { kind: 'recruit'; name: string }
+  | { kind: 'join'; code: string };
 
 export type Venue = { id: string; name: string };
-export type Ctx = { roster: Fighter[]; venues: Venue[]; lastMatch: { id: string; label: string } | null };
+/** `crew`: the crew you are in, by name; null when you are in none; undefined when this build has no server. */
+export type Ctx = { roster: Fighter[]; venues: Venue[]; lastMatch: { id: string; label: string } | null; crew?: string | null };
 
 export const COLOR_WORDS: Record<string, string> = {
   yellow: COLORS[0], lime: COLORS[0], ball: COLORS[0], pink: COLORS[1], blue: COLORS[2], cyan: COLORS[2], orange: COLORS[3],
@@ -23,7 +27,7 @@ export const COLOR_WORDS: Record<string, string> = {
 };
 const PAGES: Record<string, Page> = {
   home: 'home', standings: 'standings', table: 'standings', season: 'standings', courts: 'courts', court: 'courts',
-  fighter: 'fighter', gear: 'gear', closet: 'gear', play: 'case', opponents: 'case',
+  fighter: 'fighter', gear: 'gear', closet: 'gear', play: 'case', opponents: 'case', crew: 'crew', roster: 'crew', team: 'crew', friends: 'crew',
 };
 
 /** Best fuzzy match of `said` among labelled options; null when nothing is close. Ties come back as a question. */
@@ -99,6 +103,31 @@ export function parseCommand(text: string, ctx: Ctx, answers: Answers = {}): Car
   if (/ (?:undo|delete|remove|scratch) (?:the )?(?:last )?(?:match|game)? ?$| undo /.test(t)) {
     if (!ctx.lastMatch) return card(text, ['UNDO', 'no matches to undo'], null);
     return card(text, ['DELETE LAST MATCH', ctx.lastMatch.label], { kind: 'undo', matchId: ctx.lastMatch.id });
+  }
+
+  // Crew. "join k7qx2m": a code from a friend. Invite codes skip 0, O, 1, I and L, so a written 0 or O can only be a misread.
+  if ((m = t.match(/ (?:join|code)(?: the| a| my)?(?: crew)?(?: code)? ([a-z0-9]{6}) $/))) {
+    const code = m[1].toUpperCase();
+    if (ctx.crew === undefined) return card(text, ['JOIN A CREW', 'this build has no server'], null);
+    if (ctx.crew) return card(text, ['JOIN A CREW', `you are already in ${ctx.crew.toUpperCase()}`], null);
+    if (/[01OIL]/.test(code)) return card(text, ['JOIN A CREW', code, 'codes never have 0, O, 1, I or L', 'write it again'], null);
+    return card(text, ['JOIN A CREW', code], { kind: 'join', code });
+  }
+  // "start a crew called the lobsters", "new crew lobsters", "found the lobsters".
+  if ((m = t.match(/ (?:start|new|make|create|found)(?: a| the| my)?(?: new)? crew(?: called| named)? (.+)| found (?:the )?(.+)/))) {
+    const name = (m[1] ?? m[2]).trim().toUpperCase().slice(0, 40);
+    if (ctx.crew === undefined) return card(text, ['START A CREW', 'this build has no server'], null);
+    if (ctx.crew) return card(text, ['START A CREW', `you are already in ${ctx.crew.toUpperCase()}`], null);
+    return card(text, ['START A CREW', name], { kind: 'found', name });
+  }
+  // "add dave", "add dave to the crew", "recruit dave", "sign dave". A new friend stands in the crew as a pretender until they
+  // open their link.
+  if ((m = t.match(/ (?:add|recruit|invite|sign) (?:my friend |my buddy )?([a-z][a-z' ]{0,22}?)(?: to (?:the |my )?(?:crew|roster|team))? $/))) {
+    const name = m[1].trim().toUpperCase().slice(0, 16);
+    if (ctx.crew === undefined) return card(text, ['ADD TO THE CREW', 'this build has no server'], null);
+    if (!ctx.crew) return card(text, ['ADD TO THE CREW', 'start a crew first', 'write: start a crew called ...'], null);
+    if (ctx.roster.some((f) => f.name.toUpperCase() === name)) return card(text, ['ADD TO THE CREW', `${name} is already on the roster`], null);
+    return card(text, ['ADD TO THE CREW', name, 'stands in pale until they open their link'], { kind: 'recruit', name });
   }
 
   // Go somewhere: "open standings", "go to gear", "show courts".

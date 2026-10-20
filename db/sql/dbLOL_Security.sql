@@ -74,3 +74,18 @@ CREATE POLICY beacons_select_member ON lol.tb_beacons FOR SELECT TO authenticate
 
 REVOKE ALL ON FUNCTION lol.fn_my_player_id(), lol.fn_my_crew_ids() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION lol.fn_my_player_id(), lol.fn_my_crew_ids() TO authenticated;
+
+-- Call-ups (migration 003): SELECT for crew members, writes through functions.
+ALTER TABLE lol.tb_callups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lol.tm_callup_players ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON lol.tb_callups, lol.tm_callup_players FROM anon, authenticated;
+GRANT SELECT ON lol.tb_callups, lol.tm_callup_players TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON lol.tb_callups, lol.tm_callup_players TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE lol.tm_callup_players_callup_player_id_seq TO service_role;
+
+DROP POLICY IF EXISTS callups_select_member ON lol.tb_callups;
+CREATE POLICY callups_select_member ON lol.tb_callups FOR SELECT TO authenticated
+    USING (crew_id IN (SELECT lol.fn_my_crew_ids()));
+DROP POLICY IF EXISTS callup_players_select_member ON lol.tm_callup_players;
+CREATE POLICY callup_players_select_member ON lol.tm_callup_players FOR SELECT TO authenticated
+    USING (callup_id IN (SELECT callup_id FROM lol.tb_callups WHERE crew_id IN (SELECT lol.fn_my_crew_ids())));

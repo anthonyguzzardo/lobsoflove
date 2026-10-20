@@ -124,4 +124,23 @@ assert.equal(turnFromGravity(0.3, -0.5, -9.7, 'ios'), null, 'flat on a table: no
 assert.equal(turnFromGravity(6.9, -6.9, 0, 'ios'), null, 'halfway between two turns: no say');
 assert.equal(turnFromGravity(2, -6, -7, 'ios'), 0, 'tilted back while writing, still upright');
 
+// Crew, written instead of typed into a form.
+{
+  const solo = { ...ctx, crew: null };
+  const inCrew = { ...ctx, crew: 'lobs of love' };
+  const kindOf = (t: string, c: typeof ctx & { crew?: string | null }) => { const r = parseCommand(t, c); return r?.draft.kind === 'command' ? r.draft.cmd : r ? 'card-no-save' : null; };
+  assert.deepEqual(kindOf('join k7qx2m', solo), { kind: 'join', code: 'K7QX2M' });
+  assert.deepEqual(kindOf('join crew k7qx2m', solo), { kind: 'join', code: 'K7QX2M' });
+  assert.equal(kindOf('join k7qx0m', solo), 'card-no-save', 'a 0 is a misread: codes never have one');
+  assert.equal(kindOf('join k7qx2m', inCrew), 'card-no-save', 'already in a crew');
+  assert.deepEqual(kindOf('start a crew called the lobsters', solo), { kind: 'found', name: 'THE LOBSTERS' });
+  assert.deepEqual(kindOf('new crew moonballers', solo), { kind: 'found', name: 'MOONBALLERS' });
+  assert.deepEqual(kindOf('add gary', inCrew), { kind: 'recruit', name: 'GARY' });
+  assert.deepEqual(kindOf('add gary to the crew', inCrew), { kind: 'recruit', name: 'GARY' });
+  assert.equal(kindOf('add gary', solo), 'card-no-save', 'no crew to add to');
+  assert.equal(kindOf('add marco', inCrew), 'card-no-save', 'already on the roster');
+  assert.equal(kindOf('join k7qx2m', ctx), 'card-no-save', 'no server in this build');
+  assert.deepEqual(kindOf('open crew', inCrew), { kind: 'open', page: 'crew' });
+}
+
 console.log('ink parse: all good');

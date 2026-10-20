@@ -17,7 +17,8 @@ import { layoutLine, pickTurn, recognizeChar, TURNS, turnPiece, type Stroke, typ
 import { addMatch, removeMatch, scoreLine, useMatches, winnerOf } from '@/lib/matches';
 import { useHoldTurn } from '@/lib/hold-turn';
 import { goBack } from '@/lib/nav';
-import { saveFighter, useRoster } from '@/lib/roster';
+import { CAST_IDS, COLORS, saveFighter, useRoster } from '@/lib/roster';
+import { addPretender, createCrew, joinCrew, useCloud } from '@/lib/cloud';
 import { sfx } from '@/lib/sfx';
 
 type Msg =
@@ -30,7 +31,7 @@ type Msg =
 
 const PEN_KEY = 'lol.ink.pen';
 const FLIP_KEY = 'lol.ink.flip';
-const PAGE_ROUTES: Record<Page, '/' | '/standings' | '/courts' | '/fighter' | '/gear' | '/case'> = { home: '/', standings: '/standings', courts: '/courts', fighter: '/fighter', gear: '/gear', case: '/case' };
+const PAGE_ROUTES: Record<Page, '/' | '/standings' | '/courts' | '/fighter' | '/gear' | '/case' | '/crew'> = { home: '/', standings: '/standings', courts: '/courts', fighter: '/fighter', gear: '/gear', case: '/case', crew: '/crew' };
 const INK_LAST = 'lol.ink.last';
 
 /** A written piece (one stacked letter, or a word written across) waiting on, or done with, the recognizer. */
@@ -44,6 +45,7 @@ type Entry = { space: true } | { space?: false; cands: string[] | null; strokes:
 export default function Ink() {
   const params = useLocalSearchParams<{ demo?: string; say?: string }>();
   const roster = useRoster();
+  const cloud = useCloud();
   const matches = useMatches();
   const picked = usePickedCourt();
   const scene = useScene();
@@ -61,7 +63,8 @@ export default function Ink() {
   const understand = (t: string): Card => {
     const last = [...matches].sort((a, b) => b.playedAt - a.playedAt)[0];
     const lastMatch = last ? { id: last.id, label: `${winnerOf(last) === last.p1 ? 'W' : 'L'} vs ${roster.find((f) => f.id === last.p2)?.name ?? '?'}  ${scoreLine(last.sets)}` } : null;
-    return parseCommand(t, { roster, venues, lastMatch }, answers.current) ?? parse(t, roster, answers.current);
+    const crew = cloud.status === 'off' ? undefined : cloud.crew?.name ?? null;
+    return parseCommand(t, { roster, venues, lastMatch, crew }, answers.current) ?? parse(t, roster, answers.current);
   };
 
   const text = () => decode(entries.current.flatMap((e): Slot[] => (e.space ? [{ space: true }] : e.cands ? [{ cands: e.cands }] : [])), names);
@@ -196,6 +199,16 @@ export default function Ink() {
       else if (cmd.kind === 'name') saveFighter({ ...you, name: cmd.name });
       else if (cmd.kind === 'court') { if (cmd.home) saveFighter({ ...you, homeCourt: cmd.name }); else pickCourt(cmd.id); }
       else if (cmd.kind === 'undo') removeMatch(cmd.matchId);
+      if (cmd.kind === 'found' || cmd.kind === 'recruit' || cmd.kind === 'join') {
+        // Crew changes go to the server; the crew page is where you see them land.
+        const go = cmd.kind === 'found' ? createCrew(cmd.name)
+          : cmd.kind === 'join' ? joinCrew(cmd.code)
+          : addPretender(cmd.name, CAST_IDS[roster.length % CAST_IDS.length], COLORS[roster.length % COLORS.length]);
+        run(`window.saved(${JSON.stringify(cmd.kind === 'found' ? 'STARTING IT' : cmd.kind === 'join' ? 'JOINING' : 'ADDING')})`);
+        reset();
+        go.then(() => router.replace('/crew'), (e: unknown) => run(`window.saved(${JSON.stringify(e instanceof Error ? e.message.toUpperCase() : 'DID NOT WORK')})`));
+        return;
+      }
       run(`window.saved(${JSON.stringify(cmd.kind === 'open' ? 'GOING' : cmd.kind === 'undo' ? 'DELETED' : 'DONE')})`);
       reset();
       if (cmd.kind === 'open') setTimeout(() => router.replace(PAGE_ROUTES[cmd.page]), 650);

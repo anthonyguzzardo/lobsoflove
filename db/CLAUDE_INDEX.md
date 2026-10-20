@@ -30,7 +30,7 @@ Direct SQL (the db.<ref> host is IPv6-only; use the IPv4 session pooler), passwo
 Exposed schemas were set with `alter role authenticator set pgrst.db_schemas = 'public, graphql_public, lol'` +
 `notify pgrst, 'reload config'` (also `notify pgrst, 'reload schema'` after DDL). Keep the Dashboard's Exposed schemas in step.
 
-Applied migrations: 001 (2026-10-15). Written, not yet applied: 002 (shared season) + rpc/rpc_crew.sql.
+Applied migrations: 001 (2026-10-15). 002 (shared season) + rpc/rpc_crew.sql applied by the user 2026-10-19. Written, not yet applied: 003 (call-ups, leave/delete crew, remove pretender).
 Anonymous sign-ins must be ON (Dashboard -> Authentication -> Providers); every phone signs in anonymously.
 
 ## Tables
@@ -43,8 +43,10 @@ Anonymous sign-ins must be ON (Dashboard -> Authentication -> Providers); every 
 | `lol.tm_crew_players` | matrix | Who is in which crew, with role (commissioner, player). One crew per player for now. |
 | `lol.tb_matches` | normal | Reported by p1; counts once p2 confirms. Client picks `match_id`. |
 | `lol.tb_beacons` | normal | One row per player: the court they are at now. |
+| `lol.tb_callups` | normal | "Need N at this court" with a message; open, on (enough in) or off. 12 h life. |
+| `lol.tm_callup_players` | matrix | Who a call-up went to and their answer (in, out). |
 
-Writes (rpc/rpc_crew.sql): `fn_save_me`, `fn_create_crew`, `fn_join_crew(code, claim)`, `fn_add_pretender`, `fn_report_match`, `fn_answer_match`, `fn_withdraw_match`, `fn_set_beacon`. Scenario test recipe: local Postgres 17 with a stub `auth.uid()` reading `current_setting('test.uid')`.
+Writes (rpc/rpc_crew.sql): `fn_save_me`, `fn_create_crew`, `fn_join_crew(code, claim)`, `fn_add_pretender`, `fn_report_match`, `fn_answer_match`, `fn_withdraw_match`, `fn_set_beacon`. rpc/rpc_callup.sql: `fn_post_callup`, `fn_answer_callup`, `fn_cancel_callup`, `fn_delete_crew` (commissioner), `fn_leave_crew`, `fn_remove_pretender`; internal `fn_wipe_crew`. Scenario test recipe: local Postgres 17 with a stub `auth.uid()` reading `current_setting('test.uid')`.
 
 ## Edge functions
 

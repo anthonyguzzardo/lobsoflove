@@ -1,8 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import { C } from '@/constants/arcade';
+import { InkLink, Rise } from '@/components/ink-button';
+
+import { body, MONO, P } from '@/constants/paper';
 import { joinCrew } from '@/lib/cloud';
 
 /** Where an invite link lands (lobsoflove://join/CODE, with ?claim=TOKEN when it hands you a pretender's fighter). */
@@ -22,12 +24,12 @@ export default function Join() {
     <View style={styles.root}>
       {err ? (
         <>
-          <Text style={styles.err}>{err}</Text>
-          <Pressable onPress={() => router.replace('/crew')} accessibilityRole="button"><Text style={styles.link}>CREW ›</Text></Pressable>
+          <Rise><Text style={styles.err}>{err}</Text></Rise>
+          <Rise index={1}><InkLink label="CREW ›" onPress={() => router.replace('/crew')} /></Rise>
         </>
       ) : (
         <>
-          <ActivityIndicator color={C.ball} />
+          <ActivityIndicator color={P.ink} />
           <Text style={styles.text}>JOINING {String(code).toUpperCase()}</Text>
         </>
       )}
@@ -36,8 +38,7 @@ export default function Join() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
-  text: { color: C.text, fontSize: 14, fontWeight: '900', letterSpacing: 2 },
-  err: { color: C.p2, fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  link: { color: C.ball, fontSize: 13, fontWeight: '900', letterSpacing: 1.5, padding: 10 },
+  root: { flex: 1, backgroundColor: P.paper, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
+  text: { fontFamily: MONO, fontWeight: '800', fontSize: 14, letterSpacing: 2, color: P.ink },
+  err: { ...body, color: P.red, textAlign: 'center', fontSize: 15 },
 });

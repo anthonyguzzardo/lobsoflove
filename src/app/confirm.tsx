@@ -1,11 +1,11 @@
-import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackSwing } from '@/components/back-swing';
 import { FighterAvatar } from '@/components/fighter';
-import { C } from '@/constants/arcade';
+import { Breathe, InkButton, InkLink, Rise } from '@/components/ink-button';
+import { body, label, MONO, P, paperCard } from '@/constants/paper';
 import { answerMatch, toAnswer } from '@/lib/cloud';
 import { useMatches, winnerOf } from '@/lib/matches';
 import { goHome } from '@/lib/nav';
@@ -17,7 +17,6 @@ export default function Confirm() {
   const roster = useRoster();
   const matches = useMatches();
   const insets = useSafeAreaInsets();
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const queue = toAnswer(matches).sort((a, b) => a.playedAt - b.playedAt);
   const m = queue[0];
@@ -26,9 +25,9 @@ export default function Confirm() {
   if (!m) {
     return (
       <View style={[styles.root, styles.center]}>
-        <Text style={styles.big}>ALL SQUARE</Text>
-        <Text style={styles.dim}>Nothing waiting on you.</Text>
-        <Pressable onPress={goHome} accessibilityRole="button"><Text style={styles.link}>‹ HOME</Text></Pressable>
+        <Rise><Text style={styles.big}>ALL SQUARE</Text></Rise>
+        <Rise index={1}><Text style={styles.dim}>Nothing waiting on you.</Text></Rise>
+        <Rise index={2}><InkLink label="‹ HOME" onPress={goHome} /></Rise>
         <BackSwing floating />
       </View>
     );
@@ -40,24 +39,21 @@ export default function Confirm() {
   // Shown from your side of the net: your games first.
   const line = m.sets.map(([a, b]) => `${b}–${a}`).join('   ');
   const answer = async (yes: boolean) => {
-    if (busy) return;
-    setBusy(true);
     setErr(null);
     try {
       await answerMatch(m.id, yes);
-      if (yes) { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx(youWon ? 'win' : 'ping'); }
-      else { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid); sfx('clack', 0.5); }
+      if (yes) sfx(youWon ? 'win' : 'ping');
+      else sfx('clack', 0.5);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      throw e;
     }
   };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 16 }]}>
-      <Text style={styles.tag}>{queue.length > 1 ? `${queue.length} WAITING ON YOU` : 'WAITING ON YOU'}</Text>
-      <View style={styles.card}>
+      <Breathe style={{ alignSelf: 'flex-start' }}><Text style={styles.tag}>{queue.length > 1 ? `${queue.length} WAITING ON YOU` : 'WAITING ON YOU'}</Text></Breathe>
+      <Rise key={m.id} style={styles.card}>
         <Text style={styles.meta}>{m.court.toUpperCase()} · {new Date(m.playedAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}</Text>
         <View style={styles.row}>
           {them ? <FighterAvatar cast={them.cast} color={them.color} size={64} /> : null}
@@ -66,37 +62,26 @@ export default function Confirm() {
         </View>
         <Text style={styles.score}>{line}</Text>
         <Text style={styles.dim}>Your games first.</Text>
-      </View>
+      </Rise>
       {err ? <Text style={styles.err}>{err}</Text> : null}
       <View style={{ flex: 1 }} />
-      {busy ? <ActivityIndicator color={C.ball} /> : null}
-      <Pressable onPress={() => answer(true)} accessibilityRole="button" style={({ pressed }) => [styles.yes, pressed && { transform: [{ scale: 0.97 }] }]}>
-        <Text style={styles.yesText}>{'THAT\u2019S RIGHT'}</Text>
-      </Pressable>
-      <Pressable onPress={() => answer(false)} accessibilityRole="button" style={styles.no}>
-        <Text style={styles.noText}>{'THAT\u2019S NOT WHAT HAPPENED'}</Text>
-      </Pressable>
+      <Rise index={1}><InkButton label={'THAT\u2019S RIGHT'} onPress={() => answer(true)} /></Rise>
+      <Rise index={2} style={{ marginBottom: 4 }}><InkButton label={'THAT\u2019S NOT WHAT HAPPENED'} ghost onPress={() => answer(false)} /></Rise>
       <BackSwing floating />
     </View>
   );
 }
 
-const heavy = { fontWeight: '900', fontStyle: 'italic' } as const;
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg, paddingHorizontal: 16, gap: 12 },
+  root: { flex: 1, backgroundColor: P.paper, paddingHorizontal: 16, gap: 14 },
   center: { alignItems: 'center', justifyContent: 'center' },
-  tag: { color: C.p2, fontSize: 11, fontWeight: '900', letterSpacing: 1.8 },
-  card: { backgroundColor: C.panel, borderRadius: 20, padding: 18, gap: 12 },
-  meta: { color: C.dim, fontSize: 11, fontWeight: '900', letterSpacing: 1.5 },
+  tag: label,
+  card: { ...paperCard, gap: 12 },
+  meta: { ...label, color: P.dim },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  says: { ...heavy, flex: 1, color: C.text, fontSize: 20 },
-  score: { ...heavy, color: C.text, fontSize: 44, letterSpacing: 1 },
-  big: { ...heavy, color: C.ball, fontSize: 36 },
-  dim: { color: C.dim, fontSize: 13 },
-  err: { color: C.p2, fontSize: 13, fontWeight: '800' },
-  link: { color: C.ball, fontSize: 12, fontWeight: '900', letterSpacing: 1.5, padding: 12 },
-  yes: { backgroundColor: C.ball, borderRadius: 14, paddingVertical: 18, alignItems: 'center' },
-  yesText: { ...heavy, color: C.bg, fontSize: 18 },
-  no: { alignItems: 'center', paddingVertical: 14 },
-  noText: { color: C.p2, fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
+  says: { flex: 1, fontFamily: MONO, fontWeight: '800', fontSize: 17, color: P.ink },
+  score: { fontFamily: MONO, fontWeight: '800', fontSize: 40, color: P.ink, letterSpacing: 1 },
+  big: { fontFamily: MONO, fontWeight: '800', fontSize: 30, color: P.ink },
+  dim: { ...body, color: P.dim },
+  err: { ...body, color: P.red },
 });

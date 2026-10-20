@@ -395,6 +395,43 @@ ${enterStrip}</div>
 </div>`;
 emit('closet-html.ts', 'CLOSET_HTML', page({ css: closetCss, body: closetBody, js: bundle('web/closet.js') }));
 
+// Crew: the line-up. Same paper, ink, mono and slide strip as home; name plates ride under each jelly's feet.
+const crewCss = homeCss + `
+#ui{padding-top:calc(env(safe-area-inset-top) + 64px)}
+#fade{background:linear-gradient(180deg,rgba(239,236,229,.97) 0%,rgba(239,236,229,.9) 20%,rgba(239,236,229,0) 32%,rgba(239,236,229,0) 84%,rgba(239,236,229,.92) 90%,rgba(239,236,229,.98) 100%)}
+#h1{font-size:30px}#h2{font-size:15px;letter-spacing:.32em;margin-top:4px}
+#blurb{font-size:11px;opacity:.65;max-width:300px;line-height:1.4}#blurb.bad{color:var(--clay);opacity:1;font-weight:800}
+#tags{position:fixed;left:0;top:0;width:0;height:0;pointer-events:none}
+.tag{position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;will-change:transform}
+.tag b{font:800 12px var(--mono);letter-spacing:.06em;background:#fffdf8;color:var(--ink);padding:3px 7px 3px;border-radius:3px;box-shadow:inset 0 0 0 2px var(--ink),0 3px 0 var(--ink);border-left:6px solid var(--pc,var(--ink))}
+.tag i{font:800 8.5px var(--mono);font-style:normal;letter-spacing:.1em;opacity:.7}
+.tag.you i{opacity:1;color:var(--clay)}
+.tag.pre b{background:rgba(255,253,248,.92);color:rgba(22,24,29,.55);box-shadow:inset 0 0 0 2px rgba(22,24,29,.35);border-left-color:rgba(22,24,29,.25);border-style:dashed}
+.tag.pre i{opacity:.6}
+.tag.chalk b{background:transparent;box-shadow:none;border:none;color:var(--clay);padding:0}
+#panel{pointer-events:auto!important}
+#alt{all:unset;display:block;text-align:center;font:800 11px var(--mono);letter-spacing:.14em;text-decoration:underline;margin:0 0 12px;opacity:.75}
+#alt:active{transform:translateY(2px)}
+#lasso{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
+#head{position:relative}
+#manage{all:unset;position:absolute;right:0;top:-34px;font:800 10.5px var(--mono);letter-spacing:.14em;padding:7px 10px;border-radius:4px;color:var(--clay);box-shadow:inset 0 0 0 2px var(--clay);pointer-events:auto;transition:transform .32s cubic-bezier(.34,1.56,.64,1)}
+#manage:active{transform:translateY(3px) scale(.96)}
+#msg{all:unset;box-sizing:border-box;display:block;width:100%;margin:0 0 12px;padding:12px 14px 10px;border-radius:8px;background:#fffdf8;box-shadow:inset 0 0 0 2px var(--ink),0 5px 0 var(--ink);animation:seat .38s cubic-bezier(.34,1.56,.64,1);transition:transform .14s}
+#msg:active{transform:translateY(5px);box-shadow:inset 0 0 0 2px var(--ink),0 0 0 var(--ink)}
+#mtext{display:block;font:800 15px var(--mono);line-height:1.35;color:var(--ink)}
+#msg small{display:block;margin-top:5px;font:800 9px var(--mono);letter-spacing:.14em;color:var(--clay)}
+.tag i.ans{font-size:9px;opacity:1;letter-spacing:.14em}
+.tag i.ans.in{color:#fffdf8;background:var(--clay);padding:1px 5px;border-radius:2px}
+.tag i.ans.out{color:rgba(22,24,29,.45);text-decoration:line-through}
+.tag i.ans.wait{color:var(--clay);animation:chev 1.2s linear infinite}
+`;
+const crewBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="tags"></div><canvas id="lasso"></canvas><div id="ui">
+<div id="head"><button id="manage"></button><div id="h1"></div><div id="h2"></div><div id="blurb"></div></div>
+<div class="grow"></div>
+<div id="panel"><button id="msg"><span id="mtext"></span><small>TAP TO CHANGE IT</small></button><button id="alt"></button>${enterStrip.replace('Slide the ball to log it', 'Slide the ball to go')}</div>
+</div>`;
+emit('crew-html.ts', 'CREW_HTML', page({ css: crewCss, body: crewBody, js: bundle('web/crew.js') }));
+
 // Season lines: the courts as a hand-drawn transit map. Plain 2D canvas; the text sits in the corners like the reference's credits.
 const linesCss = `
 body{background:#ebe8e2;font-family:ui-monospace,"SF Mono",Menlo,monospace;color:#16181d}
