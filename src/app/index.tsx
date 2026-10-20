@@ -9,7 +9,7 @@ import { SceneView, useScene } from '@/components/scene-view';
 import { HOME_HTML } from '@/generated/home-html';
 import { toAnswer, toCallupAnswer, useCloud } from '@/lib/cloud';
 import { dueList, useCloset } from '@/lib/gear';
-import { computeSeason, scoreLine, useMatches, winnerOf } from '@/lib/matches';
+import { computeSeason, counts, personalLine, scoreLine, useMatches, winnerOf } from '@/lib/matches';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 import { featured, findPro, proLine, proMatch, tourLine, useTour } from '@/lib/tour';
@@ -37,7 +37,7 @@ export default function Home() {
   const last = [...matches].sort((a, b) => b.playedAt - a.playedAt)[0];
   const name = (id: string) => roster.find((f) => f.id === id)?.name ?? '?';
   const lastWinner = last ? winnerOf(last) : null;
-  const season = seasonLine(rows, you.id, name, matches.length);
+  const season = personalLine(matches.filter(counts), you.id);
   const pro = findPro(tour, you.favoritePro);
   const proM = pro ? proMatch(tour, pro.name) : null;
   const line = tourLine(featured(tour, proM));
@@ -49,7 +49,8 @@ export default function Home() {
     color: you.color,
     cast: you.cast,
     record: played ? `you: ${row?.wins}–${row?.losses}, ${row?.points} points` : '',
-    place: played ? rows.findIndex((r) => r.id === you.id) + 1 : 0,
+    // Your place shows only in the top half. Lower down, home talks about you against your own past instead.
+    place: played && rows.findIndex((r) => r.id === you.id) < Math.ceil(rows.length / 2) ? rows.findIndex((r) => r.id === you.id) + 1 : 0,
     gear: (() => { const due = dueList(closet, matches); return due.length ? `${due.length} due: ${due[0]}${due.length > 1 ? ', ...' : ''}` : ''; })(),
     last: last && lastWinner ? `${name(lastWinner)} beat ${name(lastWinner === last.p1 ? last.p2 : last.p1)} ${scoreLine(last.sets)}` : null,
   });
@@ -84,26 +85,6 @@ export default function Home() {
       ) : null}
     </View>
   );
-}
-
-const ordinal = (n: number) => `${n}${['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : Math.min(n % 10, 4) % 4]}`;
-const pts = (n: number) => `${n} point${n === 1 ? '' : 's'}`;
-
-/** One true sentence about the season: where you stand and who you are chasing. */
-function seasonLine(rows: ReturnType<typeof computeSeason>['rows'], youId: string, name: (id: string) => string, played: number): string {
-  const me = rows.findIndex((r) => r.id === youId);
-  const row = rows[me];
-  if (!played) return 'season 01. nobody has played yet. go first.';
-  if (!row || row.wins + row.losses === 0) return `season 01. ${played} match${played === 1 ? '' : 'es'} in. you have not played.`;
-  const rec = `${row.wins} and ${row.losses}`;
-  if (me === 0) {
-    const second = rows[1];
-    const gap = second ? row.points - second.points : 0;
-    return `1st of ${rows.length}. ${rec}. ${second ? (gap ? `${name(second.id)} is ${pts(gap)} behind.` : `tied with ${name(second.id)}.`) : ''}`.trim();
-  }
-  const leader = rows[0];
-  const gap = leader.points - row.points;
-  return `${ordinal(me + 1)} of ${rows.length}. ${rec}. ${gap ? `${pts(gap)} behind ${name(leader.id)}.` : `tied with ${name(leader.id)}.`}`;
 }
 
 const styles = StyleSheet.create({

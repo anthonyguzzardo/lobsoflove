@@ -9,10 +9,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import { useSyncExternalStore } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import venues from '@/data/venues.json';
 import { type Match, setCrewMatches } from '@/lib/matches';
+import { pushToken } from '@/lib/push';
 import { BEACON_HOURS, type Person, setCrewPresence } from '@/lib/presence';
 import { type CastId, type Fighter, localYou, setCrewRoster } from '@/lib/roster';
 import type { SetScore } from '@/lib/tennis';
@@ -297,6 +298,8 @@ export function startCloud(): Promise<void> {
     if (error || !id) { set({ status: 'error', error: error?.message ?? 'could not save your fighter' }); starting = null; return; }
     meId = id as string;
     await loadCrew();
+    // This phone's push token, so confirm requests and call-ups reach it. Fire and forget: no token is fine.
+    void pushToken().then((t) => { if (t && db) void db.rpc('fn_save_push_token', { p_token: t, p_platform: Platform.OS }); });
   })();
   return starting;
 }

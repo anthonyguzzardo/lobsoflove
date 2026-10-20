@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { LolSplash } from '@/components/lol-splash';
 import { C } from '@/constants/arcade';
 import { startCloud } from '@/lib/cloud';
+import { followTaps } from '@/lib/push';
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 const hideNativeSplash = () => { void SplashScreen.hideAsync().catch(() => {}); };
@@ -19,6 +20,8 @@ export default function RootLayout() {
   const finishIntro = useCallback(() => { hideNativeSplash(); setShowIntro(false); }, []);
   // Sign in and load the crew in the background; every screen works from this phone's data until it lands.
   useEffect(() => { void startCloud(); }, []);
+  // A tapped push opens its screen: the confirm queue, or the crew photo for a call-up.
+  useEffect(() => followTaps(), []);
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <ThemeProvider value={theme}>

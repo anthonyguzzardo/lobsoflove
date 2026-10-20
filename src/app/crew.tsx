@@ -129,7 +129,10 @@ export default function CrewScreen() {
         edited.current = false;
         run('window.cheer()');
         const link = callupLink(id);
-        share(`${a.message}${link ? ` Tap if you're in: ${link}` : ''}`);
+        // Anyone circled who isn't in the app yet gets their own claim link, so answering also signs them up.
+        const asked = a.anyone ? roster : roster.filter((f) => (a.ids as string[]).includes(f.id));
+        const claims = asked.filter((f) => f.pretender).map((f) => `${f.name}, claim your fighter first: ${inviteLink(f.id)}`);
+        share([`${a.message}${link ? ` Tap if you're in: ${link}` : ''}`, ...claims].join('\n\n'));
       }, fail);
     } else if (a.action === 'in') answerCallup(a.id, true).then(() => run('window.cheer()'), fail);
     else if (a.action === 'resend' && live) { const link = callupLink(live.id); share(`${live.message}${link ? ` Tap if you're in: ${link}` : ''}`); }

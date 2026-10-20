@@ -34,10 +34,11 @@ export const counts = (m: Match) => m.status === undefined || m.status === 'conf
 export const isPending = (m: Match) => m.status === 'pending';
 
 /**
- * Season points. A win is 100. A loss still pays for showing up, but less each time inside a week (25, 15, then 5), so losing a lot
- * never outscores winning. Upsets pay by how far up the table you reached. A love set (6-0) and a won tiebreak (7-6) pay per set.
+ * Season points: every match pays. A win is 60 and a loss is 50, so the table rewards playing over protecting a record (in the
+ * season sim, docs/research/koc-sim, this kept the most of the weakest third playing of any public table). Upsets pay by how far
+ * up the table you reached. A love set (6-0) and a won tiebreak (7-6) pay per set.
  */
-export const POINTS = { win: 100, loss: [25, 15, 5], straightSets: 20, comeback: 30, upsetBase: 20, upsetPerRank: 15, upsetMax: 80, loveSet: 15, tiebreak: 10 } as const;
+export const POINTS = { win: 60, loss: [50], straightSets: 20, comeback: 30, upsetBase: 20, upsetPerRank: 15, upsetMax: 80, loveSet: 15, tiebreak: 10 } as const;
 const WEEK = 7 * 24 * 3600 * 1000;
 
 /** A third set that went past 9 was a first-to-10 match tiebreak. */
@@ -196,4 +197,28 @@ export function useMatches(): Match[] {
 
 export function scoreLine(sets: SetScore[]): string {
   return sets.map(([x, y], i) => (isMatchTiebreak(sets, i) ? `[${x}–${y}]` : `${x}–${y}`)).join('  ');
+}
+
+/** One true sentence about you against your own past: this week, your best week, and how many weeks in a row you have played. */
+export function personalLine(matches: Pick<Match, 'p1' | 'p2' | 'sets' | 'playedAt'>[], youId: string, now = Date.now()): string {
+  const mine = matches.filter((m) => m.p1 === youId || m.p2 === youId);
+  if (!mine.length) return 'season 01. log a match and this line starts tracking you.';
+  const weekOf = (t: number) => Math.floor((now - t) / WEEK); // 0 = the last seven days
+  const perWeek = new Map<number, { n: number; w: number }>();
+  for (const m of mine) {
+    const k = weekOf(m.playedAt);
+    const e = perWeek.get(k) ?? { n: 0, w: 0 };
+    e.n += 1;
+    if (winnerOf(m) === youId) e.w += 1;
+    perWeek.set(k, e);
+  }
+  const now0 = perWeek.get(0) ?? { n: 0, w: 0 };
+  const best = Math.max(...[...perWeek.entries()].filter(([k]) => k > 0).map(([, e]) => e.n), 0);
+  let run = 0;
+  while (perWeek.has(run)) run += 1;
+  const m = (n: number) => `${n} match${n === 1 ? '' : 'es'}`;
+  const thisWeek = now0.n ? `this week: ${m(now0.n)}, ${now0.w} won.` : 'nothing logged this week yet.';
+  const vsBest = !best ? '' : now0.n > best ? ' your best week ever.' : now0.n === best ? ' ties your best week.' : ` best week: ${best}.`;
+  const streak = run >= 2 ? ` ${run} weeks in a row.` : '';
+  return `${thisWeek}${vsBest}${streak}`;
 }

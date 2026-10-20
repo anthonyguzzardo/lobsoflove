@@ -65,6 +65,12 @@
         {
           "motionPermission": "LobsOfLove uses motion to tell which way you are holding the phone, so your writing reads the right way up."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#e2562f"
+        }
       ]
     ],
     "experiments": {

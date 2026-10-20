@@ -184,3 +184,16 @@ CREATE TABLE IF NOT EXISTS lol.tm_callup_players
     ,CHECK (answer_code IS NULL OR answer_code IN ('in', 'out'))
 );
 CREATE INDEX IF NOT EXISTS idx_callup_players_player_id ON lol.tm_callup_players (player_id);
+
+-- Push tokens (migration 004): one row per phone, server-only. Written through fn_save_push_token.
+CREATE TABLE IF NOT EXISTS lol.tb_push_tokens
+(
+     push_token_id                BIGSERIAL              PRIMARY KEY
+    ,player_id                    UUID                   NOT NULL
+    ,token                        VARCHAR(200)           NOT NULL UNIQUE
+    ,platform                     VARCHAR(10)            NOT NULL DEFAULT ''
+    ,dttm_created_utc             TIMESTAMPTZ            NOT NULL DEFAULT NOW()
+    ,created_by                   VARCHAR(50)            NOT NULL DEFAULT CURRENT_USER
+    ,dttm_modified_utc            TIMESTAMPTZ            NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_push_tokens_player_id ON lol.tb_push_tokens (player_id);

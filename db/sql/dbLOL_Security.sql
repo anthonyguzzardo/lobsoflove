@@ -89,3 +89,9 @@ CREATE POLICY callups_select_member ON lol.tb_callups FOR SELECT TO authenticate
 DROP POLICY IF EXISTS callup_players_select_member ON lol.tm_callup_players;
 CREATE POLICY callup_players_select_member ON lol.tm_callup_players FOR SELECT TO authenticated
     USING (callup_id IN (SELECT callup_id FROM lol.tb_callups WHERE crew_id IN (SELECT lol.fn_my_crew_ids())));
+
+-- Push tokens (migration 004): server-only, no policies.
+ALTER TABLE lol.tb_push_tokens ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON lol.tb_push_tokens FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON lol.tb_push_tokens TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE lol.tb_push_tokens_push_token_id_seq TO service_role;
