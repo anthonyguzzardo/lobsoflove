@@ -3,9 +3,12 @@ import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path, Rect } from 'react-native-svg';
 
 import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
+import { MONO, P } from '@/constants/paper';
 import { INK_HTML } from '@/generated/ink-html';
 import venues from '@/data/venues.json';
 import { courtById, pickCourt, usePickedCourt } from '@/lib/courts';
@@ -38,7 +41,14 @@ const INK_LAST = 'lol.ink.last';
 type Entry = { space: true } | { space?: false; cands: string[] | null; strokes: Stroke[] };
 
 
+/** One line of the type side: what you typed, or what the app read it as. */
+type Chat = { who: 'you' | 'app'; text: string; canSave?: boolean };
+
 /**
+ * The page opens on a split down the middle: TYPE on the left, WRITE on the right. Tap one to go in; each has a switch to the
+ * other. TYPE is like texting the app ("beat dave 6-4 6-2", "add maya"): the reply comes back as a chat line, with SAVE IT
+ * when it can be saved. WRITE is the finger canvas. Both go through the same reader and card.
+ *
  * Write anything: one finger, letters stacked in one spot or written across, no form. The page (web/ink.js) draws and
  * classifies strokes; this side recognizes each character, decodes the line, and draws a card back.
  */
@@ -59,6 +69,19 @@ export default function Ink() {
   const card = useRef<Card | null>(null);
   const offline = useRef(false);
   const names = roster.map((f) => f.name);
+  const insets = useSafeAreaInsets();
+  const [chat, setChat] = useState<Chat[]>([]);
+  const [typed, setTyped] = useState('');
+  const chatScroll = useRef<ScrollView>(null);
+  /** The app's answer to the current line goes in the chat: replaced while it is still the same line, added for a new one. */
+  const reply = (line: string, c: Card) => setChat((cs) => {
+    const text = c.lines.filter(Boolean).join('  ·  ');
+    const lastYou = [...cs].reverse().find((m) => m.who === 'you');
+    const last = cs[cs.length - 1];
+    const next: Chat = { who: 'app', text, canSave: c.canSave };
+    if (last?.who === 'app' && lastYou?.text === line) return [...cs.slice(0, -1), next];
+    return lastYou?.text === line ? [...cs, next] : [...cs, { who: 'you', text: line }, next];
+  });
   const you = roster.find((f) => f.isYou) ?? roster[0];
 
   /** A command if it reads as one ("change fighter to servebot"), else a match or gear entry. */
@@ -111,6 +134,7 @@ export default function Ink() {
     }
     if (offline.current && c.draft.kind === 'none') c.lines = ['no signal', "can't read ink yet", 'your writing is kept'];
     card.current = c;
+    reply(t, c);
     run(`window.showCard(${JSON.stringify({ lines: c.lines, questions: c.questions, warn: c.warn, canSave: c.canSave })})`);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
@@ -300,14 +324,139 @@ export default function Ink() {
     }
   };
 
+  /** A typed line: read it exactly as written, no handwriting in between. */
+  const send = () => {
+    const t = typed.trim();
+    if (!t) return;
+    setTyped('');
+    setChat((cs) => [...cs, { who: 'you', text: t }]);
+    entries.current = [{ space: true }];
+    answers.current = {};
+    lineText.current = t;
+    run(`window.setLine(${JSON.stringify(t)}, 0)`);
+    showCard();
+  };
+  const hint = friend ? "type their name: maya" : 'type it: beat dave 6-4 6-2';
+
+  // Where you are: the split chooser first, then typing or writing (each can switch to the other).
+  const [mode, setMode] = useState<'pick' | 'type' | 'write'>(params.say || params.demo ? 'write' : 'pick');
+  const pickMode = (m: 'type' | 'write') => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('go', 0.6); setMode(m); };
+
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar style="dark" />
-      <SceneView scene={scene} html={INK_HTML} name="ink" onReady={onReady} onMessage={onMessage} />
-    </View>
+      {/* The canvas stays loaded underneath so the reader and its card work in both modes; it is only seen in WRITE. */}
+      <View style={[StyleSheet.absoluteFill, mode !== 'write' && styles.hidden]} pointerEvents={mode === 'write' ? 'auto' : 'none'}>
+        <SceneView scene={scene} html={INK_HTML} name="ink" onReady={onReady} onMessage={onMessage} />
+      </View>
+      {mode === 'write' ? (
+        <View style={[styles.switchRow, { top: insets.top + 6 }]} pointerEvents="box-none">
+          <Pressable onPress={() => pickMode('type')} hitSlop={10} style={styles.switch}><KeysIcon size={18} /><Text style={styles.switchText}>TYPE INSTEAD</Text></Pressable>
+        </View>
+      ) : null}
+      {mode === 'pick' ? (
+        <View style={[styles.pick, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          <View style={styles.pickHead}>
+            <Pressable onPress={goBack} hitSlop={12}><Text style={styles.back}>{'<'} BACK</Text></Pressable>
+            <Text style={styles.title}>{friend ? 'ADD A FRIEND' : 'SAY IT'}</Text>
+          </View>
+          <View style={styles.halves}>
+            <Pressable style={({ pressed }) => [styles.half, styles.halfType, pressed && styles.halfPressed]} onPress={() => pickMode('type')}>
+              <KeysIcon size={86} light />
+              <Text style={[styles.halfWord, styles.light]}>TYPE</Text>
+              <Text style={[styles.halfSub, styles.light]}>{friend ? 'their name, on the keyboard' : 'like texting the app'}</Text>
+            </Pressable>
+            <Pressable style={({ pressed }) => [styles.half, pressed && styles.halfPressed]} onPress={() => pickMode('write')}>
+              <PenIcon size={86} />
+              <Text style={styles.halfWord}>WRITE</Text>
+              <Text style={styles.halfSub}>{friend ? 'their name, with your finger' : 'with your finger'}</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+      {mode === 'type' ? (
+        <View style={[styles.chat, { paddingTop: insets.top + 8 }]}>
+          <View style={styles.head}>
+            <Pressable onPress={() => setMode('pick')} hitSlop={12}><Text style={styles.back}>{'<'} BACK</Text></Pressable>
+            <Text style={styles.title}>{friend ? 'ADD A FRIEND' : 'TYPE IT'}</Text>
+            <Pressable onPress={() => pickMode('write')} hitSlop={10} style={styles.switch}><PenIcon size={18} /><Text style={styles.switchText}>WRITE INSTEAD</Text></Pressable>
+          </View>
+          <ScrollView ref={chatScroll} style={styles.log} contentContainerStyle={styles.logIn} onContentSizeChange={() => chatScroll.current?.scrollToEnd({ animated: true })} keyboardShouldPersistTaps="handled">
+            {chat.length ? chat.map((m, k) => (
+              <View key={k} style={[styles.bubble, m.who === 'you' ? styles.you : styles.app]}>
+                <Text style={[styles.btext, m.who === 'you' && styles.youText]}>{m.text}</Text>
+                {m.who === 'app' && m.canSave && k === chat.length - 1 ? (
+                  <Pressable onPress={save} hitSlop={8}><Text style={styles.saveIt}>SAVE IT</Text></Pressable>
+                ) : null}
+              </View>
+            )) : <Text style={styles.empty}>{friend ? 'type your friend\'s name' : 'type it like a text: a score, a time, a restring'}</Text>}
+          </ScrollView>
+          <View style={[styles.bar, { paddingBottom: Math.max(10, insets.bottom) }]}>
+            <TextInput style={styles.field} value={typed} onChangeText={setTyped} onSubmitEditing={send} placeholder={hint} placeholderTextColor="rgba(22,24,29,0.35)" returnKeyType="send" autoCapitalize="none" autoCorrect={!friend} autoFocus />
+            <Pressable onPress={send} hitSlop={8} style={[styles.send, !typed.trim() && { opacity: 0.35 }]}><Text style={styles.sendText}>SEND</Text></Pressable>
+          </View>
+        </View>
+      ) : null}
+    </KeyboardAvoidingView>
+  );
+}
+
+/** A keyboard, drawn: a rounded slab with three rows of keys and a space bar. */
+function KeysIcon({ size, light }: { size: number; light?: boolean }) {
+  const c = light ? '#fffdf4' : P.ink;
+  return (
+    <Svg width={size} height={size * 0.7} viewBox="0 0 60 42">
+      <Rect x={2} y={2} width={56} height={38} rx={7} stroke={c} strokeWidth={3.5} fill="none" />
+      {[0, 1, 2].map((row) => Array.from({ length: 5 - row }, (_, k) => (
+        <Rect key={`${row}-${k}`} x={9 + row * 4 + k * 9.5} y={8 + row * 7.5} width={5} height={4.5} rx={1.2} fill={c} />
+      )))}
+      <Rect x={17} y={31} width={26} height={4} rx={2} fill={c} />
+    </Svg>
+  );
+}
+
+/** A pen nib writing a stroke. */
+function PenIcon({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 60 60">
+      <Path d="M40 6 L54 20 L24 50 L8 54 L12 38 Z" stroke={P.ink} strokeWidth={3.5} strokeLinejoin="round" fill="#f2c230" />
+      <Path d="M12 38 L24 50" stroke={P.ink} strokeWidth={3.5} />
+      <Path d="M34 12 L48 26" stroke={P.ink} strokeWidth={3.5} />
+      <Path d="M6 58 Q 20 50 30 56 T 56 54" stroke={P.red} strokeWidth={3.5} fill="none" strokeLinecap="round" />
+    </Svg>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
+  hidden: { opacity: 0 },
+  pick: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#efece5' },
+  pickHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  halves: { flex: 1, flexDirection: 'row', borderTopWidth: 2.5, borderColor: P.ink },
+  half: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 10 },
+  halfType: { backgroundColor: P.ink },
+  halfPressed: { opacity: 0.8 },
+  halfWord: { fontFamily: MONO, fontWeight: '800', fontSize: 30, letterSpacing: 3, color: P.ink },
+  halfSub: { fontFamily: MONO, fontWeight: '700', fontSize: 12, color: P.ink, opacity: 0.6, textAlign: 'center' },
+  light: { color: '#fffdf4' },
+  switchRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  switch: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 2, borderColor: P.ink, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#fffdf4' },
+  switchText: { fontFamily: MONO, fontWeight: '800', fontSize: 10, letterSpacing: 1.2, color: P.ink },
+  chat: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, backgroundColor: '#efece5' },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 6 },
+  back: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.2, color: P.ink },
+  title: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: P.red },
+  log: { flex: 1 },
+  logIn: { paddingVertical: 8, gap: 8, flexGrow: 1, justifyContent: 'flex-end' },
+  empty: { fontFamily: MONO, fontWeight: '700', fontSize: 13, color: P.ink, opacity: 0.45, textAlign: 'center', marginBottom: 12 },
+  bubble: { maxWidth: '86%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 2, borderColor: P.ink },
+  you: { alignSelf: 'flex-end', backgroundColor: P.ink },
+  app: { alignSelf: 'flex-start', backgroundColor: '#fffdf4' },
+  btext: { fontFamily: MONO, fontWeight: '700', fontSize: 14, color: P.ink },
+  youText: { color: '#fffdf4' },
+  saveIt: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: P.red, marginTop: 6, textDecorationLine: 'underline' },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 6 },
+  field: { flex: 1, fontFamily: MONO, fontWeight: '700', fontSize: 16, color: P.ink, borderWidth: 2, borderColor: P.ink, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#fffdf4' },
+  send: { backgroundColor: P.red, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 2, borderColor: P.ink },
+  sendText: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.2, color: '#fffdf4' },
 });

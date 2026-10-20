@@ -217,7 +217,7 @@ function layout() {
   buildRisers(n);
   if (!st.chalkTag) {
     st.chalkTag = el('div', 'tag chalk');
-    st.chalkTag.append(el('b', '', 'NEXT FRIEND'), el('i', '', 'TAP, THEN WRITE THEIR NAME'));
+    st.chalkTag.append(el('b', '', 'INVITE'), el('i', '', 'TAP TO SEND THE LINK'));
     tagsEl.append(st.chalkTag);
   }
   st.chalkTag.style.display = showChalk ? '' : 'none';
@@ -251,8 +251,8 @@ function panel() {
     st.sel.clear();
     if (d.mode === 'solo') {
       h1.textContent = 'JUST YOU'; h2.textContent = 'FOR NOW';
-      blurb.textContent = 'Start a crew, then text your friends the link. Whoever taps it stands here with you, and your matches count against each other.';
-      slide.setKey('01', 'START A CREW', `CALLED ${d.suggest || 'THE CREW'}`); action = { type: 'start' };
+      blurb.textContent = 'Slide to make your crew and send the link to your group chat. Whoever taps it is in, with their own fighter.';
+      slide.setKey('01', 'START A CREW', 'MAKES IT AND SENDS THE LINK'); action = { type: 'start' };
     } else if (d.mode === 'error') {
       h1.textContent = 'CAN’T REACH'; h2.textContent = 'THE SEASON'; blurb.textContent = d.error || '';
       slide.setKey('01', 'TRY AGAIN', 'SLIDE TO RECONNECT'); action = { type: 'retry' };
@@ -264,7 +264,7 @@ function panel() {
     }
     return;
   }
-  h1.textContent = d.name; h2.textContent = `CODE ${d.code}`;
+  h1.textContent = d.name; h2.textContent = st.sel.size || st.anyone ? `CODE ${d.code}` : 'CIRCLE WHO PLAYS';
   manage.textContent = d.role === 'commissioner' ? 'DELETE CREW' : 'LEAVE';
   manage.style.display = '';
   if (st.confirm) {
@@ -304,8 +304,19 @@ function panel() {
   if (cu && !cu.mine && st.answers.you === 'in') {
     const ins = Object.values(st.answers).filter((a) => a === 'in').length;
     blurb.textContent = cu.status === 'on' ? `IT’S ON. ${ins} IN: "${cu.message}"` : `YOU’RE IN. ${ins} OF ${cu.need}: "${cu.message}"`;
-  } else blurb.textContent = 'Circle friends to call them up. Tap the chalk spot to add one.';
-  slide.setKey('01', 'SEND THE INVITE', 'SLIDE TO TEXT THE GROUP CHAT'); action = { type: 'invite' };
+    slide.setKey('01', 'SEND THE INVITE', 'SLIDE TO TEXT THE GROUP CHAT'); action = { type: 'invite' };
+    return;
+  }
+  // Nobody else yet: the one job is sending the link. Once friends are in, circling who plays comes first.
+  if (!st.fighters.some((g) => !g.f.you)) {
+    h2.textContent = 'JUST YOU SO FAR';
+    blurb.textContent = 'Send the link to your group chat. Whoever taps it joins with their own fighter.';
+    slide.setKey('01', 'SEND THE LINK', 'TO YOUR GROUP CHAT'); action = { type: 'invite' };
+    return;
+  }
+  blurb.textContent = 'Draw a loop around who you want to play. 1 is singles, 2 king of the court, 3 doubles.';
+  slide.setKey('01', 'CIRCLE WHO PLAYS', 'DRAW A LOOP AROUND THEM'); action = { type: 'teach' };
+  setAlt('SEND THE LINK AGAIN', { type: 'invite' });
 }
 
 $('alt').addEventListener('click', () => {
@@ -313,6 +324,7 @@ $('alt').addEventListener('click', () => {
   if (!a) return;
   if (a.type === 'unconfirm') { st.confirm = null; panel(); post({ type: 'tick' }); return; }
   if (a.type === 'clear') { clearSel(); return; }
+  if (a.type === 'invite') { post({ ...a, type: 'slid', action: 'invite' }); return; }
   post({ ...a, type: 'alt', act: a.type });
 });
 $('manage').addEventListener('click', () => {
@@ -328,6 +340,7 @@ const slide = createSlide({
   onSlid: () => {
     const a = action;
     if (!a) return;
+    if (a.type === 'teach') { teach.t = 0; post({ type: 'tick' }); return; } // shows the loop again
     if (a.type === 'confirm') st.confirm = null;
     post({ ...a, type: 'slid', action: a.type, message: st.message || '' });
     if (a.type === 'callup') { st.sel.clear(); st.anyone = false; }
@@ -456,7 +469,7 @@ $('c').addEventListener('pointerup', (e) => {
   }
   const hit = hitAt(down.x, down.y);
   if (!hit) { if (st.sel.size || st.anyone) clearSel(); return; }
-  if (hit.chalk) { chalkPop = 1; post({ type: 'write' }); return; }
+  if (hit.chalk) { chalkPop = 1; post({ type: 'slid', action: 'invite' }); return; } // the invite spot sends the link
   const { g } = hit;
   const dy = e.clientY - down.y;
   const flick = dy < -30 ? Math.min(2.2, -dy / 60) : 0; // swipe up on someone to throw them higher
@@ -473,10 +486,39 @@ $('c').addEventListener('pointerup', (e) => {
 $('c').addEventListener('pointercancel', () => { down.on = false; loop.on = false; clearTimeout(down.timer); });
 let chalkPop = 0;
 
+/**
+ * The ghost loop: until you have circled anyone, a faint brush loop draws itself round your friends every 4.5 s (draws in
+ * 1.3 s with ease (0.16, 1, 0.3, 1), holds 0.6 s, fades 0.5 s), so the first thing the page teaches is the circle.
+ */
+const teach = { t: 0 };
+window.__teach = teach; // test hook: stills pose the ghost loop at an exact moment
+function ghostLoop(dt) {
+  teach.t += dt;
+  const others = st.fighters.filter((g) => !g.f.you);
+  if (st.mode !== 'crew' || st.sel.size || st.anyone || st.confirm || down.on || others.length < 1) { teach.t = Math.min(teach.t, 0.8); return; }
+  const c = teach.t % 4.5;
+  if (c > 2.4) return;
+  const pts = others.map((g) => screenOf(middleOf(g)));
+  const px = window.innerWidth * 0.2; const py = window.innerHeight * 0.1; // round the bodies, not through them
+  const x0 = Math.max(10, Math.min(...pts.map((q) => q.x)) - px); const x1 = Math.min(window.innerWidth - 10, Math.max(...pts.map((q) => q.x)) + px);
+  const y0 = Math.min(...pts.map((q) => q.y)) - py; const y1 = Math.max(...pts.map((q) => q.y)) + py;
+  const k = Math.min(1, c / 1.3); const e = 1 - (1 - k) ** 3;
+  const a = c < 1.9 ? 0.6 : 0.6 * (1 - (c - 1.9) / 0.5);
+  const ring = [];
+  const n = Math.max(2, Math.round(64 * e));
+  for (let i = 0; i <= n; i += 1) {
+    const th = -2.2 + (i / 64) * Math.PI * 2.12;
+    const wob = 1 + 0.04 * Math.sin(th * 3 + 1);
+    ring.push([(x0 + x1) / 2 + Math.cos(th) * ((x1 - x0) / 2) * wob, (y0 + y1) / 2 + Math.sin(th) * ((y1 - y0) / 2) * wob]);
+  }
+  drawBrush(lg, [{ pts: ring }], a, 11);
+}
+
 /** The loop, drawn with the ink page's patterned brush while you draw it, fading over 0.5 s after. */
 function drawLasso(dt) {
   if (!loop.on) loop.fade = Math.max(0, loop.fade - dt * 2);
   lg.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  if (loop.fade <= 0) ghostLoop(dt);
   if (loop.fade <= 0 || loop.pts.length < 2) return;
   if (!loop.stroke) loop.stroke = { pts: loop.pts };
   loop.stroke.pts = loop.pts;
@@ -585,6 +627,7 @@ window.advance = (sec) => {
   for (let t = 0; t < sec; t += 1 / 120) { frameCam(1 / 120); step(1 / 120); }
   pose();
   renderer.render(scene, camera);
+  drawLasso(0);
 };
 function frame(now) {
   requestAnimationFrame(frame);

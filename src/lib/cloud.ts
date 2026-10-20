@@ -349,6 +349,9 @@ export async function answerMatch(id: string, confirm: boolean) {
 }
 
 /** The link that drops a friend into your crew; with a pretender's id, it also hands them that fighter. */
+/** The crew you are in right now, read fresh (a screen's copy from useCloud is a render behind right after createCrew). */
+export const crewNow = () => state.crew;
+
 export function inviteLink(forId?: string): string | null {
   if (!state.crew) return null;
   const claim = forId ? state.claims[forId] : undefined;

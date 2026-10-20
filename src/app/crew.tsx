@@ -11,7 +11,7 @@ import { MONO, P, paperCard } from '@/constants/paper';
 import venues from '@/data/venues.json';
 import { CREW_HTML } from '@/generated/crew-html';
 import {
-  answerCallup, type Callup, callupLink, cancelCallup, createCrew, deleteCrew, inviteLink, leaveCrew, postCallup, removePretender,
+  answerCallup, type Callup, callupLink, cancelCallup, crewNow, createCrew, deleteCrew, inviteLink, leaveCrew, postCallup, removePretender,
   startCloud, useCloud,
 } from '@/lib/cloud';
 import { useMatches } from '@/lib/matches';
@@ -83,10 +83,11 @@ export default function CrewScreen() {
   const share = (message: string) => { void Share.share({ message }); };
   const invite = (forId?: string, who?: string) => {
     const url = inviteLink(forId);
-    if (!url || !cloud.crew) return;
+    const crew = crewNow();
+    if (!url || !crew) return;
     share(who
-      ? `${who}, you're on the ${cloud.crew.name} roster in LobsOfLove. Open this to claim your fighter and confirm your matches: ${url}`
-      : `Join ${cloud.crew.name} on LobsOfLove. Code ${cloud.crew.code}: ${url}`);
+      ? `${who}, you're on the ${crew.name} roster in LobsOfLove. Open this to claim your fighter and confirm your matches: ${url}`
+      : `Join ${crew.name} on LobsOfLove. Tap to get in: ${url}`);
   };
   const fail = (e: unknown) => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -99,7 +100,6 @@ export default function CrewScreen() {
     if (demo) return;
     switch (msg.type) {
       case 'invite': invite(msg.id, msg.name); break;
-      case 'write': router.push('/ink?for=friend'); break; // the chalk spot: the ink page asks for one name
       case 'select': {
         // A fresh circle gets a fresh message, unless you typed your own for this one.
         if (!msg.count && !msg.anyone) { edited.current = false; break; }
@@ -120,7 +120,8 @@ export default function CrewScreen() {
   };
 
   const handleSlid = (a: { [k: string]: any }) => {
-    if (a.action === 'start') createCrew(suggest).then(() => run('window.cheer()'), fail);
+    // Making the crew sends the link straight away: there is nothing else to set up.
+    if (a.action === 'start') createCrew(suggest).then(() => { run('window.cheer()'); setTimeout(() => invite(), 600); }, fail);
     else if (a.action === 'retry') void startCloud();
     else if (a.action === 'invite') invite();
     else if (a.action === 'callup') {

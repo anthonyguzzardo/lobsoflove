@@ -30,8 +30,8 @@ Direct SQL (the db.<ref> host is IPv6-only; use the IPv4 session pooler), passwo
 Exposed schemas were set with `alter role authenticator set pgrst.db_schemas = 'public, graphql_public, lol'` +
 `notify pgrst, 'reload config'` (also `notify pgrst, 'reload schema'` after DDL). Keep the Dashboard's Exposed schemas in step.
 
-Applied migrations: 001 (2026-10-15). 002 (shared season) + rpc/rpc_crew.sql applied by the user 2026-10-19. 003 applied by the user 2026-10-19. Written, not yet applied: 004 (push notifications; needs pg_net).
-Anonymous sign-ins must be ON (Dashboard -> Authentication -> Providers); every phone signs in anonymously.
+Applied migrations: 001 (2026-10-15). 002 (shared season) + rpc/rpc_crew.sql applied by the user 2026-10-19. 003 applied by the user 2026-10-19. 004 (push notifications, pg_net) live as of 2026-10-20 (checked against the database).
+Anonymous sign-ins must be ON (Dashboard -> Authentication -> Providers); every phone signs in anonymously. ON as of 2026-10-20.
 
 ## Tables
 
