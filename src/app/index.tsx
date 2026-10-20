@@ -14,7 +14,7 @@ import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
 import { featured, findPro, proLine, proMatch, tourLine, useTour } from '@/lib/tour';
 
-const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter' | 'write' | 'gear' | 'intro', Href> = { play: '/courts', courts: '/courts', standings: '/standings', fighter: '/fighter', write: '/ink', gear: '/gear', intro: '/splash' };
+const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter' | 'write' | 'gear' | 'crew' | 'intro', Href> = { play: '/courts', courts: '/courts', standings: '/standings', fighter: '/fighter', write: '/ink', gear: '/gear', crew: '/crew', intro: '/splash' };
 
 /** Home: a diorama drawn by three.js in a WebView (web/home.js). Your fighter hops between tiles; each tile is a place in the app. */
 export default function Home() {
@@ -52,6 +52,8 @@ export default function Home() {
     // Your place shows only in the top half. Lower down, home talks about you against your own past instead.
     place: played && rows.findIndex((r) => r.id === you.id) < Math.ceil(rows.length / 2) ? rows.findIndex((r) => r.id === you.id) + 1 : 0,
     gear: (() => { const due = dueList(closet, matches); return due.length ? `${due.length} due: ${due[0]}${due.length > 1 ? ', ...' : ''}` : ''; })(),
+    // The crew platform's team photo wears your crew's colors (you first), and its key says who is in it.
+    crew: cloud.crew ? { name: cloud.crew.name, n: roster.length, colors: [you.color, ...roster.filter((f) => !f.isYou).map((f) => f.color)] } : null,
     last: last && lastWinner ? `${name(lastWinner)} beat ${name(lastWinner === last.p1 ? last.p2 : last.p1)} ${scoreLine(last.sets)}` : null,
   });
 
@@ -80,7 +82,6 @@ export default function Home() {
           {waiting ? (
             <Breathe><InkPill hot label={`${waiting} TO CONFIRM`} onPress={() => { sfx('go', 0.8); router.push('/confirm'); }} /></Breathe>
           ) : null}
-          <InkPill label={cloud.crew ? cloud.crew.name : 'CREW'} onPress={() => { sfx('go', 0.8); router.push('/crew'); }} />
         </View>
       ) : null}
     </View>

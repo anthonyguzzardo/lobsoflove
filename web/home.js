@@ -34,6 +34,7 @@ const PLACES = [
   { key: 'fighter', label: 'FIGHTER', head: ['YOUR FIGHTER.', 'NAME. STYLE. COLOR.'], blurb: 'change how you show up' },
   { key: 'write', label: 'WRITE', head: ['JUST WRITE IT.', 'NO FORMS.'], blurb: 'a score, a time, a restring: write it with your finger' },
   { key: 'gear', label: 'GEAR', head: ['YOUR GEAR.', 'WHAT IS WORN OUT.'], blurb: 'rackets, shoes, balls, overgrips' },
+  { key: 'crew', label: 'CREW', head: ['YOUR CREW.', 'WHO YOU PLAY.'], blurb: 'the friends your season counts against. start one, text them the link.' },
 ];
 
 const canvas = $('c');
@@ -53,7 +54,7 @@ scene.add(sun, sun.target);
 const FWD = new THREE.Vector3(-1, 0, -1).normalize();
 const RIGHT = new THREE.Vector3(1, 0, -1).normalize();
 const STEP = 1.95;
-const spots = [0, 1, 2, 3, 4, 5, 6].map((i) => FWD.clone().multiplyScalar(i * STEP).add(RIGHT.clone().multiplyScalar(i === 0 ? 0 : (i % 2 ? 0.8 : -0.8))).setY(i === 0 ? 0 : 0.12 + 0.16 * ((i * 7) % 3)));
+const spots = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => FWD.clone().multiplyScalar(i * STEP).add(RIGHT.clone().multiplyScalar(i === 0 ? 0 : (i % 2 ? 0.8 : -0.8))).setY(i === 0 ? 0 : 0.12 + 0.16 * ((i * 7) % 3)));
 
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...extra });
 const rbox = (w, h, d, r, material) => {
@@ -232,6 +233,30 @@ const mirrorDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 40)
   tile.userData.pencil = pencil;
 }
 
+const crewJellies = [];
+{
+  const tile = tiles[7];
+  const t = propGroup(tile); // the crew's team photo: three jellies on a two-step riser, taking turns to hop
+  t.add(at(rbox(0.96, 0.12, 0.34, 0.02, mat(0xe6e1d7)), 0, 0.06, 0.16));
+  t.add(at(rbox(0.96, 0.26, 0.3, 0.02, mat(0xffffff)), 0, 0.13, -0.16));
+  const eye = mat(0xfffdf0, { roughness: 0.2 });
+  const pupil = mat(INK, { roughness: 0.4 });
+  [[-0.3, 0.12, 0.16, 0xd7f205], [0.3, 0.12, 0.16, 0xff6fb1], [0, 0.26, -0.16, 0x35d6ff]].forEach(([x, y, z, c]) => {
+    const j = new THREE.Group();
+    const body = at(rbox(0.24, 0.24, 0.24, 0.07, new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.3, clearcoat: 1 })), 0, 0.12, 0);
+    j.add(body);
+    for (const ex of [-0.05, 0.05]) {
+      j.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), eye), ex, 0.15, 0.12));
+      j.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.016, 10, 6), pupil), ex, 0.15, 0.145));
+    }
+    j.position.set(x, y, z);
+    j.rotation.y = rad(45); // faces the camera, like your fighter
+    j.userData.y = y;
+    t.add(j);
+    crewJellies.push({ j, body });
+  });
+}
+
 // Studio dressing: a softbox, a desk lamp, loose slabs and loose balls.
 const softbox = new THREE.Group();
 softbox.add(at(rbox(0.34, 1.1, 0.12, 0.03, new THREE.MeshBasicMaterial({ color: 0xfffdf4 })), 0, 2.3, 0));
@@ -338,7 +363,7 @@ function paint() {
   const p = PLACES[i - 1];
   $('h1').textContent = p ? p.head[0] : 'WHERE TO?';
   $('h2').textContent = p ? p.head[1] : 'TAP A TILE.';
-  $('blurb').textContent = p ? (i === 3 && st.record ? st.record : i === 6 && st.gear ? st.gear : p.blurb) : 'your fighter hops there. swipe up works too.';
+  $('blurb').textContent = p ? (i === 3 && st.record ? st.record : i === 6 && st.gear ? st.gear : i === 7 && st.crew ? `${st.crew.name}: ${st.crew.n} fighter${st.crew.n === 1 ? '' : 's'}. call them up for a game.` : p.blurb) : 'your fighter hops there. swipe up works too.';
   if (p) slide.setKey(`0${i}`, p.label, 'SLIDE TO ENTER'); else slide.setKey('', '', '');
 }
 
@@ -386,6 +411,8 @@ window.setHome = (d) => {
   mirrorDisc.material.color.set(d.color);
   st.record = d.record; // shown on the standings key, where a record means something
   st.gear = d.gear; // what is worn out, shown on the gear key
+  st.crew = d.crew; // { name, n, colors } once you are in a crew
+  if (d.crew?.colors) d.crew.colors.slice(0, 3).forEach((c, k) => crewJellies[k]?.body.material.color.set(c));
   setTop(d);
   paint();
 };
@@ -469,6 +496,13 @@ function pose() {
   tiles[3].userData.cup.rotation.y = t * 0.8;
   tiles[4].userData.stand.rotation.y = rad(24) + 0.35 * Math.sin(t * 0.7);
   tiles[6].userData.racket.rotation.z = 0.28 * Math.sin(t * 2.6);
+  // The crew hop in turn, one every 0.7 s, like friends who cannot stand still for the photo.
+  crewJellies.forEach(({ j }, k) => {
+    const c = ((t - k * 0.7) % 2.1 + 2.1) % 2.1;
+    const h = c < 0.42 ? Math.sin((Math.PI * c) / 0.42) : 0;
+    j.position.y = j.userData.y + 0.14 * h;
+    j.scale.set(1 + 0.06 * (1 - h) * (c < 0.5 ? 1 : 0), 1 + 0.1 * h, 1);
+  });
   // The pencil writes: quick side-to-side strokes across the line, a lift, then the next character.
   {
     const p = tiles[5].userData.pencil;
@@ -497,7 +531,7 @@ function pose() {
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
-  let remaining = Math.min((now - last) / 1000, 0.1);
+  let remaining = window.paused ? 0 : Math.min((now - last) / 1000, 0.1);
   last = now;
   while (remaining > 1e-6) {
     const dt = Math.min(remaining, 1 / 120);
@@ -513,3 +547,6 @@ window.demoHome = () => { [1, 2, 3, 4, 5].forEach((i, k) => setTimeout(() => goT
 // The headline's second line gets a self-drawing brush stroke under it; it redraws whenever the headline changes.
 brushUnderline(document.getElementById('h2'));
 post({ type: 'ready' });
+window.__goTo = (i) => goTo(i); // test hook: headless stills hop straight to a tile
+// Test hook: with window.paused set, step the scene exactly `sec` seconds and draw it.
+window.advanceBy = (sec) => { for (let k = 0; k < sec * 120; k += 1) { advance(1 / 120); pose(); } renderer.render(scene, camera); };

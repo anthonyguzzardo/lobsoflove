@@ -32,9 +32,9 @@ body{background:var(--paper);color:var(--ink);font-family:var(--mono)}
 #ui>*{pointer-events:none}
 /* The dock: little floating platforms, one per place. A real ball hops between them; the one it sits on is the active one. */
 #dock{position:relative;display:flex;justify-content:space-between;align-items:flex-end;height:86px;margin:2px 0 0;pointer-events:auto;padding:0 4px}
-#dock .slot{all:unset;position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
-#dock .pf{width:50px;height:14px;border-radius:3px;background:#f4f1ea;position:relative;box-shadow:0 6px 0 #d8d2c5,0 12px 14px rgba(40,34,26,.18);transition:background .2s,transform .32s cubic-bezier(.34,1.56,.64,1);animation:bob 3.6s ease-in-out infinite}
-#dock .slot:nth-child(2) .pf{animation-delay:-.9s}#dock .slot:nth-child(3) .pf{animation-delay:-1.8s}#dock .slot:nth-child(4) .pf{animation-delay:-2.7s}#dock .slot:nth-child(5) .pf{animation-delay:-.45s}#dock .slot:nth-child(6) .pf{animation-delay:-1.35s}
+#dock .slot{all:unset;position:relative;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
+#dock .pf{width:min(50px,calc(100% - 6px));height:14px;border-radius:3px;background:#f4f1ea;position:relative;box-shadow:0 6px 0 #d8d2c5,0 12px 14px rgba(40,34,26,.18);transition:background .2s,transform .32s cubic-bezier(.34,1.56,.64,1);animation:bob 3.6s ease-in-out infinite}
+#dock .slot:nth-child(2) .pf{animation-delay:-.9s}#dock .slot:nth-child(3) .pf{animation-delay:-1.8s}#dock .slot:nth-child(4) .pf{animation-delay:-2.7s}#dock .slot:nth-child(5) .pf{animation-delay:-.45s}#dock .slot:nth-child(6) .pf{animation-delay:-1.35s}#dock .slot:nth-child(7) .pf{animation-delay:-2.25s}
 @keyframes bob{0%,100%{translate:0 0}50%{translate:0 -3px}}
 #dock .slot.on .pf{background:var(--pc,var(--clay));box-shadow:0 6px 0 color-mix(in srgb,var(--pc,#e2562f) 62%,#000),0 12px 14px rgba(40,34,26,.22)}
 #dock .slot.land .pf{transform:translateY(4px)}
@@ -45,7 +45,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--mono)}
 #dock .mini{display:block;margin-bottom:-1px;opacity:.72;transform-origin:50% 100%;transition:transform .32s cubic-bezier(.34,1.56,.64,1),opacity .2s}
 #dock .slot.on .mini{opacity:1;transform:scale(1.18)}
 #dock .slot.land .mini{transform:scale(1.24,1.06)}
-#dock .lbl{font:800 9.5px var(--mono);letter-spacing:.06em;margin-top:13px;opacity:.42;transition:opacity .2s}
+#dock .lbl{font:800 8.5px var(--mono);letter-spacing:.03em;margin-top:13px;opacity:.42;transition:opacity .2s}
 #dock .slot.on .lbl{opacity:1}
 #dball{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;pointer-events:none;will-change:transform}
 #dball i{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%,#f4ff7a 0,#d7f205 46%,#a9c400 100%);box-shadow:inset -3px -4px 5px rgba(60,80,0,.35)}

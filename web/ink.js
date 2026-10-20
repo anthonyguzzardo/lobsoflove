@@ -372,7 +372,10 @@ function drawLine(t) {
   g.fillStyle = INK; g.globalAlpha = 0.14; g.fillRect(16, y + 12, W - 32, 2); g.globalAlpha = 1;
 }
 
-const EXAMPLES = ['beat dave 6-4 6-2', 'lost 7-5 6-3 @ 5pm', 'restring $28', '6-4 2-6 7-6 w', 'regrip 8 bucks'];
+// What the empty page suggests. A page opened for one job (the crew's next friend) sets its own with window.setHints.
+let HINT_TITLE = 'TRY WRITING';
+let EXAMPLES = ['beat dave 6-4 6-2', 'lost 7-5 6-3 @ 5pm', 'restring $28', '6-4 2-6 7-6 w', 'regrip 8 bucks'];
+window.setHints = ({ title, examples }) => { HINT_TITLE = title; EXAMPLES = examples; };
 function drawHints(t) {
   if (S.line || S.group.length || S.live || S.mode === 'card' || S.pending || S.stamp) return;
   const i = Math.floor(t / 3400) % EXAMPLES.length;
@@ -382,7 +385,7 @@ function drawHints(t) {
   g.textAlign = 'center';
   g.font = `700 13px ${MONO}`;
   g.fillStyle = INK; g.globalAlpha = 0.55;
-  g.fillText('TRY WRITING', W / 2, H * 0.4 - 46);
+  g.fillText(HINT_TITLE, W / 2, H * 0.4 - 46);
   g.font = `700 36px ${HAND}`;
   g.globalAlpha = 0.22 * a;
   g.fillText(EXAMPLES[i], W / 2, H * 0.4);

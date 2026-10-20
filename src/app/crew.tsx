@@ -99,7 +99,7 @@ export default function CrewScreen() {
     if (demo) return;
     switch (msg.type) {
       case 'invite': invite(msg.id, msg.name); break;
-      case 'write': router.push('/ink'); break;
+      case 'write': router.push('/ink?for=friend'); break; // the chalk spot: the ink page asks for one name
       case 'select': {
         // A fresh circle gets a fresh message, unless you typed your own for this one.
         if (!msg.count && !msg.anyone) { edited.current = false; break; }

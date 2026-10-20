@@ -43,7 +43,9 @@ type Entry = { space: true } | { space?: false; cands: string[] | null; strokes:
  * classifies strokes; this side recognizes each character, decodes the line, and draws a card back.
  */
 export default function Ink() {
-  const params = useLocalSearchParams<{ demo?: string; say?: string }>();
+  const params = useLocalSearchParams<{ demo?: string; say?: string; for?: string }>();
+  // Opened from the crew's chalk spot: the page asks for one friend's name, and whatever is written is read as adding them.
+  const friend = params.for === 'friend';
   const roster = useRoster();
   const cloud = useCloud();
   const matches = useMatches();
@@ -64,7 +66,8 @@ export default function Ink() {
     const last = [...matches].sort((a, b) => b.playedAt - a.playedAt)[0];
     const lastMatch = last ? { id: last.id, label: `${winnerOf(last) === last.p1 ? 'W' : 'L'} vs ${roster.find((f) => f.id === last.p2)?.name ?? '?'}  ${scoreLine(last.sets)}` } : null;
     const crew = cloud.status === 'off' ? undefined : cloud.crew?.name ?? null;
-    return parseCommand(t, { roster, venues, lastMatch, crew }, answers.current) ?? parse(t, roster, answers.current);
+    const said = friend && t.trim() && !/^\s*(add|recruit|invite|sign)\b/i.test(t) ? `add ${t.trim()}` : t;
+    return parseCommand(said, { roster, venues, lastMatch, crew }, answers.current) ?? parse(said, roster, answers.current);
   };
 
   const text = () => decode(entries.current.flatMap((e): Slot[] => (e.space ? [{ space: true }] : e.cands ? [{ cands: e.cands }] : [])), names);
@@ -101,7 +104,7 @@ export default function Ink() {
     } else {
       c = understand(t);
       // Not a score, gear or a fixed command: ask the AI reader, and say so on the card while it thinks.
-      if (c.draft.kind === 'none' && AI_READER_READY && t.trim().length >= 3 && !offline.current) {
+      if (c.draft.kind === 'none' && !friend && AI_READER_READY && t.trim().length >= 3 && !offline.current) {
         if (asking.current !== t) askAi(t);
         c = { ...c, lines: [`"${t}"`, 'reading it...'], canSave: false };
       }
@@ -221,6 +224,7 @@ export default function Ink() {
 
   const onReady = () => {
     pushLine();
+    if (friend) run(`window.setHints(${JSON.stringify({ title: "WRITE YOUR FRIEND'S NAME", examples: ['maya', 'jo', 'big dave', 'sam'] })})`);
     AsyncStorage.getItem(PEN_KEY).then((v) => { if (v) run(`window.setPen(${Number(v)})`); }).catch(() => {});
     // Test hook: /ink?say=change fighter to servebot skips the handwriting and shows the card for that sentence.
     if (params.say) { lineText.current = params.say; entries.current = [{ space: true }]; run(`window.setLine(${JSON.stringify(params.say)}, 0)`); showCard(); }
