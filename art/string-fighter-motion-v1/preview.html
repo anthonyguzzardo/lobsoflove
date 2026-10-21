@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little pieces, big attitude — fighter motion studies</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3eee3;color:#292923;font:16px system-ui,sans-serif}main{max-width:1400px;margin:auto;padding:48px 24px}header{max-width:780px}small{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#716b5c}h1{font:clamp(36px,6vw,70px)/1.05 Georgia,serif;letter-spacing:-2px;margin:18px 0}p{color:#716b5c;line-height:1.6}nav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:28px 0}button,select{font:inherit;border:1px solid #bcb6a7;border-radius:24px;background:transparent;color:inherit;padding:10px 18px;cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #bb4933;outline-offset:4px}.studies{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}article{background:#faf7ef;border:1px solid #dad4c6;border-radius:12px;overflow:hidden}article:last-child{background:#222b30;color:#eee9dd}canvas{width:100%;aspect-ratio:1;display:block}.caption{padding:0 24px 24px}h2{font:28px Georgia,serif;margin:0 0 8px}.caption p{font-size:14px;margin:0}article:last-child p{color:#b6c0bd}.timeline{display:flex;gap:16px;align-items:center;margin:24px 0}input{flex:1;accent-color:#bb4933;min-width:80px}output{width:110px;font-size:13px}footer{margin-top:30px;font-size:13px;color:#716b5c}a{color:inherit}@media(max-width:760px){main{padding:28px 16px}.studies{grid-template-columns:1fr}canvas{max-height:400px}.timeline{position:sticky;bottom:8px;background:#f3eee3;padding:16px;border:1px solid #dad4c6;border-radius:12px}}
+</style>
+<main>
+<header><small>Lobs of Love / Motion study 01</small><h1>Little pieces.<br>Big attitude.</h1><p>One fighter, three ways to fall apart. A shared five-second loop explores a ready bounce, stretchy punch, scattered recovery, and one late little piece.</p></header>
+<nav aria-label="Playback"><button id="play">Pause</button><button id="restart">Replay</button><label>Speed <select id="speed"><option value="0.5">Half speed</option><option value="1" selected>Normal</option></select></label></nav>
+<section class="studies" aria-label="Material comparison">
+<article><canvas aria-label="Animated fighter formed from black ink strings" role="img"></canvas><div class="caption"><h2>01 / Ink strings</h2><p>Coiled, scrappy, elastic. A coral thread holds the attitude together.</p></div></article>
+<article><canvas aria-label="Animated fighter formed from chunky pixels" role="img"></canvas><div class="caption"><h2>02 / Chunky pixels</h2><p>Little blocks, big punch. Pieces tumble out and click back into place.</p></div></article>
+<article><canvas aria-label="Animated fighter formed from glittering particles" role="img"></canvas><div class="caption"><h2>03 / Glitter atoms</h2><p>A small constellation with fists. Bright specks scatter and find their way home.</p></div></article>
+</section>
+<div class="timeline"><label for="time">Scrub</label><input id="time" type="range" min="0" max="4999" value="0" aria-label="Animation position"><output id="phase">Ready</output></div>
+<footer>Motion prototype / <a href="../string-fighter-v1/concept-sheet.png">Original fighter concept</a> / Pause or scrub to compare silhouettes.</footer>
+</main>
+<script src="study.js"></script>
+</html>

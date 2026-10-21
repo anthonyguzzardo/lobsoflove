@@ -353,21 +353,45 @@ const fighterBody = `<canvas id="c"></canvas><div id="vig"></div><div id="grain"
 </div><div id="shout">HNNGH!</div>`;
 emit('fighter-html.ts', 'FIGHTER_HTML', page({ css: fighterCss, body: fighterBody, js: bundle('web/fighter.js') }));
 
-// Gear closet: the locker. Same paper, ink, mono type and slide strip as home; clay marks what is due.
-const closetCss = homeCss + `
+// The slide strip, as on home: shared by the gear page and the crew page.
+const enterStrip = homeBody.match(/<div id="enter"[\s\S]*?<\/svg><\/div><\/div><\/div>/)[0].replace('Slide the ball to go in', 'Slide the ball to log it');
+
+// The domain: retired gear planted in broken concrete, drawn like a manga panel. Paper and ink, one red cord; the title stamps in.
+const domainCss = homeCss + `
 #ui{padding-top:calc(env(safe-area-inset-top) + 56px)}
-#fade{background:linear-gradient(180deg,rgba(239,236,229,0) 0%,rgba(239,236,229,0) 74%,rgba(239,236,229,.92) 81%,rgba(239,236,229,.98) 100%)}
-#panel{pointer-events:auto!important}
-#panel #fo{display:none}#ui.focus #panel #ov{display:none}#ui.focus #panel #fo{display:block}
-#ov #h1{font-size:25px}#ov #h2{font-size:25px;color:var(--clay)}
+#fade{background:linear-gradient(180deg,rgba(239,236,229,0) 0%,rgba(239,236,229,0) 74%,rgba(239,236,229,.9) 82%,rgba(239,236,229,.98) 100%)}
+#void{position:fixed;inset:0;background:#0b0c0e;pointer-events:none;z-index:1}#veil{position:fixed;inset:0;pointer-events:none;opacity:0}#de,#stamp{z-index:2}
+#de{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 62px);font:400 15px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.12em;color:#efece5;opacity:0;pointer-events:none}
+#stamp{position:fixed;left:14px;top:calc(env(safe-area-inset-top) + 92px);display:flex;gap:6px;align-items:flex-start;pointer-events:none;opacity:0}
+#stamp b{writing-mode:vertical-rl;font:900 56px "Hiragino Mincho ProN","Hiragino Sans","Yu Mincho",serif;line-height:1;color:#16181d;letter-spacing:.02em;text-shadow:3px 0 0 #efece5,-3px 0 0 #efece5,0 3px 0 #efece5,0 -3px 0 #efece5,2px 2px 0 #efece5,-2px -2px 0 #efece5,2px -2px 0 #efece5,-2px 2px 0 #efece5}
+#stamp i{writing-mode:vertical-rl;font:800 10px var(--mono);font-style:normal;letter-spacing:.3em;color:#efece5;margin-top:10px}
+body.open #stamp{opacity:1;animation:stamp .42s cubic-bezier(.34,1.56,.64,1) both}
+body.open #de{opacity:1;animation:dein .5s .1s cubic-bezier(.16,1,.3,1) both}
+@keyframes stamp{0%{transform:scale(2.4) rotate(-8deg);opacity:0}60%{opacity:1}100%{transform:none;opacity:1}}
+@keyframes dein{0%{transform:translateX(-20px);opacity:0}100%{transform:none;opacity:1}}
+#panel{pointer-events:none}
+#ui.focus #ov{display:none}
+#ov #h1{font-size:25px}#ov #h2{font-size:13px;color:var(--clay);margin-top:4px;letter-spacing:.06em}
+#hint{font:700 12px var(--mono);margin:8px 0 18px;opacity:.75}
+#plate{display:flex;align-items:stretch;height:44px;border-radius:6px;overflow:hidden;background:var(--ink);box-shadow:0 5px 0 #000,0 10px 16px rgba(22,24,29,.22);margin-bottom:12px}
+#kind{flex:none;display:flex;align-items:center;padding:0 10px;background:var(--clay);color:var(--ink);font:800 12px var(--mono);letter-spacing:.08em}
+#name{flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;color:var(--paper);font:800 21px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rec{display:flex;align-items:baseline;gap:10px;margin:0 2px 6px}
+#wl{font:800 40px var(--mono);letter-spacing:.02em;line-height:1}
+#sub{font:800 10px var(--mono);letter-spacing:.14em;opacity:.6}
+#facts{list-style:none;margin:0 0 6px;padding:0}
+#facts li{font:700 12.5px var(--mono);padding:3px 0;display:flex;align-items:center;gap:8px}
+#facts li:before{content:"";width:9px;height:2px;background:var(--clay);flex:none}
+#how{font:700 11px var(--mono);letter-spacing:.06em;opacity:.6;margin:8px 0 18px}
+#ui.focus #plate,#ui.focus #nplate{animation:seat .38s cubic-bezier(.34,1.56,.64,1)}
+#fo,#nw{display:none}#ui.past #fo{display:block}#ui.now #nw{display:block}
+#nw{pointer-events:auto!important}#nw *{pointer-events:auto}
+#nplate{display:flex;align-items:stretch;height:44px;border-radius:6px;overflow:hidden;background:var(--ink);box-shadow:0 5px 0 #000,0 10px 16px rgba(22,24,29,.22);margin-bottom:12px}
+#nkind{flex:none;display:flex;align-items:center;padding:0 10px;background:var(--clay);color:var(--ink);font:800 12px var(--mono);letter-spacing:.08em}
+#nname{all:unset;flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;color:var(--paper);font:800 21px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #due{list-style:none;margin:8px 0 0;padding:0}
 #due li{font:800 13px var(--mono);letter-spacing:.03em;padding:3px 0;display:flex;align-items:center;gap:8px}
 #due li:before{content:"";width:9px;height:9px;border-radius:2px;background:var(--clay);flex:none}
-#due li.ok:before{background:#3f8f5a}
-#hint{font:700 12px var(--mono);margin:8px 0 14px;opacity:.75}
-#plate{display:flex;align-items:stretch;height:44px;border-radius:6px;overflow:hidden;background:var(--ink);box-shadow:0 5px 0 #000,0 10px 16px rgba(22,24,29,.22);margin-bottom:12px}
-#kind{flex:none;display:flex;align-items:center;padding:0 10px;background:var(--clay);color:var(--ink);font:800 12px var(--mono);letter-spacing:.08em}
-#name{all:unset;flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;color:var(--paper);font:800 21px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #rows{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
 .row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:1fr auto;grid-template-areas:"w e" "t t" "b b";gap:3px 8px;padding:8px 10px 9px;border-radius:5px;background:#fffdf8;box-shadow:inset 0 0 0 1.6px rgba(22,24,29,.22)}
 .row.on{box-shadow:inset 0 0 0 2.4px var(--ink)}
@@ -384,16 +408,80 @@ const closetCss = homeCss + `
 #order{all:unset;font:800 11px var(--mono);letter-spacing:.1em;padding:8px 10px;border-radius:4px;background:var(--ink);color:var(--paper);box-shadow:0 3px 0 #000}
 #order:active{transform:translateY(3px);box-shadow:none}
 .how{font:700 12px var(--mono);margin:2px 0 0;opacity:.75}
+#dom{all:unset;position:fixed;right:16px;top:calc(env(safe-area-inset-top) + 18px);font:800 10.5px var(--mono);letter-spacing:.14em;padding:8px 11px;border-radius:4px;color:var(--paper);background:var(--ink);box-shadow:0 3px 0 var(--clay);pointer-events:auto;transition:transform .32s cubic-bezier(.34,1.56,.64,1)}
+#dom:active{transform:translateY(3px) scale(.96);box-shadow:0 0 0 var(--clay)}
+#ui.focus #dom{display:none}
+#addone{all:unset;font:800 11px var(--mono);letter-spacing:.1em;padding:8px 10px;border-radius:4px;background:#fffdf8;color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink),0 3px 0 var(--ink)}
+#addone:active{transform:translateY(3px);box-shadow:inset 0 0 0 2px var(--ink)}
 #enter{margin-bottom:6px}
 `;
-const enterStrip = homeBody.match(/<div id="enter"[\s\S]*?<\/svg><\/div><\/div><\/div>/)[0].replace('Slide the ball to go in', 'Slide the ball to log it');
-const closetBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
-<div class="grow"></div>
+const domainBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div>
+<div id="de">DOMAIN EXPANSION</div><div id="stamp"><i>MUTUAL LOBS</i><b>相愛</b></div>
+<div id="ui"><div class="grow"></div>
 <div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><ul id="due"></ul><div id="hint"></div></div>
-<div id="fo"><div id="plate"><div id="kind"></div><button id="name" aria-label="Rename"></button></div><div id="rows"></div></div>
+<div id="fo"><div id="plate"><div id="kind"></div><div id="name"></div></div><div id="rec"><b id="wl"></b><span id="sub"></span></div><ul id="facts"></ul><div id="how"></div></div>
+<div id="nw"><div id="nplate"><div id="nkind"></div><button id="nname" aria-label="Rename, or hold to retire"></button></div><div id="rows"></div></div>
 ${enterStrip}</div>
-</div>`;
-emit('closet-html.ts', 'CLOSET_HTML', page({ css: closetCss, body: closetBody, js: bundle('web/closet.js') }));
+</div><div id="veil"></div><div id="void"></div>`;
+emit('domain-html.ts', 'DOMAIN_HTML', page({ css: domainCss, body: domainBody, js: bundle('web/domain.js') }));
+
+// The sky over San Diego: fly it like a Z fighter. Bright sky; the controls are paper-and-ink pads; tags name the courts.
+const flyCss = `
+:root{--ink:#16181d;--paper:#efece5;--clay:#e2562f;--acc:#e8ff6a;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+body{background:#d8e9ef;color:var(--ink);font-family:var(--mono)}
+#c{position:fixed;inset:0}
+#lines{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
+#flash{position:fixed;inset:0;background:#fffdf4;opacity:0;pointer-events:none}
+#tags{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.vtag{position:absolute;left:0;top:0;display:flex;align-items:center;gap:6px;background:var(--ink);color:var(--paper);font:800 10px var(--mono);letter-spacing:.06em;padding:4px 7px 4px 6px;border-radius:3px;white-space:nowrap;box-shadow:0 3px 0 rgba(0,0,0,.3);will-change:transform}
+.vtag i{width:8px;height:8px;transform:rotate(45deg);background:var(--c);flex:none}
+.vtag small{font:700 9px var(--mono);opacity:.62}
+.vtag.edge{opacity:.8;transform-origin:center}
+.vtag.here{background:var(--c);color:var(--ink)}.vtag.here i{background:var(--ink)}
+.rtag{position:absolute;left:0;top:0;font:800 10.5px var(--mono);letter-spacing:.22em;color:var(--ink);text-shadow:0 0 3px #efece5,0 0 3px #efece5,0 0 8px #efece5;white-space:nowrap;opacity:0;will-change:transform,opacity}
+#hud{position:fixed;right:16px;top:calc(env(safe-area-inset-top) + 12px);display:flex;flex-direction:column;align-items:flex-end;pointer-events:none;max-width:calc(100% - 110px)}
+#over{background:var(--paper);border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);font:800 12.5px var(--mono);letter-spacing:.08em;padding:6px 9px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#read{margin-top:10px;display:flex;flex-direction:column;align-items:flex-end;gap:3px;font:800 11px var(--mono);letter-spacing:.08em;text-shadow:0 0 3px #efece5,0 0 6px #efece5}
+#ki{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 100px);text-align:center;pointer-events:none;opacity:0;transition:opacity .25s}
+#ki b{display:block;font:900 36px var(--mono);letter-spacing:.02em;color:#fffdf0;-webkit-text-stroke:2px var(--ink);text-shadow:0 4px 0 var(--ink)}
+#ki i{display:block;font:800 9.5px var(--mono);font-style:normal;letter-spacing:.32em;margin-top:6px;text-shadow:0 0 3px #efece5,0 0 6px #efece5}
+body.super #ki b{color:#ffd23a}
+#nine{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 168px);text-align:center;font:400 34px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.05em;color:#ffd23a;-webkit-text-stroke:1.5px var(--ink);text-shadow:0 4px 0 var(--ink);opacity:0;pointer-events:none}
+body.nine #nine{animation:nine 2.4s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes nine{0%{transform:scale(2.6) rotate(-6deg);opacity:0}12%{transform:scale(1) rotate(-3deg);opacity:1}80%{opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:0}}
+#stick{position:fixed;left:0;top:0;width:124px;height:124px;margin:-62px 0 0 -62px;border-radius:50%;border:2px dashed rgba(22,24,29,.6);background:rgba(239,236,229,.2);opacity:0;pointer-events:none;transition:opacity .15s}
+#stick.on{opacity:1}
+#stick i{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:var(--ink);box-shadow:0 4px 0 rgba(0,0,0,.28)}
+#pads{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom) + 34px);display:flex;flex-direction:column;align-items:center;gap:30px}
+.pad{all:unset;position:relative;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--paper);border:2.5px solid var(--ink);box-shadow:0 6px 0 var(--ink);touch-action:none;-webkit-tap-highlight-color:transparent;transition:transform .07s,box-shadow .07s}
+.pad.on{transform:translateY(5px);box-shadow:0 1px 0 var(--ink)}
+.pad em{position:absolute;left:50%;bottom:-22px;transform:translateX(-50%);font:800 10px var(--mono);font-style:normal;letter-spacing:.14em;text-shadow:0 0 3px #efece5,0 0 6px #efece5}
+#rise{width:62px;height:62px}
+#blast{width:98px;height:98px}
+.orb{width:60px;height:60px;border-radius:50%;background:radial-gradient(circle,#fffdf0 0,#fffdf0 26%,var(--acc) 60%,color-mix(in srgb,var(--acc) 55%,#16181d) 100%);box-shadow:0 0 0 2px var(--ink)}
+#blast.on .orb{animation:orb .09s linear infinite alternate;box-shadow:0 0 0 2px var(--ink),0 0 28px 10px var(--acc)}
+body.super .orb{background:radial-gradient(circle,#fffdf0 0,#fffdf0 26%,#ffd23a 60%,#a8781a 100%)}
+@keyframes orb{from{transform:scale(.93)}to{transform:scale(1.08)}}
+.chev{display:flex;flex-direction:column;align-items:center;margin-top:10px}
+.chev b{width:14px;height:14px;border-left:4px solid var(--ink);border-top:4px solid var(--ink);transform:rotate(45deg);margin-bottom:-5px}
+#rise.on .chev b{border-color:var(--clay)}
+#hint{position:fixed;left:16px;bottom:calc(env(safe-area-inset-bottom) + 30px);max-width:calc(100% - 160px);font:800 10.5px var(--mono);letter-spacing:.07em;line-height:1.75;background:rgba(239,236,229,.9);border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);border-radius:4px;padding:7px 10px;pointer-events:none;transition:opacity .5s}
+#hint.gone{opacity:0}
+#land{all:unset;position:fixed;left:16px;bottom:calc(env(safe-area-inset-bottom) + 30px);max-width:calc(100% - 160px);box-sizing:border-box;display:flex;align-items:center;gap:9px;background:var(--clay);color:var(--ink);border:2.5px solid var(--ink);box-shadow:0 6px 0 var(--ink);border-radius:6px;padding:13px 14px;font:800 14px var(--mono);letter-spacing:.06em;transform:translateY(160px);transition:transform .4s cubic-bezier(.34,1.56,.64,1),box-shadow .07s;touch-action:none;-webkit-tap-highlight-color:transparent}
+#land.show{transform:none;animation:breathe 1.6s ease-in-out infinite}
+#land.on{transform:translateY(5px);box-shadow:0 1px 0 var(--ink);animation:none}
+@keyframes breathe{0%,100%{scale:1}50%{scale:1.03}}
+#land i{width:11px;height:11px;transform:rotate(45deg);background:var(--c,#fffdf0);border:2px solid var(--ink);flex:none}
+#land span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+`;
+const flyBody = `<canvas id="c"></canvas><canvas id="lines"></canvas><div id="tags"></div><div id="flash"></div>
+<div id="hud"><div id="over">OVER SAN DIEGO</div><div id="read"><span id="alt"></span><span id="spd"></span></div></div>
+<div id="ki"><b id="kin"></b><i>POWER LEVEL</i></div><div id="nine">IT'S OVER 9000</div>
+<div id="stick"><i></i></div>
+<div id="hint">DRAG ANYWHERE TO STEER<br>HOLD BLAST TO ROCKET<br>HOLD RISE TO GO UP</div>
+<button id="land" aria-label="Land at this court"><i></i><span id="landtxt"></span></button>
+<div id="pads"><button id="rise" class="pad" aria-label="Hold to rocket up"><span class="chev"><b></b><b></b></span><em>RISE</em></button><button id="blast" class="pad" aria-label="Hold to rocket forward"><span class="orb"></span><em>BLAST</em></button></div>`;
+emit('fly-html.ts', 'FLY_HTML', page({ css: flyCss, body: flyBody, pre: `window.VENUES=${readFileSync(`${root}src/data/venues.json`)};`, js: bundle('web/fly.js') }));
 
 // Crew: the line-up. Same paper, ink, mono and slide strip as home; name plates ride under each jelly's feet.
 const crewCss = homeCss + `

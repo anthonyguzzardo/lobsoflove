@@ -22,6 +22,8 @@ export type GearItem = {
   serviced: Partial<Record<Service, number>>;
   /** Unopened cans (balls) or overgrips in the bin (grips). */
   stock?: number;
+  /** When it was retired: it leaves the closet and stands planted in the domain. */
+  retiredAt?: number;
 };
 
 /**
@@ -74,6 +76,10 @@ const KEY = 'lol.gear.v1';
 const ITEMS_KEY = 'lol.closet.v1';
 let entries: GearEntry[] = [];
 let items: GearItem[] = [];
+/** The closet shows what is in use; the domain shows what was retired. Kept as stable arrays for useSyncExternalStore. */
+let active: GearItem[] = [];
+let retired: GearItem[] = [];
+const split = () => { active = items.filter((it) => it.retiredAt == null); retired = items.filter((it) => it.retiredAt != null); };
 let loaded = false;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
@@ -101,12 +107,13 @@ async function load() {
     // Unreadable storage: start with an empty log.
     items = starter(Date.now());
   }
+  split();
   emit();
 }
 
-const set = (next: GearItem[]) => { items = next; emit(); persist(); };
+const set = (next: GearItem[]) => { items = next; split(); emit(); persist(); };
 const patch = (id: string, fn: (it: GearItem) => GearItem) => set(items.map((it) => (it.id === id ? fn(it) : it)));
-const first = (kind: GearKind) => items.find((it) => it.kind === kind);
+const first = (kind: GearKind) => items.find((it) => it.kind === kind && it.retiredAt == null);
 
 /** A written log line ("restring 28"). It also counts on the closet: the first racket gets restrung, a can goes on the shelf. */
 export function addGear(input: Omit<GearEntry, 'id'>): string {
@@ -129,6 +136,8 @@ export function addItem(kind: GearKind, name: string, photo: string | null): str
 export function renameItem(id: string, name: string) { patch(id, (it) => ({ ...it, name })); }
 export function setPhoto(id: string, photo: string) { patch(id, (it) => ({ ...it, photo })); }
 export function removeItem(id: string) { set(items.filter((it) => it.id !== id)); }
+/** Done with it: it leaves the closet and is planted in the domain, wear history and all. */
+export function retireItem(id: string, at = Date.now()) { patch(id, (it) => ({ ...it, retiredAt: at })); }
 export function service(id: string, s: Service, at = Date.now()) { patch(id, (it) => ({ ...it, serviced: { ...it.serviced, [s]: at } })); }
 export function restock(kind: GearKind, n: number) {
   const it = first(kind);
@@ -161,6 +170,12 @@ export function useGear(): GearEntry[] {
   return useSyncExternalStore(subscribe, () => entries, () => entries);
 }
 
+/** What is in use (the closet). */
 export function useCloset(): GearItem[] {
-  return useSyncExternalStore(subscribe, () => items, () => items);
+  return useSyncExternalStore(subscribe, () => active, () => active);
+}
+
+/** What was retired (the domain). */
+export function useRetired(): GearItem[] {
+  return useSyncExternalStore(subscribe, () => retired, () => retired);
 }

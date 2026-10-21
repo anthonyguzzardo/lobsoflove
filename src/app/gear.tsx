@@ -1,121 +1,119 @@
-import { File, Paths } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { BackSwing } from '@/components/back-swing';
 import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
-import { CLOSET_HTML } from '@/generated/closet-html';
+import { DOMAIN_HTML } from '@/generated/domain-html';
 import {
   type GearItem, type GearKind, LIFE, type Service, SERVICES,
-  addItem, crackCan, dueList, lowStock, regrip, removeItem, renameItem, restock, service, setPhoto, useCloset, wearOf,
+  addItem, crackCan, dueList, lowStock, regrip, renameItem, restock, retireItem, service, useCloset, useRetired, wearOf,
 } from '@/lib/gear';
-import { type Match, useMatches } from '@/lib/matches';
-import { goBack } from '@/lib/nav';
-import { sfx } from '@/lib/sfx';
 import { askInk } from '@/lib/ink-ask';
-
-type Msg =
-  | { type: 'doors' | 'knock' | 'grab' | 'fling' | 'tick' | 'ping' | 'wrap' | 'kick' | 'pop' | 'land' | 'thud' | 'squeak' | 'crack' }
-  | { type: 'clack' | 'pock'; v: number }
-  | { type: 'focus'; id: string | null }
-  | { type: 'add'; kind: 'racket' | 'shoes' }
-  | { type: 'restock'; kind: 'balls' | 'grips' }
-  | { type: 'service'; id: string; s: Service }
-  | { type: 'photo' | 'edit' | 'remove'; id: string }
-  | { type: 'order'; kind: GearKind };
+import { counts, type Match, useMatches, winnerOf } from '@/lib/matches';
+import { goBack } from '@/lib/nav';
+import { type Fighter, useRoster } from '@/lib/roster';
+import { sfx } from '@/lib/sfx';
 
 const DEFAULT_NAME: Record<GearKind, string> = { racket: 'RACKET', shoes: 'COURT SHOES', balls: 'BALLS', grips: 'OVERGRIPS' };
 const PLACEHOLDER: Record<GearKind, string> = { racket: 'PURE AERO', shoes: 'GEL RESOLUTION', balls: 'PENN CHAMPIONSHIP', grips: 'TOURNA GRIP' };
 const SEARCH: Record<GearKind, string> = { racket: 'tennis racket', shoes: 'tennis shoes', balls: 'tennis balls', grips: 'tennis overgrip' };
-
-/** Photos load into the page as data URIs; a file is read once and kept. */
-const dataUris = new Map<string, string>();
-function dataUri(uri: string | null): string | null {
-  if (!uri) return null;
-  const hit = dataUris.get(uri);
-  if (hit) return hit;
-  try {
-    const d = `data:image/jpeg;base64,${new File(uri).base64Sync()}`;
-    dataUris.set(uri, d);
-    return d;
-  } catch {
-    return null;
-  }
-}
-
-function stateLine(w: { matches: number; days: number }, s: Service) {
-  const life = LIFE[s];
-  return `${w.matches} of ${life.matches} matches, ${w.days} of ${life.days} days`;
-}
-
-function payloadOf(items: GearItem[], matches: Match[]) {
-  return {
-    due: dueList(items, matches),
-    items: items.map((it) => ({
-      id: it.id,
-      kind: it.kind,
-      name: it.name,
-      photo: dataUri(it.photo),
-      stock: it.stock ?? 0,
-      low: lowStock(it),
-      hasOpen: it.kind === 'balls' && it.serviced.can != null,
-      stamps: it.serviced,
-      rows: SERVICES[it.kind]
-        .filter((s) => s !== 'can' || it.serviced.can != null)
-        .map((s) => {
-          const w = wearOf(it, s, matches);
-          return { s, word: LIFE[s].word, verb: LIFE[s].verb, text: stateLine(w, s), worn: w.worn };
-        }),
-    })),
-  };
-}
-
-/** A sample closet for `?demo=1` recordings. Never saved. */
 const DAY = 86_400_000;
-const demoCloset = (now: number): GearItem[] => [
-  { id: 'demo-r1', kind: 'racket', name: 'PURE AERO', photo: null, addedAt: now - 200 * DAY, serviced: { strings: now - 96 * DAY, overgrip: now - 12 * DAY } },
-  { id: 'demo-r2', kind: 'racket', name: 'BLADE 98', photo: null, addedAt: now - 40 * DAY, serviced: { strings: now - 20 * DAY, overgrip: now - 34 * DAY } },
-  { id: 'demo-s1', kind: 'shoes', name: 'GEL RESOLUTION', photo: null, addedAt: now - 150 * DAY, serviced: {} },
-  { id: 'balls', kind: 'balls', name: 'PENN CHAMPIONSHIP', photo: null, addedAt: now - 30 * DAY, serviced: { can: now - 9 * DAY }, stock: 3 },
-  { id: 'grips', kind: 'grips', name: 'OVERGRIPS', photo: null, addedAt: now - 30 * DAY, serviced: {}, stock: 2 },
-];
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
-/** Copies a picked photo into the documents folder so it outlives the picker's cache. */
-async function pickPhoto(): Promise<string | null> {
-  const cam = await ImagePicker.requestCameraPermissionsAsync();
-  const opts: ImagePicker.ImagePickerOptions = { quality: 0.45, allowsEditing: true, aspect: [1, 1] };
-  const res = cam.granted ? await ImagePicker.launchCameraAsync(opts).catch(() => null) : null;
-  const picked = res && !res.canceled ? res : await ImagePicker.launchImageLibraryAsync({ ...opts, mediaTypes: ['images'] });
-  if (picked.canceled || !picked.assets[0]) return null;
-  try {
-    const dest = new File(Paths.document, `gear-${Date.now()}.jpg`);
-    await new File(picked.assets[0].uri).copy(dest);
-    return dest.uri;
-  } catch {
-    return picked.assets[0].uri;
-  }
+/** The gear in use, as the page shows it: wear on each part, and stock for cans and overgrips. */
+function inUse(items: GearItem[], matches: Match[]) {
+  return items.map((it) => ({
+    id: it.id,
+    kind: it.kind,
+    name: it.name,
+    stock: it.stock ?? 0,
+    low: lowStock(it),
+    hasOpen: it.kind === 'balls' && it.serviced.can != null,
+    rows: SERVICES[it.kind]
+      .filter((s: Service) => s !== 'can' || it.serviced.can != null)
+      .map((s: Service) => {
+        const w = wearOf(it, s, matches);
+        const life = LIFE[s];
+        return { s, word: life.word, verb: life.verb, text: `${w.matches} of ${life.matches} matches, ${w.days} of ${life.days} days`, worn: w.worn };
+      }),
+  }));
 }
 
-/** Gear closet: a locker drawn by three.js in a WebView (web/closet.js). */
-export default function Closet() {
+function span(ms: number): string {
+  const days = Math.max(1, Math.round(ms / DAY));
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'}`;
+  if (days < 60) return `${Math.round(days / 7)} weeks`;
+  return `${Math.round(days / 30)} months`;
+}
+
+/** What a piece of retired gear did while you used it: the matches you played between getting it and retiring it. */
+function historyOf(it: GearItem, matches: Match[], me: string, roster: Fighter[]) {
+  const end = it.retiredAt ?? Date.now();
+  const played = matches.filter((m) => counts(m) && m.playedAt >= it.addedAt && m.playedAt <= end && (m.p1 === me || m.p2 === me));
+  let w = 0; let l = 0;
+  let best: { m: Match; margin: number } | null = null;
+  for (const m of played) {
+    const win = winnerOf(m);
+    if (!win) continue;
+    if (win !== me) { l += 1; continue; }
+    w += 1;
+    const mine = m.p1 === me;
+    const margin = m.sets.reduce((a, [x, y]) => a + (mine ? x - y : y - x), 0);
+    if (!best || margin > best.margin) best = { m, margin };
+  }
+  const lines = [`${played.length} match${played.length === 1 ? '' : 'es'} over ${span(end - it.addedAt)}`];
+  if (best) {
+    const mine = best.m.p1 === me;
+    const opp = mine ? best.m.p2 : best.m.p1;
+    const score = best.m.sets.map(([x, y]) => (mine ? `${x}-${y}` : `${y}-${x}`)).join(' ');
+    lines.push(`best win ${score} over ${roster.find((f) => f.id === opp)?.name ?? 'someone'}`);
+  }
+  const d = new Date(end);
+  lines.push(`planted ${MONTHS[d.getMonth()]} ${d.getFullYear()}`);
+  return { id: it.id, kind: it.kind, name: it.name, matches: played.length, record: `${w}-${l}`, lines };
+}
+
+/**
+ * Gear: your fighter and the ghost. The ghost holds the rackets you use now, your shoes, cans and overgrips stand at its feet,
+ * and everything you have retired stands planted in the ground around them. Drawn by three.js in a WebView (web/domain.js).
+ */
+export default function Gear() {
   const params = useLocalSearchParams<{ demo?: string }>();
-  const saved = useCloset();
-  const [demo] = useState(() => demoCloset(Date.now()));
-  const items = params.demo === '1' ? demo : saved;
+  const demo = params.demo === '1';
+  const items = useCloset();
+  const retired = useRetired();
   const matches = useMatches();
+  const roster = useRoster();
   const scene = useScene();
   const { run } = scene;
-  const focused = useRef<string | null>(null);
+  const state = useRef({ focus: null as string | null, held: false, open: false });
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
 
-  const data = useMemo(() => JSON.stringify(payloadOf(items, matches)), [items, matches]);
-  useEffect(() => { run(`window.setCloset(${data})`); }, [run, data]);
+  const you = roster.find((f) => f.isYou) ?? roster[0];
+  const data = useMemo(() => {
+    const me = you?.id ?? 'you';
+    const past = retired.filter((it) => it.kind === 'racket' || it.kind === 'shoes').map((it) => historyOf(it, matches, me, roster));
+    const due = dueList(items, matches);
+    const planted = past.filter((i) => i.kind === 'racket').reduce((a, i) => a + i.matches, 0);
+    return JSON.stringify({
+      you: you ? { cast: you.cast, color: you.color, name: you.name } : null,
+      gear: inUse(items, matches),
+      items: past,
+      due,
+      title: 'YOUR GEAR.',
+      sub: due.length ? `${due.length} THING${due.length > 1 ? 'S' : ''} DUE.` : 'ALL GOOD.',
+      hint: 'hold your fighter to expand your domain',
+      inside: past.length
+        ? { sub: `${past.length} PLANTED. ${planted} MATCHES IN THE GROUND.`, hint: 'pull one up to see what it won. back closes it.' }
+        : { sub: 'NOTHING PLANTED YET.', hint: 'hold a racket\'s name to retire it. the ghost plants it here. back closes it.' },
+    });
+  }, [items, retired, matches, roster, you]);
+  useEffect(() => { if (!demo) run(`window.setDomain(${data})`); }, [run, data, demo]);
 
   const byId = (id: string) => itemsRef.current.find((i) => i.id === id);
   /** Naming a piece of gear happens on the TYPE / WRITE page; the answer renames it here. */
@@ -124,14 +122,9 @@ export default function Closet() {
     if (!it) return;
     askInk({ label: 'WHAT IS IT CALLED', max: 22, upper: true, examples: [PLACEHOLDER[it.kind]] }, (t) => { renameItem(id, t || DEFAULT_NAME[it.kind]); void Haptics.selectionAsync(); });
   };
-  const add = async (kind: 'racket' | 'shoes') => {
-    const photo = await pickPhoto();
-    const id = addItem(kind, DEFAULT_NAME[kind], photo);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    startEdit(id);
-  };
   const back = () => {
-    if (focused.current) run('window.unfocus()');
+    if (state.current.held || state.current.focus) run('window.unfocus()');
+    else if (state.current.open) run('window.collapse()');
     else goBack();
   };
 
@@ -140,50 +133,61 @@ export default function Closet() {
       <StatusBar style="dark" />
       <SceneView
         scene={scene}
-        html={CLOSET_HTML}
-        name="closet"
-        cues={{ land: null, slid: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } }}
-        onReady={() => { if (params.demo === '1') run('window.demoCloset()'); }}
+        html={DOMAIN_HTML}
+        name="gear"
+        cues={{ slid: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } }}
+        onReady={() => {
+          if (demo) run('window.demoDomain()');
+        }}
         onMessage={(m: SceneMsg) => {
-          const msg = m as Msg;
-          switch (msg.type) {
-            case 'doors': sfx('swish', 0.35); break;
-            case 'knock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('clack', 0.35); break;
+          switch (m.type) {
             case 'grab': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); break;
-            case 'fling': sfx('swish', 0.5); break;
-            case 'clack': void Haptics.impactAsync(msg.v > 0.5 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light); sfx('clack', 0.3 + 0.6 * msg.v); break;
-            case 'pock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('bounce', 0.3 + 0.5 * msg.v); break;
-            case 'squeak': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('squeak', 0.5); break;
-            case 'thud': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('bounce', 0.6); break;
-            case 'ping': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('ping', 0.8); break;
-            case 'wrap': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('swish', 0.4); break;
-            case 'kick': sfx('swish', 0.6); break;
-            case 'pop': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('can', 0.8); break;
-            case 'land': sfx('pock', 0.4); break;
-            case 'tick': void Haptics.selectionAsync(); sfx('tick', 0.5); break;
-            case 'focus': focused.current = msg.id; if (msg.id) { void Haptics.selectionAsync(); sfx('select', 0.5); } break;
-            case 'add': if (params.demo !== '1') void add(msg.kind); break;
-            case 'restock': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); if (params.demo !== '1') restock(msg.kind, 1); break;
-            case 'crack': if (params.demo !== '1') crackCan(); break;
-            case 'service':
-              if (params.demo === '1') break;
-              if (msg.s === 'overgrip') regrip(msg.id); else service(msg.id, msg.s);
+            // Holding your fighter: each quarter of the charge hits harder.
+            case 'charge': void Haptics.impactAsync(m.v > 0.7 ? Haptics.ImpactFeedbackStyle.Heavy : m.v > 0.4 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light); sfx('tick', 0.3 + 0.5 * m.v); break;
+            case 'fizzle': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('drip', 0.5); break;
+            case 'expand': state.current.open = true; void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('slam', 1); setTimeout(() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); }, 160); break;
+            case 'collapse': state.current.open = false; void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('swish', 0.7); break;
+            case 'tick': void Haptics.selectionAsync(); sfx('tick', 0.4); break;
+            case 'free': state.current.held = true; void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('slam', 0.5); break;
+            case 'sink': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('pock', 0.4); break;
+            case 'fling': state.current.held = false; sfx('swish', 0.6); break;
+            case 'plant': void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('slam', 0.9); break;
+            case 'twang': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('ping', 0.35); break;
+            case 'rise': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('clack', 0.25); break;
+            case 'swing': case 'swish': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('swish', 0.4); break;
+            case 'poke': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('squeak', 0.6); break;
+            case 'ghost': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('drip', 0.6); break;
+            case 'focus': state.current.focus = m.id ?? null; if (m.id) { void Haptics.selectionAsync(); sfx('select', 0.5); } break;
+            case 'add': {
+              if (demo) break;
+              const kind = m.kind as 'racket' | 'shoes';
+              const id = addItem(kind, DEFAULT_NAME[kind], null);
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              startEdit(id);
               break;
-            case 'photo': void pickPhoto().then((p) => { if (p) setPhoto(msg.id, p); }); break;
-            case 'edit': startEdit(msg.id); break;
+            }
+            case 'restock': if (!demo) restock(m.kind as GearKind, 1); sfx('pock', 0.5); break;
+            case 'crack': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('can', 0.8); if (!demo) crackCan(); break;
+            case 'service':
+              sfx('ping', 0.8);
+              if (demo) break;
+              if (m.s === 'overgrip') regrip(m.id); else service(m.id, m.s as Service);
+              break;
+            case 'edit': if (!demo) startEdit(m.id); break;
             case 'remove': {
-              const it = byId(msg.id);
+              const it = byId(m.id);
               if (!it || it.kind === 'balls' || it.kind === 'grips') break;
               void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-              Alert.alert(`Take ${it.name} out of the closet?`, 'Its wear history goes with it.', [
-                { text: 'Keep it', style: 'cancel' },
-                { text: 'Take it out', style: 'destructive', onPress: () => { removeItem(msg.id); run('window.unfocus()'); } },
+              Alert.alert(`Retire ${it.name}?`, 'The ghost plants it in the ground with every match it played.', [
+                { text: 'Keep using it', style: 'cancel' },
+                { text: 'Plant it', onPress: () => { run(`window.retire(${JSON.stringify(it.id)})`); retireItem(it.id); } },
               ]);
               break;
             }
             case 'order': {
-              const it = itemsRef.current.find((i) => i.kind === msg.kind);
-              const q = it && it.name !== DEFAULT_NAME[msg.kind] ? `${it.name} ${SEARCH[msg.kind]}` : SEARCH[msg.kind];
+              const kind = m.kind as GearKind;
+              const it = itemsRef.current.find((i) => i.kind === kind);
+              const q = it && it.name !== DEFAULT_NAME[kind] ? `${it.name} ${SEARCH[kind]}` : SEARCH[kind];
               void WebBrowser.openBrowserAsync(`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(q)}`);
               break;
             }
@@ -194,7 +198,6 @@ export default function Closet() {
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
