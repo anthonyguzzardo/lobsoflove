@@ -28,6 +28,7 @@ import { FEEL, SoftBody } from './jelly-core.js';
 import { post } from './lib/bridge.js';
 import { drawBrush } from './lib/brush.js';
 import { createSlide } from './lib/slide.js';
+import { faceSvg, hasFace } from '../src/lib/faces.ts';
 
 const PAPER = 0xefece5;
 const $ = (id) => document.getElementById(id);
@@ -143,6 +144,7 @@ function makeFighter(f) {
   scene.add(carrier);
   const tag = el('div', `tag${f.you ? ' you' : ''}${f.pretender ? ' pre' : ''}`);
   tag.style.setProperty('--pc', f.color);
+  if (hasFace(f.face)) { const face = el('span', 'face'); face.innerHTML = faceSvg(f.face, f.color, 38); tag.append(face); }
   tag.append(el('b', '', f.name));
   if (f.you && f.name !== 'YOU') tag.append(el('i', '', 'YOU'));
   if (f.pretender) tag.append(el("i", "", "NOT IN YET · TAP TO TEXT"));

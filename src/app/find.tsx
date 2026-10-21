@@ -1,53 +1,156 @@
 import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type GestureResponderEvent, KeyboardAvoidingView, type LayoutChangeEvent, Platform, Pressable, Share, StyleSheet, Text,
+  TextInput, View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Path, SvgXml } from 'react-native-svg';
 
 import { MONO, P } from '@/constants/paper';
-import { crewNow, findPlayers, type Found, inviteLink, invitePlayer } from '@/lib/cloud';
+import { crewNow, findPlayers, type Found, inviteLink, invitePlayer, refresh } from '@/lib/cloud';
+import { faceSvg } from '@/lib/faces';
 import { goBack } from '@/lib/nav';
 import { sfx } from '@/lib/sfx';
 
+type Pt = { x: number; y: number };
+type Cell = { p: Found; x: number; y: number; w: number; h: number };
+
+const NAME_H = 18;
+
+/** Lay the people out as big as they fit: fewest columns that still fit everyone, else as many as fit at six across. */
+function layout(people: Found[], W: number, H: number): { cells: Cell[]; hidden: number } {
+  if (!W || !H) return { cells: [], hidden: 0 };
+  let cols = 3;
+  for (; cols < 6; cols++) {
+    const w = W / cols;
+    if (Math.ceil(people.length / cols) * (w * 0.86 + NAME_H) <= H) break;
+  }
+  const w = W / cols;
+  const h = w * 0.86 + NAME_H;
+  const fit = cols * Math.max(1, Math.floor(H / h));
+  const shown = people.slice(0, fit);
+  return { cells: shown.map((p, i) => ({ p, x: (i % cols) * w, y: Math.floor(i / cols) * h, w, h })), hidden: people.length - shown.length };
+}
+
+const inside = (pt: Pt, poly: Pt[]) => {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < ((b.x - a.x) * (pt.y - a.y)) / (b.y - a.y) + a.x) hit = !hit;
+  }
+  return hit;
+};
+
 /**
- * Find players the way any app does it: type part of a name, everyone with the app who matches shows up as you type, tap one and
- * they are invited. They get a push and a JOIN on their crew page. Anyone not on the app yet gets the link instead (bottom row).
+ * Find players: everyone on the app is a face on the page. Circle the ones you want, or scribble over a face to color it in, or
+ * tap it. Typing a name narrows the page. INVITE sends them all at once: bots (DBZ, tennis legends, JJK) join on the spot, real
+ * players get a push and a JOIN on their crew page. Anyone not on the app gets the link (bottom row).
  */
 export default function Find() {
   const insets = useSafeAreaInsets();
   const [q, setQ] = useState('');
   const [found, setFound] = useState<Found[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<Record<string, true>>({});
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [stroke, setStroke] = useState<Pt[]>([]);
   const asked = useRef(0);
 
-  // Search as you type, a beat after the last key.
+  // Everyone on open; narrowed as you type, a beat after the last key.
   useEffect(() => {
-    const t = q.trim();
-    if (!t) return;
     const n = ++asked.current;
     const timer = setTimeout(() => {
-      findPlayers(t).then(
+      findPlayers(q.trim()).then(
         (r) => { if (n === asked.current) { setFound(r); setError(null); } },
         (e: Error) => { if (n === asked.current) setError(e.message); },
       );
-    }, 220);
+    }, q ? 220 : 0);
     return () => clearTimeout(timer);
   }, [q]);
 
-  const type = (v: string) => { setQ(v); if (!v.trim()) { asked.current++; setFound(null); setError(null); } };
+  const { cells, hidden } = useMemo(() => layout(found ?? [], size.w, size.h), [found, size]);
+  const open = (p: Found) => p.crew === 'free' && !p.invited;
 
-  const invite = (p: Found) => {
-    if (p.crew !== 'free' || p.invited || sent[p.id]) return;
-    setSent((s) => ({ ...s, [p.id]: true }));
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    sfx('pock', 0.8);
-    invitePlayer(p.id).catch((e: Error) => {
-      setSent((s) => { const n = { ...s }; delete n[p.id]; return n; });
-      setError(e.message);
+  // Live copies for the gesture handlers, which are made once.
+  const live = useRef({ cells, picked });
+  useEffect(() => { live.current = { cells, picked }; }, [cells, picked]);
+  const pts = useRef<Pt[]>([]);
+
+  /** A stroke picks: a loop takes everyone inside it; a scribble colors in every face it went over. All already picked: unpick. */
+  const finish = (line: Pt[]) => {
+    const { cells: cs, picked: was } = live.current;
+    const xs = line.map((p) => p.x), ys = line.map((p) => p.y);
+    const diag = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    const a = line[0], b = line[line.length - 1];
+    const loop = line.length > 10 && Math.hypot(a.x - b.x, a.y - b.y) < Math.max(50, diag * 0.35);
+    const hits = cs.filter((c) => open(c.p)).filter((c) => {
+      if (loop) return inside({ x: c.x + c.w / 2, y: c.y + c.h / 2 - NAME_H / 2 }, line);
+      const m = c.w * 0.12;
+      return line.filter((p) => p.x > c.x + m && p.x < c.x + c.w - m && p.y > c.y + m && p.y < c.y + c.h - NAME_H).length >= 2;
+    }).map((c) => c.p.id);
+    if (!hits.length) return;
+    const allIn = hits.every((id) => was.has(id));
+    const next = new Set(was);
+    hits.forEach((id) => (allIn ? next.delete(id) : next.add(id)));
+    setPicked(next);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    sfx(allIn ? 'swish' : 'pock', 0.8);
+  };
+
+  const tap = (pt: Pt) => {
+    const c = live.current.cells.find((k) => pt.x >= k.x && pt.x < k.x + k.w && pt.y >= k.y && pt.y < k.y + k.h);
+    if (!c || !open(c.p)) return;
+    const next = new Set(live.current.picked);
+    if (next.has(c.p.id)) next.delete(c.p.id); else next.add(c.p.id);
+    setPicked(next);
+    void Haptics.selectionAsync();
+    sfx('pock', 0.6);
+  };
+
+  const at = (e: GestureResponderEvent): Pt => ({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY });
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Touch handlers straight on the grid: a short touch is a tap, anything longer is a stroke.
+  const touch = {
+    onStartShouldSetResponder: () => true,
+    onResponderTerminationRequest: () => false,
+    onResponderGrant: (e: GestureResponderEvent) => { if (clearTimer.current) clearTimeout(clearTimer.current); pts.current = [at(e)]; setStroke(pts.current); },
+    onResponderMove: (e: GestureResponderEvent) => {
+      const p = at(e);
+      const last = pts.current[pts.current.length - 1];
+      if (Math.hypot(p.x - last.x, p.y - last.y) < 3) return;
+      pts.current = [...pts.current, p];
+      setStroke(pts.current);
+    },
+    onResponderRelease: () => {
+      const line = pts.current;
+      const a = line[0], b = line[line.length - 1];
+      const moved = line.reduce((m, p) => Math.max(m, Math.hypot(p.x - a.x, p.y - a.y)), 0);
+      if (moved < 10) { tap(b); setStroke([]); return; }
+      finish(line);
+      clearTimer.current = setTimeout(() => setStroke([]), 380);
+    },
+  };
+
+  const type = (v: string) => setQ(v);
+
+  const send = async () => {
+    const ids = [...picked];
+    if (!ids.length || busy) return;
+    setBusy(true);
+    try {
+      await Promise.all(ids.map((id) => invitePlayer(id)));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      sfx('win', 0.8);
+      await refresh();
+      goBack();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    });
+      setBusy(false);
+    }
   };
 
   const shareLink = () => {
@@ -56,8 +159,8 @@ export default function Find() {
     if (url && crew) void Share.share({ message: `Join ${crew.name} on LobsOfLove. Tap to get in: ${url}` });
   };
 
-  const status = (p: Found) =>
-    p.crew === 'yours' ? 'IN YOUR CREW' : p.crew === 'taken' ? 'IN A CREW' : p.invited || sent[p.id] ? 'INVITED' : 'INVITE';
+  const d = stroke.length > 1 ? `M${stroke.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' L')}` : '';
+  const n = picked.size;
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -76,51 +179,47 @@ export default function Find() {
           style={styles.search}
           value={q}
           onChangeText={type}
-          placeholder="search by name"
+          placeholder="type a name to narrow it"
           placeholderTextColor={P.faint}
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
-          autoFocus
         />
         {q ? <Pressable onPress={() => type('')} hitSlop={10}><Text style={styles.clear}>CLEAR</Text></Pressable> : null}
       </View>
-      <ScrollView style={styles.list} contentContainerStyle={styles.listIn} keyboardShouldPersistTaps="handled">
-        {error ? <Text style={styles.note}>{error}</Text> : null}
-        {found === null && !error ? <Text style={styles.note}>everyone on LobsOfLove shows up here</Text> : null}
-        {found?.length === 0 ? <Text style={styles.note}>nobody called &quot;{q.trim()}&quot; yet</Text> : null}
-        {found?.map((p) => {
-          const s = status(p);
-          const open = s === 'INVITE';
-          return (
-            <Pressable key={p.id} onPress={() => invite(p)} style={({ pressed }) => [styles.row, pressed && open && styles.pressed]}>
-              <Blob color={p.color} />
-              <View style={styles.who}>
-                <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
-                {p.home ? <Text style={styles.home} numberOfLines={1}>{p.home}</Text> : null}
-              </View>
-              <View style={[styles.pill, open ? styles.pillGo : styles.pillDone]}>
-                <Text style={[styles.pillText, open && styles.pillGoText]}>{s}</Text>
-              </View>
-            </Pressable>
-          );
-        })}
-        <Pressable onPress={shareLink} style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}>
-          <Text style={styles.linkText}>NOT ON THE APP YET? SEND THE LINK</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
+      <Text style={styles.hint}>{error ?? (found?.length === 0 ? `NOBODY CALLED "${q.trim().toUpperCase()}"` : 'CIRCLE THEM, COLOR THEM IN, OR TAP')}</Text>
 
-/** A jelly fighter's head in their color: a soft blob with two eyes. */
-function Blob({ color }: { color: string }) {
-  return (
-    <Svg width={40} height={40} viewBox="0 0 40 40">
-      <Path d="M20 4 C31 4 36 12 36 22 C36 32 29 37 20 37 C11 37 4 32 4 22 C4 12 9 4 20 4 Z" fill={color} stroke={P.ink} strokeWidth={2.5} />
-      <Circle cx={15} cy={19} r={2.6} fill={P.ink} />
-      <Circle cx={25} cy={19} r={2.6} fill={P.ink} />
-    </Svg>
+      <View style={styles.grid} onLayout={(e: LayoutChangeEvent) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })} {...touch}>
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {cells.map((c) => {
+            const on = picked.has(c.p.id);
+            const tag = c.p.crew === 'yours' ? 'IN CREW' : c.p.crew === 'taken' ? 'IN A CREW' : c.p.invited ? 'INVITED' : null;
+            const face = c.w * 0.8;
+            return (
+              <View key={c.p.id} style={[styles.cell, { left: c.x, top: c.y, width: c.w, height: c.h }, tag && styles.cellDim]}>
+                <View style={[styles.faceWrap, { width: face + 8, height: face + 8, borderRadius: (face + 8) / 2 }, on && { backgroundColor: c.p.color, borderColor: P.ink }]}>
+                  <SvgXml xml={faceSvg(c.p.face, c.p.color)} width={face} height={face} />
+                </View>
+                <Text numberOfLines={1} style={[styles.name, on && styles.nameOn]}>{tag ?? c.p.name}</Text>
+              </View>
+            );
+          })}
+          {d ? (
+            <Svg style={StyleSheet.absoluteFill}>
+              <Path d={d} stroke={P.red} strokeWidth={7} strokeOpacity={0.85} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            </Svg>
+          ) : null}
+        </View>
+      </View>
+      {hidden > 0 ? <Text style={styles.more}>+{hidden} MORE: TYPE A NAME TO FIND THEM</Text> : null}
+
+      <View style={[styles.foot, { paddingBottom: Math.max(12, insets.bottom) }]}>
+        <Pressable onPress={send} disabled={!n || busy} style={({ pressed }) => [styles.go, !n && styles.goOff, pressed && n ? styles.goPressed : null]}>
+          <Text style={[styles.goText, !n && styles.goTextOff]}>{busy ? 'SENDING...' : n ? `INVITE ${n} ${n === 1 ? 'PLAYER' : 'PLAYERS'}` : 'PICK WHO YOU WANT'}</Text>
+        </Pressable>
+        <Pressable onPress={shareLink} hitSlop={8}><Text style={styles.link}>NOT ON THE APP YET? SEND THE LINK</Text></Pressable>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -131,27 +230,27 @@ const styles = StyleSheet.create({
   back: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.2, color: P.ink, width: 56 },
   title: { fontFamily: MONO, fontWeight: '800', fontSize: 13, letterSpacing: 1.6, color: P.red },
   searchWrap: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, paddingHorizontal: 14, paddingVertical: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, paddingHorizontal: 14, paddingVertical: 2,
     borderWidth: 2.5, borderColor: P.ink, borderRadius: 24, backgroundColor: P.card,
   },
-  search: { flex: 1, fontFamily: MONO, fontWeight: '700', fontSize: 17, color: P.ink, paddingVertical: 10 },
+  search: { flex: 1, fontFamily: MONO, fontWeight: '700', fontSize: 16, color: P.ink, paddingVertical: 9 },
   clear: { fontFamily: MONO, fontWeight: '800', fontSize: 10, letterSpacing: 1.2, color: P.dim },
-  list: { flex: 1 },
-  listIn: { padding: 16, gap: 10 },
-  note: { fontFamily: MONO, fontWeight: '700', fontSize: 13, color: P.dim, textAlign: 'center', marginVertical: 14 },
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 10,
-    borderWidth: 2, borderColor: P.ink, borderRadius: 14, backgroundColor: P.card,
+  hint: { fontFamily: MONO, fontWeight: '800', fontSize: 11, letterSpacing: 1.3, color: P.red, textAlign: 'center', marginTop: 10, marginBottom: 4 },
+  grid: { flex: 1, marginHorizontal: 10 },
+  cell: { position: 'absolute', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
+  cellDim: { opacity: 0.4 },
+  faceWrap: { alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: 'transparent' },
+  name: { fontFamily: MONO, fontWeight: '800', fontSize: 9, letterSpacing: 0.6, color: P.ink, marginTop: 1, paddingHorizontal: 4, maxWidth: '100%' },
+  nameOn: { backgroundColor: P.ink, color: P.card, borderRadius: 4, overflow: 'hidden' },
+  more: { fontFamily: MONO, fontWeight: '800', fontSize: 10, letterSpacing: 1.1, color: P.dim, textAlign: 'center', marginTop: 2 },
+  foot: { paddingHorizontal: 16, paddingTop: 8, gap: 10, alignItems: 'center' },
+  go: {
+    alignSelf: 'stretch', alignItems: 'center', paddingVertical: 15, borderRadius: 30, backgroundColor: P.red, borderWidth: 2.5, borderColor: P.ink,
+    shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 4 },
   },
-  pressed: { opacity: 0.75 },
-  who: { flex: 1, minWidth: 0 },
-  name: { fontFamily: MONO, fontWeight: '800', fontSize: 16, letterSpacing: 0.6, color: P.ink },
-  home: { fontFamily: MONO, fontWeight: '700', fontSize: 11, color: P.dim, marginTop: 2 },
-  pill: { borderWidth: 2, borderColor: P.ink, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 },
-  pillGo: { backgroundColor: P.red },
-  pillDone: { backgroundColor: 'transparent', opacity: 0.55 },
-  pillText: { fontFamily: MONO, fontWeight: '800', fontSize: 10, letterSpacing: 1.1, color: P.ink },
-  pillGoText: { color: P.card },
-  linkRow: { marginTop: 8, paddingVertical: 14, borderWidth: 2, borderColor: P.ink, borderStyle: 'dashed', borderRadius: 14, alignItems: 'center' },
-  linkText: { fontFamily: MONO, fontWeight: '800', fontSize: 11, letterSpacing: 1.2, color: P.ink },
+  goOff: { backgroundColor: 'transparent', borderStyle: 'dashed', shadowOpacity: 0 },
+  goPressed: { transform: [{ translateY: 3 }], shadowOffset: { width: 0, height: 1 } },
+  goText: { fontFamily: MONO, fontWeight: '800', fontSize: 14, letterSpacing: 1.6, color: P.card },
+  goTextOff: { color: P.dim },
+  link: { fontFamily: MONO, fontWeight: '800', fontSize: 10, letterSpacing: 1.2, color: P.ink, textDecorationLine: 'underline' },
 });

@@ -63,7 +63,7 @@ BEGIN
     DELETE FROM lol.tb_matches WHERE crew_id = p_crew;
     DELETE FROM lol.tb_beacons WHERE crew_id = p_crew;
     DELETE FROM lol.tb_crew_invites WHERE crew_id = p_crew;
-    DELETE FROM lol.tb_players WHERE user_id IS NULL AND player_id IN (SELECT player_id FROM lol.tm_crew_players WHERE crew_id = p_crew);
+    DELETE FROM lol.tb_players WHERE user_id IS NULL AND NOT is_bot AND player_id IN (SELECT player_id FROM lol.tm_crew_players WHERE crew_id = p_crew);
     DELETE FROM lol.tm_crew_players WHERE crew_id = p_crew;
     DELETE FROM lol.tb_crews WHERE crew_id = p_crew;
 END $$;
@@ -103,18 +103,17 @@ END $$;
 CREATE OR REPLACE FUNCTION lol.fn_remove_pretender(p_player UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = lol, pg_temp AS $$
-DECLARE v_me UUID := lol.fn_my_player_id(); v_crew UUID;
+DECLARE v_me UUID := lol.fn_my_player_id(); v_crew UUID; v_bot BOOLEAN;
 BEGIN
     SELECT crew_id INTO v_crew FROM lol.tm_crew_players WHERE player_id = v_me LIMIT 1;
-    IF NOT EXISTS (
-        SELECT 1 FROM lol.tb_players p JOIN lol.tm_crew_players cp ON cp.player_id = p.player_id AND cp.crew_id = v_crew
-        WHERE p.player_id = p_player AND p.user_id IS NULL
-          AND (p.added_by_player_id = v_me OR EXISTS (SELECT 1 FROM lol.tm_crew_players WHERE crew_id = v_crew AND player_id = v_me AND role_code = 'commissioner'))
-    ) THEN RAISE EXCEPTION 'you can only remove a pretender you added' USING ERRCODE = '42501'; END IF;
+    SELECT p.is_bot INTO v_bot FROM lol.tb_players p JOIN lol.tm_crew_players cp ON cp.player_id = p.player_id AND cp.crew_id = v_crew
+    WHERE p.player_id = p_player AND p.user_id IS NULL
+      AND (p.is_bot OR p.added_by_player_id = v_me OR EXISTS (SELECT 1 FROM lol.tm_crew_players WHERE crew_id = v_crew AND player_id = v_me AND role_code = 'commissioner'));
+    IF v_bot IS NULL THEN RAISE EXCEPTION 'you can only remove a pretender you added' USING ERRCODE = '42501'; END IF;
     DELETE FROM lol.tb_matches WHERE crew_id = v_crew AND (p1_player_id = p_player OR p2_player_id = p_player);
-    DELETE FROM lol.tm_callup_players WHERE player_id = p_player;
-    DELETE FROM lol.tm_crew_players WHERE player_id = p_player;
-    DELETE FROM lol.tb_players WHERE player_id = p_player;
+    DELETE FROM lol.tm_callup_players WHERE player_id = p_player AND callup_id IN (SELECT callup_id FROM lol.tb_callups WHERE crew_id = v_crew);
+    DELETE FROM lol.tm_crew_players WHERE player_id = p_player AND crew_id = v_crew;
+    IF NOT v_bot THEN DELETE FROM lol.tb_players WHERE player_id = p_player; END IF;
     RETURN true;
 END $$;
 

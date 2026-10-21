@@ -109,15 +109,10 @@ const at = (m, x, y, z) => { m.position.set(x, y, z); return m; };
 
 // ---------- Ground and rubble ----------
 const groundTex = tex(512, 512, (g, w, h) => {
-  g.fillStyle = '#e7e2d6'; g.fillRect(0, 0, w, h);
+  // Clean paper: only a faint grain, so nothing on the ground fights the characters.
+  g.fillStyle = '#ebe7dd'; g.fillRect(0, 0, w, h);
   const r = rng(7);
-  for (let i = 0; i < 900; i += 1) {
-    g.fillStyle = `rgba(22,24,29,${0.08 + r() * 0.3})`;
-    const s = 1 + r() * 3.5;
-    g.fillRect(r() * w, r() * h, s, s * (0.5 + r()));
-  }
-  g.strokeStyle = 'rgba(22,24,29,.35)'; g.lineWidth = 1.4;
-  for (let i = 0; i < 40; i += 1) { const x = r() * w; const y = r() * h; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 4; k += 1) g.lineTo(x + (r() - 0.5) * 60, y + (r() - 0.5) * 30); g.stroke(); }
+  for (let i = 0; i < 220; i += 1) { g.fillStyle = `rgba(22,24,29,${0.03 + r() * 0.05})`; g.fillRect(r() * w, r() * h, 1.5, 1.5); }
 });
 groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
 groundTex.repeat.set(14, 14);
@@ -909,6 +904,7 @@ function scrubAt(x, y) {
 }
 function finishScrub(it, s, at) {
   st.scrub.done = true;
+  panel();
   if (s === 'strings') drawBed(0, true);
   else showS.pair.userData.upperMat.color.set(0xf4f1ea);
   burst(at, 30, 2);
@@ -939,6 +935,8 @@ function buildDock() {
   old.replaceWith(fresh);
   dock = createDock({ slots: slots.map((x, k) => ({ i: k + 1, label: x.label })), onPick: (i) => pickSlot(i), post });
   fresh.querySelectorAll('.slot').forEach((b, k) => { b.classList.toggle('due', !!slots[k].due); b.classList.toggle('dom', !!slots[k].domain); });
+  const pf = fresh.querySelector('.slot.dom .pf');
+  if (pf) pf.innerHTML = '<svg class="knot" viewBox="0 0 44 16"><path d="M4 8c6-7 12-7 18 0s12 7 18 0M4 8c6 7 12 7 18 0s12-7 18 0"/></svg>';
   dock.place(3);
   markDock();
 }
@@ -958,63 +956,41 @@ function pickSlot(i) {
   }
 }
 
-// ---------- Notes on the thing he is holding ----------
-// Lettered next to it with an ink line to the part they are about, and the name on a tag you can tap.
-const notesEl = $('notes');
+// ---------- The line from the card to the part ----------
+// While he holds something the bottom card is the only text: its name, the wear, what to do. A dashed ink line runs from the top
+// of the card to the part the wear is about.
 const lineEl = $('nline');
 function notes() {
   const sh = st.show;
   const on = sh && (sh.phase === 'held' || (sh.phase === 'in' && sh.t > 0.7));
-  notesEl.classList.toggle('on', !!on);
-  $('tag').classList.toggle('on', !!on);
+  $('notes').classList.toggle('on', !!on);
   if (!on) return;
-  const it = currentOf(sh);
   const anchor = sh.kind === 'racket' ? showR.bed.getWorldPosition(new THREE.Vector3()) : showS.pair.getWorldPosition(new THREE.Vector3());
-  const a = anchor.clone().project(camera);
+  const a = anchor.project(camera);
   const ax = (a.x * 0.5 + 0.5) * window.innerWidth; const ay = (-a.y * 0.5 + 0.5) * window.innerHeight;
-  const box = $('note');
-  if (!it) {
-    $('nword').textContent = sh.kind === 'racket' ? 'NEW RACKET?' : 'NEW SHOES?';
-    $('nwhat').textContent = '';
-    $('ntext').textContent = 'tap it to add one';
-  } else {
-    const s = sh.kind === 'racket' ? 'strings' : 'soles';
-    const row = rowsOf(it).find((r) => r.s === s);
-    const w = row ? row.worn : 0;
-    const sc = st.scrub;
-    $('nword').textContent = sc && sc.done ? 'FRESH' : sc && sc.progress > 0 ? `${Math.round(sc.progress * 100)}%` : w >= 1 ? (s === 'strings' ? 'DEAD' : 'WORN OUT') : w >= 0.6 ? 'TIRED' : 'FRESH';
-    $('nwhat').textContent = s === 'strings' ? 'STRINGS' : 'SOLES';
-    $('ntext').textContent = sc && sc.done ? (s === 'strings' ? 'restrung. logged.' : 'new pair. logged.') : row ? row.text : '';
-  }
-  box.classList.toggle('due', !!(it && dueWord(it)) && !(st.scrub && st.scrub.done));
-  const r = box.getBoundingClientRect();
-  const right = ax < window.innerWidth / 2;
-  const bx = right ? window.innerWidth - 16 - r.width : 16; const by = clamp(ay - r.height - 40, 70, window.innerHeight * 0.5);
-  box.style.transform = `translate(${bx}px,${by}px)`;
-  lineEl.setAttribute('x1', String(right ? bx : bx + r.width)); lineEl.setAttribute('y1', String(by + r.height * 0.6));
+  const card = $('ov').getBoundingClientRect();
+  const sx = clamp(ax, card.left + 30, card.right - 30);
+  lineEl.setAttribute('x1', String(sx)); lineEl.setAttribute('y1', String(card.top));
   lineEl.setAttribute('x2', String(ax)); lineEl.setAttribute('y2', String(ay));
   $('ndot').setAttribute('cx', String(ax)); $('ndot').setAttribute('cy', String(ay));
-  // The name tag hangs at his hand.
-  const h = legend.arms[1].hand.getWorldPosition(new THREE.Vector3()).project(camera);
-  const tg = $('tag');
-  tg.textContent = it ? it.name : sh.kind === 'racket' ? '+ NEW RACKET' : '+ NEW SHOES';
-  tg.style.transform = `translate(${(h.x * 0.5 + 0.5) * window.innerWidth}px,${(-h.y * 0.5 + 0.5) * window.innerHeight + 26}px) translateX(-50%) rotate(-4deg)`;
+  // The card's status line follows the scrub as it happens.
+  if (st.scrub && !st.scrub.done && st.scrub.progress > 0) $('h2').textContent = `${sh.kind === 'racket' ? 'RESTRINGING' : 'CLEANING'} ${Math.round(st.scrub.progress * 100)}%`;
 }
+// The name on the card: tap to rename, hold to retire. On a blank, tap to add one.
 let pressTimer = 0;
-$('tag').addEventListener('pointerdown', (e) => {
-  e.stopPropagation();
+$('h1').addEventListener('pointerdown', () => {
   const it = st.show && currentOf(st.show);
   if (!it) return;
   pressTimer = setTimeout(() => { pressTimer = -1; post({ type: 'remove', id: it.id }); }, 650);
 });
-$('tag').addEventListener('pointerup', (e) => {
-  e.stopPropagation();
-  const it = st.show && currentOf(st.show);
-  if (!it) { post({ type: 'add', kind: st.show ? st.show.kind : 'racket' }); return; }
+$('h1').addEventListener('pointerup', () => {
+  if (!st.show) return;
+  const it = currentOf(st.show);
+  if (!it) { post({ type: 'add', kind: st.show.kind }); return; }
   if (pressTimer !== -1) { clearTimeout(pressTimer); post({ type: 'edit', id: it.id }); }
   pressTimer = 0;
 });
-$('tag').addEventListener('pointercancel', () => { clearTimeout(pressTimer); pressTimer = 0; });
+$('h1').addEventListener('pointercancel', () => { clearTimeout(pressTimer); pressTimer = 0; });
 
 // ---------- Panel ----------
 const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
@@ -1036,15 +1012,24 @@ function panel() {
   const d = st.data || {};
   const inside = d.inside || {};
   const sh = st.show;
+  document.body.classList.toggle('showing', !!sh);
   if (sh) {
     const n = ofKind(sh.kind).length;
     const it = currentOf(sh);
-    $('h1').textContent = it ? it.name : sh.kind === 'racket' ? 'A NEW RACKET.' : 'NEW SHOES.';
-    $('h2').textContent = it ? `${sh.kind === 'racket' ? 'RACKET' : 'SHOES'} ${sh.idx + 1} OF ${n}` : '';
+    const s = sh.kind === 'racket' ? 'strings' : 'soles';
+    const row = it && rowsOf(it).find((r) => r.s === s);
+    const w = row ? row.worn : 0;
+    const done = st.scrub && st.scrub.done;
+    const word = done ? 'FRESH' : w >= 1 ? (s === 'strings' ? 'DEAD' : 'WORN OUT') : w >= 0.6 ? 'TIRED' : 'FRESH';
+    $('h1').textContent = it ? it.name : sh.kind === 'racket' ? '+ NEW RACKET' : '+ NEW SHOES';
+    $('h2').textContent = it ? `${s.toUpperCase()} ${word}${n > 1 ? `  ${sh.idx + 1} OF ${n}` : ''}` : 'TAP THE NAME TO ADD ONE';
+    $('h2').classList.toggle('ok', !!it && (done || w < 0.6));
     $('due').innerHTML = '';
-    $('hint').textContent = !it ? 'tap the tag to add it' : sh.kind === 'racket' ? `scrub the strings to restring them.${showCount('racket') > 1 ? ' tap RACKET for the next one.' : ''}` : 'scrub them clean when you get a new pair.';
+    $('hint').textContent = !it ? '' : done ? (s === 'strings' ? 'restrung. logged.' : 'new pair. logged.')
+      : `${row ? `${row.text}. ` : ''}${s === 'strings' ? 'scrub the strings to restring.' : 'scrub them clean for a new pair.'} hold the name to retire it.`;
     return;
   }
+  $('h2').classList.remove('ok');
   $('h1').textContent = st.open ? 'YOUR DOMAIN.' : d.title || 'YOUR GEAR.';
   $('h2').textContent = st.open ? inside.sub || '' : d.sub || '';
   const due = st.open ? [] : d.due || [];

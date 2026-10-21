@@ -363,25 +363,18 @@ const domainCss = homeCss + `
 #ov,#fo{background:#fffdf8;border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);border-radius:8px;padding:10px 12px 10px;margin-bottom:4px}
 #dock .slot.due .lbl{color:var(--clay);opacity:1}
 #dock .slot.due .pf:after{content:"";position:absolute;right:-3px;top:-4px;width:9px;height:9px;border-radius:50%;background:var(--clay);box-shadow:0 0 0 2px #fffdf8}
-/* DOMAIN is the special move: bigger, ink with a red sheen running across it, and a glow. */
-#dock .slot.dom .pf{width:min(70px,calc(100% - 4px));height:20px;border-radius:5px;background:linear-gradient(105deg,#0b0c0e 0%,#0b0c0e 38%,#e2562f 50%,#ffb08f 52%,#e2562f 55%,#0b0c0e 68%,#0b0c0e 100%);background-size:280% 100%;animation:sheen 2.6s linear infinite,bob 3.6s ease-in-out infinite;box-shadow:0 6px 0 #000,0 0 0 2px #e2562f,0 0 22px rgba(226,86,47,.55),0 12px 14px rgba(40,34,26,.25)}
-@keyframes sheen{0%{background-position:100% 0}100%{background-position:-80% 0}}
-#dock .slot.dom .lbl{opacity:1;color:var(--clay);font-size:10px;letter-spacing:.2em}
-/* The notes on the thing he holds: lettered on a cream slip, an ink line to the part, the name on a tag at his hand. */
+/* DOMAIN: a plain ink platform with the red knot drawn on it. */
+#dock .slot.dom .pf{background:var(--ink);box-shadow:0 6px 0 #000,0 12px 14px rgba(40,34,26,.22);display:flex;align-items:center;justify-content:center}
+#dock .slot.dom .knot{width:30px;height:11px;fill:none;stroke:var(--clay);stroke-width:2.6;stroke-linecap:round}
+#dock .slot.dom .lbl{opacity:1;color:var(--clay)}
+/* While he holds something, the card is the only text, and a dashed ink line runs from it to the part. */
 #notes{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .18s}
 #notes.on{opacity:1}
 #notes svg{position:absolute;inset:0;width:100%;height:100%}
 #nline{stroke:var(--ink);stroke-width:2.5;stroke-dasharray:6 4}
 #ndot{fill:var(--clay);stroke:var(--ink);stroke-width:2}
-#note{position:absolute;left:0;top:0;max-width:44vw;background:#fffdf8;border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);border-radius:6px;padding:7px 10px 8px;rotate:-2deg}
-#nword{display:block;font:400 30px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.03em;line-height:1;color:#3f8f5a}
-#note.due #nword{color:var(--clay)}
-#nwhat{display:block;font:800 10px var(--mono);letter-spacing:.2em;margin-top:3px}
-#ntext{display:block;font:700 11px var(--mono);margin-top:3px;opacity:.75}
-#tag{all:unset;position:fixed;left:0;top:0;font:800 12px var(--mono);letter-spacing:.06em;padding:5px 9px;background:var(--clay);color:var(--ink);border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink);border-radius:3px;white-space:nowrap;pointer-events:auto;opacity:0;transition:opacity .18s;z-index:3}
-#tag:not(.on){pointer-events:none}
-#tag.on{opacity:1}
-#tag:active{translate:0 2px}
+#h2.ok{color:#3f8f5a}
+body.showing #h1{pointer-events:auto;text-decoration:underline dotted 3px;text-underline-offset:6px}
 #de,#stamp{z-index:2}
 #de{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 62px);font:400 15px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.12em;color:#efece5;opacity:0;pointer-events:none}
 #stamp{position:fixed;left:14px;top:calc(env(safe-area-inset-top) + 92px);display:flex;gap:6px;align-items:flex-start;pointer-events:none;opacity:0}
@@ -445,7 +438,7 @@ const domainBody = `<canvas id="c"></canvas><div id="grain"></div>
 <div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><ul id="due"></ul><div id="hint"></div></div>
 <div id="fo"><div id="plate"><div id="kind"></div><div id="name"></div></div><div id="rec"><b id="wl"></b><span id="sub"></span></div><ul id="facts"></ul><div id="how"></div></div>
 <div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div></div>
-</div><div id="notes"><svg><line id="nline"/><circle id="ndot" r="6"/></svg><div id="note"><b id="nword"></b><span id="nwhat"></span><span id="ntext"></span></div></div><button id="tag" aria-label="Rename, or hold to retire"></button>`;
+</div><div id="notes"><svg><line id="nline"/><circle id="ndot" r="6"/></svg></div>`;
 emit('domain-html.ts', 'DOMAIN_HTML', page({ css: domainCss, body: domainBody, js: bundle('web/domain.js') }));
 
 // The sky over San Diego: fly it like a Z fighter. Bright sky; the controls are paper-and-ink pads; tags name the courts.
@@ -586,6 +579,8 @@ const crewCss = homeCss + `
 #tags{position:fixed;left:0;top:0;width:0;height:0;pointer-events:none}
 .tag{position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;will-change:transform}
 .tag b{font:800 12px var(--mono);letter-spacing:.06em;background:#fffdf8;color:var(--ink);padding:3px 7px 3px;border-radius:3px;box-shadow:inset 0 0 0 2px var(--ink),0 3px 0 var(--ink)}
+.tag .face{display:block;width:38px;height:38px;margin-bottom:-6px;filter:drop-shadow(0 2px 0 #16181d)}
+.tag .face svg{display:block}
 .tag i{font:800 8.5px var(--mono);font-style:normal;letter-spacing:.1em;opacity:.7}
 .tag.you i{opacity:1;color:var(--clay)}
 .tag.pre b{background:rgba(255,253,248,.92);color:rgba(22,24,29,.55);box-shadow:inset 0 0 0 2px rgba(22,24,29,.35)}

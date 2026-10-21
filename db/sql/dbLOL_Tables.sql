@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS lol.tb_players
     ,racket                       VARCHAR(80)            NOT NULL DEFAULT ''
     ,claim_token                  VARCHAR(16)            NULL UNIQUE
     ,added_by_player_id           UUID                   NULL
+    ,is_bot                       BOOLEAN                NOT NULL DEFAULT false   -- migration 007
+    ,face_code                    VARCHAR(24)            NOT NULL DEFAULT ''      -- migration 007, src/lib/faces.ts
     ,dttm_created_utc             TIMESTAMPTZ            NOT NULL DEFAULT NOW()
     ,created_by                   VARCHAR(50)            NOT NULL DEFAULT CURRENT_USER
     ,dttm_modified_utc            TIMESTAMPTZ            NOT NULL DEFAULT NOW()

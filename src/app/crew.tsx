@@ -74,7 +74,7 @@ export default function CrewScreen() {
     error: cloud.error,
     suggest,
     invite: cloud.invites[0] ?? null,
-    fighters: (inCrew ? roster : [you]).map((f) => ({ id: f.id, name: f.name, cast: f.cast, color: f.color, you: !!f.isYou, pretender: !!f.pretender })),
+    fighters: (inCrew ? roster : [you]).map((f) => ({ id: f.id, name: f.name, cast: f.cast, color: f.color, you: !!f.isYou, pretender: !!f.pretender, face: f.face ?? '' })),
     callup: live ? { id: live.id, mine: live.caller === 'you', callerName: name(live.caller), message: live.message, need: live.need, status: live.status, answers: live.answers } : null,
   });
   useEffect(() => { if (!demo) run(`window.setCrew(${data})`); }, [run, data, demo]);
