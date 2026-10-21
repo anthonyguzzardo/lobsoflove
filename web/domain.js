@@ -461,7 +461,7 @@ const POSE = {
   wide: { L: [V(-0.98, 1.05, 0.12), V(-1.32, 1.55, 0.25)], R: [V(0.98, 1.05, 0.12), V(1.32, 1.55, 0.25)] },
   // Reaching behind his back, and holding it up at you with the other hand on his hip.
   behind: { L: [V(-0.5, 0.36, 0.28), V(0.3, 0.5, 0.42)], R: [V(0.72, 0.52, -0.22), V(0.42, 0.5, -0.55)] },
-  present: { L: [V(-0.66, 0.44, 0.08), V(-0.45, 0.16, 0.24)], R: [V(0.86, 0.6, 0.32), V(1.0, 0.98, 0.58)] },
+  present: { L: [V(-0.66, 0.44, 0.08), V(-0.45, 0.16, 0.24)], R: [V(0.86, 0.42, 0.34), V(0.92, 0.56, 0.66)] },
 };
 const smooth = (x) => { const k = clamp(x, 0, 1); return k * k * (3 - 2 * k); };
 /** How far into each pose he is right now. */
@@ -1404,7 +1404,7 @@ function step(dt) {
   // It crouches over your fighter wherever your fighter is; while you charge it leans further down over it.
   const gb = G_OUT.clone().lerp(G_IN, k);
   spring1(st.lean, st.show && st.show.phase !== 'out' ? 1 : 0, dt, 1.8, 0.8);
-  legend.carrier.position.set(gb.x - 0.45 * st.lean.x, gb.y - c.x * 0.35 + 0.06 * Math.sin((st.clock * TAU) / 4.6), gb.z + c.x * 0.4);
+  legend.carrier.position.set(gb.x - 0.7 * st.lean.x, gb.y - c.x * 0.35 + 0.06 * Math.sin((st.clock * TAU) / 4.6), gb.z + c.x * 0.4);
   legend.carrier.rotation.x = c.x * 0.25; // leans in over your fighter while you charge
   legend.body.simulate(dt, st.clock);
   stepShow(dt);
@@ -1506,7 +1506,6 @@ window.__focus = (id) => focus(id);
 window.__charge = (on) => { st.charge.holding = on; };
 window.__pose = (c) => { st.charge.x = c; };
 window.__tab = (k) => tab(k);
-window.__dbg = () => { const w = (o) => o.getWorldPosition(new THREE.Vector3()).toArray().map((n) => n.toFixed(2)).join(','); return { hand: w(legend.arms[1].hand), handL: w(legend.arms[0].hand), g: w(showR.g), bed: w(showR.bed), sx: legend.arms[1].sx }; };
 window.__scrub = (pts) => { if (!st.scrub) st.scrub = { cells: new Set(), progress: 0, dist: 0, last: null, done: false }; for (const [x, y] of pts) scrubAt(x, y); };
 
 post({ type: 'ready' });

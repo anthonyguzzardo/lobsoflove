@@ -17,6 +17,10 @@ export type Fighter = {
   demo?: boolean;
   /** In a crew: a friend someone added by name who has not installed the app yet. Their matches wait for them to confirm. */
   pretender?: boolean;
+  /** A bot player (DBZ, tennis legends, JJK): joins when invited, agrees with every score. */
+  bot?: boolean;
+  /** Drawn face code (src/lib/faces.ts); none is the plain jelly face. */
+  face?: string;
 };
 
 export const CAST: Record<CastId, { label: string; tagline: string }> = {

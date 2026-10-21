@@ -54,7 +54,7 @@ export type CloudState = {
 /** A crew asking you in: its name, who asked, and how many are in it. */
 export type Invite = { id: string; crew: string; from: string; color: string; size: number };
 /** A search result: someone with the app. `crew` says if they are free, already yours, or in another crew. */
-export type Found = { id: string; name: string; cast: CastId; color: string; home: string; crew: 'free' | 'yours' | 'taken'; invited: boolean };
+export type Found = { id: string; name: string; cast: CastId; color: string; home: string; face: string; bot: boolean; crew: 'free' | 'yours' | 'taken'; invited: boolean };
 
 let state: CloudState = { status: CLOUD_READY ? 'starting' : 'off', error: null, crew: null, claims: {}, callups: [], invites: [] };
 const listeners = new Set<() => void>();
@@ -72,7 +72,7 @@ export function useCloud(): CloudState {
 
 type PlayerRow = {
   player_id: string; user_id: string | null; display_name: string; cast_code: string; color_hex: string; bio: string;
-  favorite_pro: string; home_court: string; racket: string; claim_token: string | null;
+  favorite_pro: string; home_court: string; racket: string; claim_token: string | null; is_bot?: boolean; face_code?: string;
 };
 type MatchRow = {
   match_id: string; venue_code: string | null; venue_name: string; p1_player_id: string; p2_player_id: string; sets: SetScore[];
@@ -147,7 +147,9 @@ const fighter = (p: PlayerRow): Fighter => ({
   homeCourt: p.home_court,
   racket: p.racket,
   isYou: p.player_id === meId || undefined,
-  pretender: p.user_id === null || undefined,
+  pretender: (p.user_id === null && !p.is_bot) || undefined,
+  bot: p.is_bot || undefined,
+  face: p.face_code || undefined,
 });
 
 const match = (r: MatchRow): Match => ({
@@ -182,7 +184,7 @@ export async function refresh() {
   if (!inCrew.has(meId)) { await loadCrew(); return; }
   const rows = (players.data as PlayerRow[]).filter((p) => inCrew.has(p.player_id));
   // You first, then real friends, then pretenders: the order the case picker and standings fall back on.
-  rows.sort((a, b) => Number(b.player_id === meId) - Number(a.player_id === meId) || Number(a.user_id === null) - Number(b.user_id === null));
+  rows.sort((a, b) => Number(b.player_id === meId) - Number(a.player_id === meId) || Number(a.user_id === null && !a.is_bot) - Number(b.user_id === null && !b.is_bot));
   const roster = rows.map(fighter);
   const byId = new Map(roster.map((f) => [f.id, f]));
 
