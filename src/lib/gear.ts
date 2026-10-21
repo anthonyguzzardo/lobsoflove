@@ -11,6 +11,9 @@ export type GearKind = 'racket' | 'shoes' | 'balls' | 'grips';
 /** The part of an item that wears out and gets replaced. */
 export type Service = 'strings' | 'overgrip' | 'soles' | 'can';
 
+/** How a racket is strung. Tension in pounds. */
+export type StringSetup = { string: string | null; gauge: string; mains: number; crosses: number };
+
 export type GearItem = {
   id: string;
   kind: GearKind;
@@ -24,6 +27,15 @@ export type GearItem = {
   stock?: number;
   /** When it was retired: it leaves the closet and stands planted in the domain. */
   retiredAt?: number;
+  /** Circled when it was added. */
+  brand?: string;
+  model?: string;
+  /** How many of the same frame you have (rackets): they get strung together. */
+  count?: number;
+  /** Shoes: main color, then the accent, as hex. */
+  colors?: string[];
+  /** Rackets: what is in the strings. */
+  setup?: StringSetup;
 };
 
 /**
@@ -41,7 +53,7 @@ export const LIFE: Record<Service, { matches: number; days: number; word: string
 export const SERVICES: Record<GearKind, Service[]> = { racket: ['strings'], shoes: ['soles'], balls: ['can'], grips: [] };
 /** Reorder when the shelf or bin is down to this many. */
 export const REORDER_AT: Partial<Record<GearKind, number>> = { balls: 1, grips: 2 };
-export const MAX: Record<GearKind, number> = { racket: 3, shoes: 2, balls: 1, grips: 1 };
+export const MAX: Record<GearKind, number> = { racket: 3, shoes: 6, balls: 1, grips: 1 };
 
 const DAY = 86_400_000;
 
@@ -129,11 +141,13 @@ export function addGear(input: Omit<GearEntry, 'id'>): string {
   return e.id;
 }
 
-export function addItem(kind: GearKind, name: string, photo: string | null): string {
+type Extra = Pick<GearItem, 'brand' | 'model' | 'count' | 'colors' | 'setup'>;
+export function addItem(kind: GearKind, name: string, photo: string | null, extra: Extra = {}): string {
   const id = `${kind}${Date.now()}`;
-  set([...items, { id, kind, name, photo, addedAt: Date.now(), serviced: {} }]);
+  set([...items, { id, kind, name, photo, addedAt: Date.now(), serviced: {}, ...extra }]);
   return id;
 }
+export function setSetup(id: string, setup: StringSetup) { patch(id, (it) => ({ ...it, setup })); }
 export function renameItem(id: string, name: string) { patch(id, (it) => ({ ...it, name })); }
 export function setPhoto(id: string, photo: string) { patch(id, (it) => ({ ...it, photo })); }
 export function removeItem(id: string) { set(items.filter((it) => it.id !== id)); }

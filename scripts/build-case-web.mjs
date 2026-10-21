@@ -367,12 +367,46 @@ const domainCss = homeCss + `
 #dock .slot.dom .pf{background:var(--ink);box-shadow:0 6px 0 #000,0 12px 14px rgba(40,34,26,.22);display:flex;align-items:center;justify-content:center}
 #dock .slot.dom .knot{width:30px;height:11px;fill:none;stroke:var(--clay);stroke-width:2.6;stroke-linecap:round}
 #dock .slot.dom .lbl{opacity:1;color:var(--clay)}
-/* While he holds something, the card is the only text, and a dashed ink line runs from it to the part. */
-#notes{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .18s}
-#notes.on{opacity:1}
-#notes svg{position:absolute;inset:0;width:100%;height:100%}
-#nline{stroke:var(--ink);stroke-width:2.5;stroke-dasharray:6 4}
-#ndot{fill:var(--clay);stroke:var(--ink);stroke-width:2}
+/* The string zone: how the racket he holds is strung. Tap the string to circle a new one, tap the gauge to step it, drag a tension. */
+#sz{display:none;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:9px 0 2px;pointer-events:auto}
+#sz.on{display:grid}
+#sz button{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;padding:6px 8px 7px;border-radius:5px;background:#f6f3ec;box-shadow:inset 0 0 0 2px var(--ink);touch-action:none;user-select:none;-webkit-user-select:none}
+#sz button:active,#sz button.drag{background:#fff;box-shadow:inset 0 0 0 2.6px var(--clay)}
+#sz span{font:800 9px var(--mono);letter-spacing:.14em;opacity:.6}
+#sz b{font:800 17px var(--mono);letter-spacing:.02em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#sz .ten b:before{content:"‹ ";opacity:.35}#sz .ten b:after{content:" ›";opacity:.35}
+#sz #sname{grid-column:1 / -1;flex-direction:row!important;align-items:center;gap:9px!important}
+#sz #sname i{width:22px;height:22px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 2px var(--ink)}
+#sname div{display:flex;flex-direction:column;gap:2px;min-width:0}
+#sname.unset b{color:var(--clay)}
+#sz.fresh .ten b,#sz.fresh #sgauge b{opacity:.5}
+/* Circle to pick: a paper sheet over everything. */
+#cpick{position:fixed;inset:0;z-index:20;background:#efece5;padding:calc(env(safe-area-inset-top) + 64px) 16px calc(env(safe-area-inset-bottom) + 20px);display:flex;flex-direction:column;touch-action:none;user-select:none;-webkit-user-select:none;animation:cpin .28s cubic-bezier(.16,1,.3,1) both}
+#cpick.out{animation:cpout .22s ease-in both}
+@keyframes cpin{0%{transform:translateY(24px);opacity:0}100%{transform:none;opacity:1}}
+@keyframes cpout{100%{transform:translateY(24px);opacity:0}}
+.cp-head{display:flex;justify-content:flex-end;margin:6px 0 14px}
+.cp-step{font:800 11px var(--mono);letter-spacing:.14em;opacity:.5}
+.cp-title{font:800 28px var(--mono);letter-spacing:.02em;line-height:1.05}
+.cp-sub{font:700 12px var(--mono);opacity:.65;margin:6px 0 18px}
+.cp-opts{display:flex;flex-wrap:wrap;gap:14px 12px;align-content:flex-start;flex:1}
+.cp-o{display:flex;align-items:center;gap:8px;padding:10px 13px;border-radius:6px;background:#fffdf8;box-shadow:inset 0 0 0 2px var(--ink),0 3px 0 var(--ink);transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+.cp-o b{font:800 16px var(--mono);letter-spacing:.04em}
+.cp-o span{font:700 10px var(--mono);opacity:.55}
+.cp-o i{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--ink);flex:none}
+.cp-o.hit{transform:scale(1.08)}
+.cp-opts.swatch{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 12px}
+.cp-opts.swatch .cp-o{flex-direction:column;padding:12px 6px 9px}
+.cp-opts.swatch .cp-o i{width:42px;height:42px;box-shadow:inset 0 0 0 2.5px var(--ink)}
+.cp-opts.swatch .cp-o b{font-size:12px}
+.cp-opts.big{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding-top:30px}
+.cp-opts.big .cp-o{justify-content:center;padding:26px 0}
+.cp-opts.big .cp-o b{font-size:48px}
+.cp-ink{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.cp-stroke{fill:none;stroke:var(--ink);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+.cp-loop{fill:none;stroke:var(--clay);stroke-width:4.5;opacity:0;stroke-dasharray:600;stroke-dashoffset:600}
+.cp-loop.on{opacity:1;animation:cploop .3s cubic-bezier(.16,1,.3,1) forwards}
+@keyframes cploop{100%{stroke-dashoffset:0}}
 #h2.ok{color:#3f8f5a}
 body.showing #h1{pointer-events:auto;text-decoration:underline dotted 3px;text-underline-offset:6px}
 #de,#stamp{z-index:2}
@@ -435,10 +469,10 @@ body.open #de{opacity:1;animation:dein .5s .1s cubic-bezier(.16,1,.3,1) both}
 const domainBody = `<canvas id="c"></canvas><div id="grain"></div>
 <div id="de">DOMAIN EXPANSION</div><div id="stamp"><i>MUTUAL LOBS</i><b>相愛</b></div>
 <div id="ui"><div class="grow"></div>
-<div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><ul id="due"></ul><div id="hint"></div></div>
+<div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><div id="sz"><button id="sname"><i></i><div><span>STRING</span><b></b></div></button><button id="sgauge"><span>GAUGE</span><b></b></button><button class="ten" id="smain"><span>MAINS LB</span><b></b></button><button class="ten" id="scross"><span>CROSSES LB</span><b></b></button></div><ul id="due"></ul><div id="hint"></div></div>
 <div id="fo"><div id="plate"><div id="kind"></div><div id="name"></div></div><div id="rec"><b id="wl"></b><span id="sub"></span></div><ul id="facts"></ul><div id="how"></div></div>
 <div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div></div>
-</div><div id="notes"><svg><line id="nline"/><circle id="ndot" r="6"/></svg></div>`;
+</div>`;
 emit('domain-html.ts', 'DOMAIN_HTML', page({ css: domainCss, body: domainBody, js: bundle('web/domain.js') }));
 
 // The sky over San Diego: fly it like a Z fighter. Bright sky; the controls are paper-and-ink pads; tags name the courts.

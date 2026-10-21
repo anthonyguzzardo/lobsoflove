@@ -9,8 +9,8 @@ import { BackSwing } from '@/components/back-swing';
 import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
 import { DOMAIN_HTML } from '@/generated/domain-html';
 import {
-  type GearItem, type GearKind, LIFE, type Service, SERVICES,
-  addItem, crackCan, dueList, lowStock, renameItem, restock, retireItem, service, useCloset, useRetired, wearOf,
+  type GearItem, type GearKind, LIFE, type Service, SERVICES, type StringSetup,
+  addItem, crackCan, dueList, lowStock, renameItem, restock, retireItem, service, setSetup, useCloset, useRetired, wearOf,
 } from '@/lib/gear';
 import { askInk } from '@/lib/ink-ask';
 import { counts, type Match, useMatches, winnerOf } from '@/lib/matches';
@@ -30,6 +30,11 @@ function inUse(items: GearItem[], matches: Match[]) {
     id: it.id,
     kind: it.kind,
     name: it.name,
+    brand: it.brand,
+    model: it.model,
+    count: it.count ?? 1,
+    colors: it.colors ?? [],
+    setup: it.setup ?? null,
     stock: it.stock ?? 0,
     low: lowStock(it),
     hasOpen: it.kind === 'balls' && it.serviced.can != null,
@@ -74,7 +79,7 @@ function historyOf(it: GearItem, matches: Match[], me: string, roster: Fighter[]
   }
   const d = new Date(end);
   lines.push(`planted ${MONTHS[d.getMonth()]} ${d.getFullYear()}`);
-  return { id: it.id, kind: it.kind, name: it.name, matches: played.length, record: `${w}-${l}`, lines };
+  return { id: it.id, kind: it.kind, name: it.name, colors: it.colors ?? [], matches: played.length, record: `${w}-${l}`, lines };
 }
 
 /**
@@ -92,7 +97,7 @@ export default function Gear() {
   const roster = useRoster();
   const scene = useScene();
   const { run } = scene;
-  const state = useRef({ focus: null as string | null, held: false, open: false });
+  const state = useRef({ focus: null as string | null, held: false, open: false, pick: false });
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
 
@@ -125,7 +130,7 @@ export default function Gear() {
     askInk({ label: 'WHAT IS IT CALLED', max: 22, upper: true, examples: [PLACEHOLDER[it.kind]] }, (t) => { renameItem(id, t || DEFAULT_NAME[it.kind]); void Haptics.selectionAsync(); });
   };
   const back = () => {
-    if (state.current.held || state.current.focus) run('window.unfocus()');
+    if (state.current.pick) run('window.closePick()'); else if (state.current.held || state.current.focus) run('window.unfocus()');
     else if (state.current.open) run('window.collapse()');
     else goBack();
   };
@@ -165,9 +170,20 @@ export default function Gear() {
             case 'add': {
               if (demo) break;
               const kind = m.kind as 'racket' | 'shoes';
-              const id = addItem(kind, DEFAULT_NAME[kind], null);
+              // Circled all the way to a model: it comes in named. Circled OTHER: write the name.
+              const id = addItem(kind, typeof m.name === 'string' ? m.name : m.brand ?? DEFAULT_NAME[kind], null, {
+                brand: m.brand, model: m.model, count: m.count, colors: Array.isArray(m.colors) ? m.colors : undefined,
+              });
               void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              startEdit(id);
+              sfx('slam', 0.6);
+              if (typeof m.name !== 'string') startEdit(id);
+              break;
+            }
+            case 'setup': if (!demo) setSetup(m.id, m.setup as StringSetup); break;
+            case 'pick': state.current.pick = !!m.open; break;
+            case 'circled': {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              sfx('pock', 0.6);
               break;
             }
             case 'restock': if (!demo) restock(m.kind as GearKind, 1); sfx('pock', 0.5); break;
