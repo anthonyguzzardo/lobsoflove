@@ -1,30 +1,30 @@
 // The domain: where retired gear goes. Every racket you have worn out stands planted head-first in a field of broken court
 // concrete, grip up like a sword hilt; dead shoes hang off the grips by their laces. A red string cord, knotted, runs across the
-// sky. Your fighter stands on a pillar and a ghost made of old gear looms behind it. Drawn like a manga page: paper and ink,
+// sky. Your fighter stands on a pillar and a gloating tennis legend floats behind it. Drawn like a manga page: paper and ink,
 // ink outlines, the sky going black overhead, one red.
 //
-// The domain is entered on purpose. The page opens outside it: paper ground, your fighter, the ghost holding the gear you use.
+// The domain is entered on purpose. The page opens outside it: paper ground, your fighter, the legend holding the gear you use.
 // Press and hold your fighter to expand it; back collapses it into the ground again.
 //
 // Motion spec. Everything integrates at 1/120 s.
-// - Charge: holding your fighter fills 0 to 1 over 1.1 s. Ink closes in round it, the jelly squashes, the ghost leans down over
+// - Charge: holding your fighter fills 0 to 1 over 1.1 s. Ink closes in round it, the jelly squashes, the legend leans down over
 //   it and the camera trembles; a tick at each quarter. Let go early and it all eases back (3 per s).
 // - Expansion (at full charge): ink covers the page, the title stamps in at 0.15 s, the ink lifts 0.3-0.9 s. Pillars rise out of the
 //   ground on a 2.2 Hz spring, ratio 0.55; rackets shoot up on 2.6 Hz, ratio 0.45, staggered by distance from the fighter
-//   (60 ms per unit), and twang when they pass their rest. The cord draws itself across the sky 0.6-1.7 s. The ghost swells in.
+//   (60 ms per unit), and twang when they pass their rest. The cord draws itself across the sky 0.6-1.7 s. The legend swells in.
 // - Twang: a planted racket rocks about the point it enters the ground. theta'' = -w^2 theta - 2 zeta w theta', 4.2 Hz, zeta 0.07,
 //   so it buzzes for about a second and a half like a sword stuck in a beam.
 // - Pull: drag a racket up. It sticks (static friction 0.1 of the pull), then breaks loose in jerks: each jerk throws dirt and a tick.
 //   Drag sideways and it leans with your finger. Let go early and it sinks back. Pull it all the way and it comes free and flies
 //   to your face on a 3 Hz, ratio 0.8 spring, turning slowly, with its record on the panel.
 // - Plant: tap anywhere and it goes back: a 0.5 s arc, driven in, dirt burst, camera shake (6 Hz, ratio 0.25), twang.
-// - The ghost bobs on a 4.6 s sine; tapping it or your fighter pokes the jelly.
+// - The legend bobs on a 4.6 s sine and raises a brow every 4.3 s; tap him and he laughs, tap your fighter and the jelly gets poked.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 import { SoftBody } from './jelly-core.js';
 import { post } from './lib/bridge.js';
-import { createSlide } from './lib/slide.js';
+import { createDock } from './lib/dock.js';
 
 const INK = 0x16181d;
 const PAPER = 0xefece5;
@@ -161,11 +161,14 @@ function slab(w, h, d, x, y, z, rx, ry, rz, delay = 0) {
 }
 
 const R = rng(42);
-// Your pillar, left of center, with a crossbar like a grave marker, and the ghost's leaning post on the right.
+// Your pillar, left of center, with a crossbar like a grave marker, and the legend's leaning post on the right.
 const YOU_AT = new THREE.Vector3(-0.62, 2.35, -0.9);
 slab(0.5, 2.35, 0.5, YOU_AT.x, 2.35 / 2, YOU_AT.z, 0, 0.25, 0.02, 0);
 const youPillar = rise[rise.length - 1]; // your fighter rides it up out of the ground
-const OUT_SPOT = new THREE.Vector3(-0.55, 0, -0.45); // where your fighter stands outside the domain
+const OUT_SPOT = new THREE.Vector3(0.2, 0, -0.3); // where your fighter stands outside the domain
+// Where the legend crouches: low over your fighter outside; up behind your pillar inside.
+const G_OUT = new THREE.Vector3(0.2, 1.15, -1.75);
+const G_IN = new THREE.Vector3(0.55, 1.55, -2.4);
 slab(1.5, 0.28, 0.32, YOU_AT.x + 0.15, 1.6, YOU_AT.z + 0.05, 0, 0.3, -0.18, 0.05);
 slab(0.42, 2.9, 0.42, 1.05, 1.3, -2.1, 0, -0.2, -0.16, 0.1);
 slab(1.3, 0.26, 0.3, 1.0, 2.05, -2.0, 0, -0.3, 0.22, 0.12);
@@ -330,35 +333,191 @@ function slotList(n) {
   return out.slice(0, n);
 }
 
-// ---------- Your fighter and the ghost ----------
+// ---------- Your fighter and the legend ----------
 const you = { body: null, carrier: new THREE.Group(), cast: null, color: null };
 you.carrier.position.copy(YOU_AT);
 you.carrier.scale.setScalar(0.34);
 scene.add(you.carrier);
-const ghost = { body: new SoftBody({ cast: 'ghost', color: '#ece6d6', edge: 0.16, transmission: 0.06 }), carrier: new THREE.Group(), grow: { x: 0, v: 0 } };
-ghost.body.feel = { ...ghost.body.feel, alpha: Math.max(ghost.body.feel.alpha, 0.03) };
-ghost.carrier.add(ghost.body.group);
-ghost.carrier.position.set(0.75, 2.2, -2.6);
-scene.add(ghost.carrier);
-inked(ghost.body.mesh, LINE.mid);
-ghost.body.mat.transmission = 0; // solid bone, not glass
-ghost.body.mat.clearcoat = 0.3;
-// Its own face: two black sockets with pinprick lights, and a wide open maw.
-for (const e of ghost.body.eyes) e.visible = false;
-ghost.sockets = [-1, 1].map((sx) => {
-  const g = new THREE.Group();
-  const hole = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 14), toon(INK));
-  hole.scale.set(0.95, 1.5, 0.35);
-  const glint = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-  glint.position.set(0.012 * sx, 0.03, 0.04);
-  g.add(hole, glint);
-  g.userData = { sx, glint };
-  ghost.body.face.add(g);
-  return g;
-});
-// The bond: a thin red cord from your fighter to the ghost.
-const bond = new THREE.Mesh(new THREE.BufferGeometry(), cordMat);
-scene.add(bond);
+// The legend: a big, gloating tennis spirit who floats behind your fighter. Seventies hair under a red headband, a white polo
+// with the collar popped, red wristbands, arms crossed, chin up, one eyebrow raised and a smirk. No legs: he trails off in a wisp.
+// He is an archetype, not anyone real. Tap him and he laughs at you.
+const legend = { carrier: new THREE.Group(), grow: { x: 0, v: 0 }, jolt: { x: 0, v: 0 }, laugh: 0, brow: { x: 0, v: 0 } };
+{
+  const L = new THREE.Group();
+  const skin = toon(0xf1d3b3); const shirt = toon(0xf7f4ec); const red = toon(CLAY); const hair = toon(0xd2a65a); const ink = toon(INK);
+  const put = (m, x, y, z, line = LINE.thin) => { inked(m, line); m.position.set(x, y, z); L.add(m); return m; };
+  /** A rounded limb from a to b. */
+  const limb = (a, b, r, m) => {
+    const len = a.distanceTo(b);
+    const c = put(new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 12), m), (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    return c;
+  };
+  // The wisp he rises out of.
+  const wisp = put(new THREE.Mesh(new THREE.ConeGeometry(0.48, 1.15, 28), shirt), 0, -0.52, 0, LINE.mid);
+  wisp.rotation.set(Math.PI, 0, 0.12);
+  // Torso, with red and ink stripes over the shoulders.
+  const torso = put(new THREE.Mesh(new RoundedBoxGeometry(1.05, 1.02, 0.56, 4, 0.22), shirt), 0, 0.48, 0, LINE.mid);
+  for (const [y, m] of [[0.86, red], [0.8, ink]]) put(new THREE.Mesh(new THREE.BoxGeometry(1.07, 0.035, 0.58), m), 0, y, 0, LINE.thin);
+  // Popped collar.
+  for (const sx of [-1, 1]) {
+    const flap = put(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.17, 0.03), shirt), sx * 0.12, 1.03, 0.16);
+    flap.rotation.set(-0.35, sx * 0.3, -sx * 0.55);
+  }
+  put(new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.18, 14), skin), 0, 1.03, 0);
+  // Head, chin up.
+  const head = new THREE.Group();
+  head.position.set(0, 1.42, 0.02);
+  L.add(head);
+  const hput = (m, x, y, z, line = LINE.thin) => { if (line) inked(m, line); m.position.set(x, y, z); head.add(m); return m; };
+  hput(new THREE.Mesh(new THREE.SphereGeometry(0.36, 28, 20), skin), 0, 0, 0, LINE.mid).scale.set(0.94, 1.1, 0.95);
+  // Hair: a cap on top and long locks down the sides and back.
+  hput(new THREE.Mesh(new THREE.SphereGeometry(0.39, 24, 16, 0, TAU, 0, Math.PI * 0.5), hair), 0, 0.06, -0.03).scale.set(1, 1.05, 1);
+  for (const sx of [-1, 1]) hput(new THREE.Mesh(new RoundedBoxGeometry(0.15, 0.62, 0.36, 3, 0.07), hair), sx * 0.33, -0.12, -0.08).rotation.z = sx * 0.08;
+  hput(new THREE.Mesh(new RoundedBoxGeometry(0.66, 0.6, 0.14, 3, 0.07), hair), 0, -0.12, -0.3);
+  const band = hput(new THREE.Mesh(new THREE.TorusGeometry(0.375, 0.048, 10, 40), red), 0, 0.15, 0);
+  band.rotation.x = Math.PI / 2 - 0.12;
+  band.scale.set(0.96, 0.98, 1);
+  // Face: lids half down, one brow up, a smirk off to one side.
+  for (const sx of [-1, 1]) {
+    const eye = hput(new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 10), ink), sx * 0.12, 0.0, 0.345, null);
+    eye.scale.set(1.15, 0.5, 0.5);
+  }
+  const brows = [-1, 1].map((sx) => {
+    const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.12, 4, 8), toon(0x8a6a34));
+    b.rotation.z = Math.PI / 2 + (sx > 0 ? -0.35 : 0.08);
+    b.position.set(sx * 0.13, 0.1, 0.35);
+    head.add(b);
+    return b;
+  });
+  hput(new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), skin), 0, -0.07, 0.34);
+  const smirk = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.016, 6, 20, 1.7), ink);
+  smirk.position.set(0.04, -0.15, 0.33);
+  smirk.rotation.z = Math.PI + 0.55;
+  head.add(smirk);
+  const grin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 10), ink);
+  grin.scale.set(1.3, 0.8, 0.4);
+  grin.position.set(0.02, -0.17, 0.32);
+  grin.visible = false;
+  head.add(grin);
+  // Arms on joints, so he can move between poses: crossed (gloating), wristband to his lips, the hand sign, arms flung wide.
+  const bone = (m, r) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 14), m); inked(c, LINE.thin); L.add(c); return c; };
+  const ball = (m, r) => { const c = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), m); inked(c, LINE.thin); L.add(c); return c; };
+  const arms = [-1, 1].map((sx) => {
+    const a = { sx, shoulder: new THREE.Vector3(sx * 0.56, 0.86, 0), upper: bone(shirt, 0.12), fore: bone(skin, 0.1), elbow: ball(skin, 0.1), hand: ball(skin, 0.11) };
+    a.cuff = ball(shirt, 0.125);
+    a.band = new THREE.Mesh(new THREE.CylinderGeometry(0.118, 0.118, 0.11, 16), red);
+    inked(a.band, LINE.thin);
+    L.add(a.band);
+    a.finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.12, 4, 8), skin);
+    inked(a.finger, LINE.thin);
+    L.add(a.finger);
+    return a;
+  });
+  legend.arms = arms;
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.9, 0.9), pickMat);
+  hit.position.y = 0.55;
+  L.add(hit);
+  legend.carrier.add(L);
+  legend.parts = { L, head, brows, smirk, grin, torso, arms };
+  legend.body = {
+    mesh: hit,
+    group: L,
+    kick(x, y) { legend.jolt.v += y * 0.6; },
+    poke() { legend.laugh = 0.9; legend.jolt.v += 1.5; },
+    simulate(dt, t) {
+      spring1(legend.jolt, 0, dt, 2.6, 0.35);
+      spring1(legend.brow, 0, dt, 5, 0.3);
+      legend.laugh = Math.max(0, legend.laugh - dt);
+      // Every few seconds the brow goes up again: still gloating.
+      if (t % 4.3 < dt) legend.brow.v += 3;
+      // Arms are posed here, before anything he holds is placed in his hand.
+      poseArms(gesture());
+    },
+    render(t) {
+      const { head, brows, smirk, grin, torso } = legend.parts;
+      const g = gesture();
+      const lg = legend.laugh > 0 || g.wide > 0.5;
+      // Head down for the kiss, back for the laugh.
+      head.rotation.set(-0.16 + 0.03 * Math.sin(t * 0.8) + 0.3 * g.kiss - 0.25 * g.wide + (lg ? 0.08 * Math.sin(t * 34) : 0), 0.12 * Math.sin(t * 0.37) * (1 - g.sign), 0.06 * Math.sin(t * 0.6));
+      brows[1].position.y = 0.1 + 0.04 * clamp(legend.brow.x, -1, 1.5) + 0.02;
+      torso.scale.set(1, 1 + 0.02 * Math.sin(t * 1.9) + (lg ? 0.03 * Math.sin(t * 30) : 0), 1);
+      smirk.visible = !lg; grin.visible = lg;
+      legend.parts.L.position.y = legend.jolt.x * 0.1 + (lg ? 0.03 * Math.abs(Math.sin(t * 17)) : 0);
+    },
+  };
+}
+legend.carrier.position.set(0.75, 2.2, -2.6);
+
+// ---------- The legend's routine ----------
+// Each pose is where the elbows and hands go (his own units; shoulders at x = +-0.56, y = 0.86). The charge walks him from
+// crossed to the wristband kiss (0 to 0.35), holds the kiss, then into the hand sign (0.7 to 1). The expansion flings his arms
+// wide in 0.22 s, holds them up laughing to 1.3 s, and lets them fall back to crossed by 2.1 s.
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const POSE = {
+  crossed: { L: [V(-0.5, 0.36, 0.28), V(0.3, 0.5, 0.42)], R: [V(0.5, 0.4, 0.32), V(-0.3, 0.57, 0.48)] },
+  kiss: { L: [V(-0.66, 0.44, 0.08), V(-0.45, 0.16, 0.24)], R: [V(0.46, 0.72, 0.5), V(0.1, 1.2, 0.5)] },
+  sign: { L: [V(-0.46, 0.58, 0.38), V(-0.05, 1.16, 0.56)], R: [V(0.46, 0.58, 0.38), V(0.05, 1.16, 0.56)] },
+  wide: { L: [V(-0.98, 1.05, 0.12), V(-1.32, 1.55, 0.25)], R: [V(0.98, 1.05, 0.12), V(1.32, 1.55, 0.25)] },
+  // Reaching behind his back, and holding it up at you with the other hand on his hip.
+  behind: { L: [V(-0.5, 0.36, 0.28), V(0.3, 0.5, 0.42)], R: [V(0.72, 0.52, -0.22), V(0.42, 0.5, -0.55)] },
+  present: { L: [V(-0.66, 0.44, 0.08), V(-0.45, 0.16, 0.24)], R: [V(0.86, 0.6, 0.32), V(1.0, 0.98, 0.58)] },
+};
+const smooth = (x) => { const k = clamp(x, 0, 1); return k * k * (3 - 2 * k); };
+/** How far into each pose he is right now. */
+function gesture() {
+  const sh = st.show;
+  if (sh) {
+    if (sh.phase === 'in') {
+      if (sh.t < 0.3) return { from: 'crossed', to: 'behind', k: smooth(sh.t / 0.3), back: 0, kiss: 0, sign: 0, wide: 0 };
+      const k = smooth((sh.t - 0.3) / 0.45);
+      return { from: 'behind', to: 'present', k: k + 0.12 * Math.sin(Math.PI * k), back: 0, kiss: 0, sign: 0, wide: 0 };
+    }
+    if (sh.phase === 'out') {
+      if (sh.t < 0.3) return { from: 'present', to: 'behind', k: smooth(sh.t / 0.3), back: 0, kiss: 0, sign: 0, wide: 0 };
+      return { from: 'behind', to: 'crossed', k: smooth((sh.t - 0.3) / 0.2), back: 0, kiss: 0, sign: 0, wide: 0 };
+    }
+    return { from: 'present', to: 'present', k: 1, back: 0, kiss: 0, sign: 0, wide: 0 };
+  }
+  if (st.open && st.t < 2.1) {
+    const out = smooth(st.t / 0.22);
+    const back = smooth((st.t - 1.3) / 0.8);
+    return { from: 'sign', to: 'wide', k: out, back, kiss: 0, sign: 1 - out, wide: out * (1 - back) };
+  }
+  const c = st.charge.x;
+  if (c <= 0.35) { const k = smooth(c / 0.35); return { from: 'crossed', to: 'kiss', k, back: 0, kiss: k, sign: 0, wide: 0 }; }
+  if (c <= 0.7) return { from: 'kiss', to: 'kiss', k: 1, back: 0, kiss: 1, sign: 0, wide: 0 };
+  const k = smooth((c - 0.7) / 0.3);
+  return { from: 'kiss', to: 'sign', k, back: 0, kiss: 1 - k, sign: k, wide: 0 };
+}
+const placeBone = (m, a, b) => {
+  m.position.copy(a).add(b).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(V(0, 1, 0), b.clone().sub(a).normalize());
+  m.scale.set(1, a.distanceTo(b), 1);
+};
+function poseArms(g) {
+  for (const a of legend.arms) {
+    const side = a.sx < 0 ? 'L' : 'R';
+    const A = POSE[g.from][side]; const B = POSE[g.to][side];
+    let elbow = A[0].clone().lerp(B[0], g.k); let hand = A[1].clone().lerp(B[1], g.k);
+    if (g.back > 0) { const C = POSE.crossed[side]; elbow = elbow.lerp(C[0], g.back); hand = hand.lerp(C[1], g.back); }
+    // Arms up and wide shake with the laugh.
+    if (g.wide > 0.5) hand.y += 0.04 * Math.sin(st.clock * 30 + a.sx);
+    placeBone(a.upper, a.shoulder, elbow);
+    placeBone(a.fore, elbow, hand);
+    a.elbow.position.copy(elbow);
+    a.cuff.position.copy(a.shoulder.clone().lerp(elbow, 0.85));
+    a.hand.position.copy(hand);
+    const wrist = elbow.clone().lerp(hand, 0.78);
+    a.band.position.copy(wrist);
+    a.band.quaternion.copy(a.fore.quaternion);
+    // Index finger up for the sign.
+    a.finger.visible = g.sign > 0.5;
+    a.finger.position.copy(hand).add(V(0, 0.13, 0.02));
+  }
+}
+
+scene.add(legend.carrier);
 
 function setYou(f) {
   if (!f) return;
@@ -369,6 +528,7 @@ function setYou(f) {
   you.carrier.add(you.body.group);
   you.cast = f.cast;
 }
+
 
 // ---------- Dirt ----------
 const DUST = 260;
@@ -405,8 +565,9 @@ const st = {
   shake: { x: 0, v: 0 },
   queue: [],
   gone: new Map(), // where something in use was when it was retired
+  lean: { x: 0, v: 0 },
   row: null,
-  cam: { pos: new THREE.Vector3(0, 3.0, 6.6), look: new THREE.Vector3(0, 1.3, -1) },
+  cam: { pos: new THREE.Vector3(0, 3.0, 6.6), look: new THREE.Vector3(0, 1.2, -1) },
 };
 
 function makeRacket(it, slot) {
@@ -421,7 +582,7 @@ function makeRacket(it, slot) {
   const r = { id: it.id, it, root, wob, body, hit, shadow, slot, e: { x: -3, v: 0 }, w: { x: 0, v: 0 }, lean: 0, mode: 'planted', pull: null, fly: null, hold: null, delay: 0, rose: false };
   hit.userData.racket = r;
   place(r);
-  // The one the ghost is about to bury waits out of sight until it comes down.
+  // The one the legend is about to bury waits out of sight until it comes down.
   if (it.id === st.planting) { r.mode = 'waiting'; root.visible = false; shadow.visible = false; }
   return r;
 }
@@ -530,307 +691,338 @@ window.setDomain = (data) => {
   panel();
 };
 
-/** The ghost buries something new: it comes down from over the ghost's head and is driven in. */
+/** The legend buries something new: it comes down from over the legend's head and is driven in. */
 window.plant = (id) => {
   if (st.open && st.t < 2.2) { if (!st.queue.includes(id)) st.queue.push(id); return; }
   const r = st.rackets.get(id);
   if (!r) return;
   r.root.visible = true;
-  const from = st.gone.get(id) || ghost.carrier.position.clone().add(new THREE.Vector3(0, 1.4, 0.2));
+  const from = st.gone.get(id) || legend.carrier.position.clone().add(new THREE.Vector3(0, 2.4, 0.2));
   st.gone.delete(id);
   r.mode = 'fly';
   r.fly = { t: 0, dur: 0.75, from, fromQ: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI)), fromS: r.scale * 0.7, spin: 2 };
   r.e.x = 0.3;
-  ghost.body.kick(0, -2.5, 0);
-  post({ type: 'ghost' });
+  legend.body.kick(0, -2.5, 0);
+  post({ type: 'laugh' });
 };
 
 
-// ---------- What you use now: the duo holds it ----------
-// Rackets in use float in front of the ghost, head up, fanned like blades it is holding: strings go brown and the grip greys as
-// they wear, and a clay tag hangs off anything due. Shoes stand at the foot of your pillar, with the ball cans and overgrip rolls.
-// Where something could go, a dashed outline waits; tap it to add one.
-const NOW_RACKETS = [
-  { p: new THREE.Vector3(0.06, 1.95, -0.55), rz: 0.4 },
-  { p: new THREE.Vector3(0.6, 2.15, -0.7), rz: 0.0 },
-  { p: new THREE.Vector3(1.1, 1.95, -0.55), rz: -0.4 },
-];
-const NOW_SHOES = [new THREE.Vector3(0.48, 0, 0.0), new THREE.Vector3(0.98, 0, -0.1)];
-const CAN_AT = new THREE.Vector3(0.0, 0, 0.05);
-const ROLL_AT = new THREE.Vector3(-0.42, 0, 0.12);
-const DEAD = new THREE.Color(0xb39a68);
-const now = { rackets: new Map(), shoes: new Map(), balls: null, grips: null, list: [], slotR: null, slotS: null, max: { racket: 3, shoes: 2 } };
-
-function label(text, bg, fg, w = 0.62) {
-  const t = tex(512, 112, (g, cw, ch) => {
-    g.fillStyle = bg; g.fillRect(0, 0, cw, ch);
-    g.strokeStyle = '#16181d'; g.lineWidth = 10; g.strokeRect(5, 5, cw - 10, ch - 10);
-    g.fillStyle = fg; g.font = '800 52px ui-monospace, Menlo, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(text, cw / 2, ch / 2 + 3);
-  });
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, fog: false }));
-  sp.scale.set(w, w * 112 / 512, 1);
-  sp.renderOrder = 4;
-  sp.userData.text = text;
-  return sp;
-}
-function setTag(o, text) {
-  if (!text) { if (o.tag) o.tag.visible = false; return; }
-  if (o.tag && o.tag.userData.text === text) { o.tag.visible = true; return; }
-  if (o.tag) { scene.remove(o.tag); o.tag.material.map.dispose(); }
-  o.tag = label(text, '#e2562f', '#16181d');
-  scene.add(o.tag);
-}
+// ---------- What you use now: the legend pulls it out ----------
+// Nothing in use sits in the scene. Pick RACKET or SHOES in the dock and the legend reaches behind his back, whips it out and
+// holds it up at you: strings browning (one snapped when they are dead), the wear lettered next to it with an ink line to the
+// part, your name for it on a tag. Scrub the strings with your finger and fresh string paints in under it; scrub the shoes and
+// the scuff comes off. Pick the same tab again (or swipe) and he swaps in the next one; past your last he holds up a blank.
+//
+// Motion: pull out 0.85 s (0-0.3 s the hand goes behind his back, it comes out with the thing spinning once and swings up with a
+// little overshoot); put away 0.5 s, the reverse. The shoes hang from his finger by the laces: a pendulum, kicked on arrival.
+const now = { list: [], max: { racket: 3, shoes: 2 } };
 const rowsOf = (it) => it.rows || [];
 const wornOf = (it, s) => (rowsOf(it).find((r) => r.s === s) || { worn: 0 }).worn;
-const dueWord = (it) => { const r = rowsOf(it).filter((x) => x.worn >= 1).sort((a, b) => b.worn - a.worn)[0]; return r ? r.verb : (it.low ? 'ORDER MORE' : ''); };
+const dueWord = (it) => { const r = rowsOf(it).filter((x) => x.worn >= 1).sort((a, b) => b.worn - a.worn)[0]; return r ? r.verb : ''; };
+const ofKind = (kind) => now.list.filter((i) => i.kind === kind).slice(0, now.max[kind]);
 
-function makeNowRacket(it) {
-  const { body, hit, bed, handle } = buildRacket();
+// The racket he shows. Its own string bed, drawn on a canvas so your finger can paint new string in.
+const bedCanvas = document.createElement('canvas');
+bedCanvas.width = 256; bedCanvas.height = 320;
+const bedG = bedCanvas.getContext('2d');
+const showBedTex = new THREE.CanvasTexture(bedCanvas);
+showBedTex.colorSpace = THREE.SRGBColorSpace;
+const FRESH_STR = '#fbfaf3';
+const DEAD_STR = '#9c7f4a';
+function strings(g, col, clip) {
+  g.save();
+  if (clip) { g.beginPath(); g.arc(clip.x, clip.y, clip.r, 0, TAU); g.clip(); }
+  g.strokeStyle = col; g.lineWidth = 4.5; g.lineCap = 'round';
+  for (let x = 14; x < 256; x += 19) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 320); g.stroke(); }
+  for (let y = 14; y < 320; y += 19) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }
+  g.restore();
+}
+function drawBed(worn, fresh) {
+  bedG.clearRect(0, 0, 256, 320);
+  if (fresh) { strings(bedG, FRESH_STR); showBedTex.needsUpdate = true; return; }
+  const col = new THREE.Color(FRESH_STR).lerp(new THREE.Color(DEAD_STR), clamp(worn, 0, 1)).getStyle();
+  strings(bedG, col);
+  if (worn >= 1) {
+    // One main string snapped: a gap with the two ends curling away.
+    bedG.clearRect(122, 120, 16, 70);
+    bedG.strokeStyle = col; bedG.lineWidth = 4.5;
+    bedG.beginPath(); bedG.moveTo(128, 120); bedG.quadraticCurveTo(140, 132, 150, 126); bedG.stroke();
+    bedG.beginPath(); bedG.moveTo(128, 190); bedG.quadraticCurveTo(114, 178, 104, 186); bedG.stroke();
+  }
+  showBedTex.needsUpdate = true;
+}
+const showR = (() => {
+  const { body, hit, bed } = buildRacket();
+  bed.material = new THREE.MeshBasicMaterial({ map: showBedTex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+  body.rotation.z = Math.PI; // head up
+  body.position.y = 1.6; // butt in his hand
   const g = new THREE.Group();
-  // Head up: flipped, and lifted so the racket's middle sits on the slot.
-  body.rotation.z = Math.PI;
-  body.position.y = 0.55;
   g.add(body);
-  g.scale.setScalar(0.66);
-  const r = { id: it.id, it, g, body, hit, spin: { x: 0, v: 0 }, sway: { x: 0, v: 0 }, ph: Math.random() * TAU, slot: 0, tag: null, rise: { x: -3, v: 0 } };
-  r.gripMat = gripMat.clone(); handle.material = r.gripMat;
-  const back = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshBasicMaterial({ color: DEAD, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: true }));
-  back.scale.copy(bed.scale); back.position.z = -0.004;
-  body.add(back);
-  r.back = back;
-  hit.userData.now = r;
-  scene.add(g);
-  return r;
+  g.scale.setScalar(0.9);
+  g.visible = false;
+  bed.userData.bed = true;
+  hit.userData.show = true;
+  return { g, body, bed, hit, frame: body.children[0] };
+})();
+const showS = (() => {
+  const g = new THREE.Group();
+  const lace = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1, 4).translate(0, -0.5, 0), toon(INK));
+  const pair = shoePair(true);
+  g.add(lace, pair);
+  g.scale.setScalar(2.1);
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), pickMat);
+  pair.add(hit);
+  hit.userData.show = true;
+  g.visible = false;
+  return { g, lace, pair, hit, a: { x: 0, v: 0 }, len: 0.3 };
+})();
+legend.parts.L.add(showR.g, showS.g);
+
+// What is out: { kind, idx, t, phase: 'in' | 'held' | 'out', then } (then: what to pull out once this one is put away).
+st.show = null;
+st.scrub = null; // { cells: Set, n, progress, done, dist, last: {x,y} }
+const currentOf = (sh) => { const list = ofKind(sh.kind); return sh.idx < list.length ? list[sh.idx] : null; };
+function showCount(kind) { const n = ofKind(kind).length; return n + (n < now.max[kind] ? 1 : 0); }
+function pullOut(kind, idx) {
+  if (st.show && st.show.phase !== 'out') { st.show.phase = 'out'; st.show.t = 0; st.show.then = { kind, idx }; return; }
+  if (st.show && st.show.phase === 'out') { st.show.then = { kind, idx }; return; }
+  st.show = { kind, idx, t: 0, phase: 'in', then: null };
+  st.scrub = null;
+  const it = currentOf(st.show);
+  if (kind === 'racket') drawBed(it ? wornOf(it, 'strings') : 0, false);
+  showS.pair.userData.upperMat.color.set(0xf4f1ea).lerp(new THREE.Color(0x9e978a), it ? clamp(wornOf(it, 'soles'), 0, 1) : 0);
+  post({ type: 'reach' });
+  focus(it ? it.id : null, true);
+  panel();
 }
-function nowRacketWear(r) {
-  const ws = wornOf(r.it, 'strings'); const wo = wornOf(r.it, 'overgrip');
-  r.back.material.opacity = 0.12 + 0.6 * clamp(ws, 0, 1);
-  r.gripMat.color.set(0xffffff).lerp(new THREE.Color(0x8f8a80), clamp(wo, 0, 1));
-  setTag(r, dueWord(r.it));
+function putAway() {
+  if (!st.show || st.show.phase === 'out') return;
+  st.show.phase = 'out'; st.show.t = 0; st.show.then = null;
+  post({ type: 'fling' });
+}
+/** Pick a tab: the first time pulls one out (the most worn first); again, the next one. */
+function tab(kind) {
+  if (st.show && st.show.kind === kind && st.show.phase !== 'out') { pullOut(kind, (st.show.idx + 1) % showCount(kind)); return; }
+  const list = ofKind(kind);
+  let idx = 0;
+  list.forEach((it, k) => { if (dueWord(it) && !dueWord(list[idx])) idx = k; });
+  pullOut(kind, idx);
 }
 
-function makeNowShoes(it) {
-  const g = new THREE.Group();
-  const pair = shoePair(false);
-  g.add(pair);
-  g.scale.setScalar(1.7);
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.36), pickMat);
-  hit.position.y = 0.08;
-  g.add(hit);
-  const o = { id: it.id, it, g, pair, hit, hop: { x: 0, v: 0 }, tag: null };
-  hit.userData.now = o;
-  scene.add(g);
-  return o;
-}
-
-// Ball cans: up to three on the ground; an open one has its lid off and a ball sitting in the mouth.
-const canTex = tex(256, 128, (g, w, h) => {
-  g.fillStyle = '#f2eee5'; g.fillRect(0, 0, w, h);
-  g.fillStyle = '#16181d'; g.fillRect(0, h * 0.3, w, h * 0.4);
-  g.fillStyle = '#e2562f'; g.fillRect(0, h * 0.42, w, h * 0.16);
-});
-function makeCans() {
-  const g = new THREE.Group();
-  const cans = [];
-  for (let k = 0; k < 4; k += 1) {
-    const c = new THREE.Group();
-    c.add(inked(at(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.26, 18), toon(0xffffff, { map: canTex })), 0, 0.13, 0), LINE.thin));
-    const lid = inked(at(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.025, 18), toon(INK)), 0, 0.272, 0), LINE.thin);
-    const ball = inked(at(new THREE.Mesh(new THREE.SphereGeometry(0.068, 16, 12), toon(0xd7f205)), 0, 0.29, 0), LINE.thin);
-    c.add(lid, ball);
-    c.userData = { lid, ball };
-    c.position.set((k % 2) * 0.17 - 0.08, 0, Math.floor(k / 2) * -0.17);
-    g.add(c);
-    cans.push(c);
-  }
-  g.scale.setScalar(1.45);
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.4, 0.42), pickMat);
-  hit.position.set(0, 0.18, -0.08);
-  g.add(hit);
-  g.position.copy(CAN_AT);
-  scene.add(g);
-  const o = { g, cans, hit, hop: { x: 0, v: 0 }, tag: null, it: null };
-  hit.userData.now = o;
-  return o;
-}
-// Overgrip rolls: little white wraps lying in a heap.
-function makeRolls() {
-  const g = new THREE.Group();
-  const rolls = [];
-  for (let k = 0; k < 4; k += 1) {
-    const r = inked(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.13, 16), toon(0xf4f1ea)), LINE.thin);
-    r.rotation.set(0, k * 0.7, Math.PI / 2);
-    r.position.set((k % 2) * 0.12 - 0.06, 0.05 + (k > 1 ? 0.09 : 0), (k > 1 ? -0.03 : 0) + (k % 2) * -0.05);
-    g.add(r);
-    rolls.push(r);
-  }
-  g.scale.setScalar(1.45);
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.3, 0.32), pickMat);
-  hit.position.y = 0.1;
-  g.add(hit);
-  g.position.copy(ROLL_AT);
-  scene.add(g);
-  const o = { g, rolls, hit, hop: { x: 0, v: 0 }, tag: null, it: null };
-  hit.userData.now = o;
-  return o;
-}
-
-// Dashed outlines where something could go.
-const dashMat = new THREE.LineDashedMaterial({ color: CLAY, linewidth: 2, dashSize: 0.05, gapSize: 0.035, fog: false });
-function dashed(points, closed) {
-  const geo = new THREE.BufferGeometry().setFromPoints(closed ? [...points, points[0]] : points);
-  const l = new THREE.Line(geo, dashMat);
-  l.computeLineDistances();
-  return l;
-}
-function racketOutline() {
-  const g = new THREE.Group();
-  const head = [];
-  for (let k = 0; k < 48; k += 1) { const a = (k / 48) * TAU; head.push(new THREE.Vector3(Math.cos(a) * 0.33, 0.55 + Math.sin(a) * 0.43, 0)); }
-  g.add(dashed(head, true));
-  g.add(dashed([new THREE.Vector3(-0.2, 0.2, 0), new THREE.Vector3(-0.05, -0.25, 0), new THREE.Vector3(-0.055, -1.05, 0), new THREE.Vector3(0.055, -1.05, 0), new THREE.Vector3(0.05, -0.25, 0), new THREE.Vector3(0.2, 0.2, 0)], false));
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.7, 0.3), pickMat);
-  hit.position.y = -0.1;
-  g.add(hit);
-  g.scale.setScalar(0.66);
-  const tag = label('ADD A RACKET', '#efece5', '#16181d', 0.5);
-  tag.position.set(0, -0.15, 0.05);
-  tag.scale.multiplyScalar(1 / 0.66);
-  g.add(tag);
-  scene.add(g);
-  const o = { g, hit, add: 'racket' };
-  hit.userData.now = o;
-  return o;
-}
-function shoesOutline() {
-  const g = new THREE.Group();
-  for (const sx of [-1, 1]) {
-    const pts = [];
-    for (let k = 0; k < 24; k += 1) { const a = (k / 24) * TAU; pts.push(new THREE.Vector3(sx * 0.085 + Math.cos(a) * 0.065, 0.004, Math.sin(a) * 0.16)); }
-    g.add(dashed(pts, true));
-  }
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.2, 0.4), pickMat);
-  hit.position.y = 0.08;
-  g.add(hit);
-  g.scale.setScalar(1.7);
-  const tag = label('ADD SHOES', '#efece5', '#16181d', 0.4);
-  tag.position.set(0, 0.16, 0);
-  tag.scale.multiplyScalar(1 / 1.7);
-  g.add(tag);
-  scene.add(g);
-  const o = { g, hit, add: 'shoes' };
-  hit.userData.now = o;
-  return o;
-}
-now.slotR = racketOutline();
-now.slotS = shoesOutline();
-now.balls = makeCans();
-now.grips = makeRolls();
-
-/** The gear in use, from the app: [{ id, kind, name, stock, low, hasOpen, rows: [{ s, word, verb, text, worn }] }]. */
+/** The gear in use, from the app: [{ id, kind, name, rows: [{ s, word, verb, text, worn }] }]. */
 function setNow(list) {
-  now.list = list || [];
-  const rackets = now.list.filter((i) => i.kind === 'racket').slice(0, now.max.racket);
-  for (const [id, r] of now.rackets) if (!rackets.find((i) => i.id === id)) { scene.remove(r.g); if (r.tag) scene.remove(r.tag); st.gone.set(id, r.g.getWorldPosition(new THREE.Vector3())); now.rackets.delete(id); burst(r.g.position, 20, 1.4); }
-  rackets.forEach((it, k) => {
-    let r = now.rackets.get(it.id);
-    if (!r) { r = makeNowRacket(it); now.rackets.set(it.id, r); if (st.clock > 1) r.rise.x = -1; }
-    r.it = it; r.slot = k;
-    nowRacketWear(r);
-  });
-  now.slotR.g.visible = rackets.length < now.max.racket;
-  now.slotR.k = rackets.length;
-  const shoes = now.list.filter((i) => i.kind === 'shoes').slice(0, now.max.shoes);
-  for (const [id, o] of now.shoes) if (!shoes.find((i) => i.id === id)) { scene.remove(o.g); if (o.tag) scene.remove(o.tag); now.shoes.delete(id); }
-  shoes.forEach((it, k) => {
-    let o = now.shoes.get(it.id);
-    if (!o) { o = makeNowShoes(it); now.shoes.set(it.id, o); }
-    o.it = it;
-    o.g.position.copy(NOW_SHOES[k]);
-    o.g.rotation.y = k ? -0.35 : 0.25;
-    o.pair.userData.upperMat.color.set(0xf4f1ea).lerp(new THREE.Color(0xa49d8e), clamp(wornOf(it, 'soles'), 0, 1));
-    setTag(o, dueWord(it));
-  });
-  now.slotS.g.visible = shoes.length < now.max.shoes;
-  if (now.slotS.g.visible) { now.slotS.g.position.copy(NOW_SHOES[shoes.length]); }
-  const balls = now.list.find((i) => i.kind === 'balls');
-  now.balls.it = balls || null;
-  now.balls.g.visible = !!balls;
-  if (balls) {
-    const shown = Math.min(3, balls.stock || 0) + (balls.hasOpen ? 1 : 0);
-    now.balls.cans.forEach((c, k) => {
-      c.visible = k < shown;
-      const open = balls.hasOpen && k === shown - 1;
-      c.userData.lid.visible = !open;
-      c.userData.ball.visible = open;
-      if (open) c.userData.ball.material.color.set(0xd7f205).lerp(new THREE.Color(0xa9a77e), clamp(wornOf(balls, 'can'), 0, 1));
-    });
-    setTag(now.balls, dueWord(balls));
+  const before = new Set(now.list.map((i) => i.id));
+  now.list = (list || []).filter((i) => i.kind === 'racket' || i.kind === 'shoes');
+  // Something just came in (named on the write page): keep showing it.
+  if (st.show) {
+    const n = ofKind(st.show.kind).length;
+    if (st.show.idx > n) st.show.idx = n;
+    const it = currentOf(st.show);
+    if (it && !before.has(it.id) && st.show.kind === 'racket') drawBed(wornOf(it, 'strings'), false);
+    if (it && st.scrub && st.scrub.done) { drawBed(wornOf(it, 'strings'), wornOf(it, 'strings') < 0.05); }
   }
-  const grips = now.list.find((i) => i.kind === 'grips');
-  now.grips.it = grips || null;
-  now.grips.g.visible = !!grips;
-  if (grips) {
-    now.grips.rolls.forEach((r, k) => { r.visible = k < Math.min(4, grips.stock || 0); });
-    setTag(now.grips, dueWord(grips));
-  }
-}
-const nowById = (id) => now.rackets.get(id) || now.shoes.get(id) || (now.balls.it && now.balls.it.id === id ? now.balls : null) || (now.grips.it && now.grips.it.id === id ? now.grips : null);
-
-function stepNow(dt) {
-  for (const r of now.rackets.values()) {
-    const slot = NOW_RACKETS[r.slot];
-    if (st.clock > 0.25 + r.slot * 0.12) spring1(r.rise, 0, dt, 2.2, 0.55);
-    spring1(r.spin, 0, dt, 1.2, 0.18);
-    spring1(r.sway, 0, dt, 3, 0.2);
-    r.g.position.copy(slot.p);
-    r.g.position.y += r.rise.x + 0.05 * Math.sin(st.clock * 1.3 + r.ph);
-    r.g.rotation.set(0, r.spin.x, slot.rz + 0.04 * Math.sin(st.clock * 0.9 + r.ph) + r.sway.x);
-    if (r.tag) r.tag.position.copy(r.g.localToWorld(new THREE.Vector3(0, 1.1, 0.1)));
-  }
-  if (now.slotR.g.visible) {
-    const slot = NOW_RACKETS[Math.min(now.slotR.k, 2)];
-    now.slotR.g.position.copy(slot.p);
-    now.slotR.g.position.y += 0.04 * Math.sin(st.clock * 1.1);
-    now.slotR.g.rotation.set(0, 0, slot.rz);
-    dashMat.dashOffset = -st.clock * 0.08;
-  }
-  for (const o of [...now.shoes.values(), now.balls, now.grips]) {
-    spring1(o.hop, 0, dt, 3.2, 0.35);
-    o.g.position.y = Math.max(0, o.hop.x);
-    if (o.tag) o.tag.position.copy(o.g.position).add(new THREE.Vector3(0, 0.55, 0.1));
-  }
+  buildDock();
 }
 
-// ---------- The slide strip: log the job on the thing you are looking at ----------
-const slide = createSlide({ post, onSlid: () => onSlid() });
-function onSlid() {
-  const o = st.focus && nowById(st.focus);
-  if (!o || !o.it) return;
-  post({ type: 'slid' });
-  if (o.it.kind === 'balls') {
-    if ((o.it.stock || 0) <= 0) return;
-    o.hop.v += 3; burst(o.g.position, 14, 1.5);
-    post({ type: 'crack' });
+function stepShow(dt) {
+  const sh = st.show;
+  if (!sh) { showR.g.visible = false; showS.g.visible = false; return; }
+  sh.t += dt;
+  if (sh.phase === 'in' && sh.t >= 0.85) sh.phase = 'held';
+  if (sh.phase === 'out' && sh.t >= 0.5) {
+    const then = sh.then;
+    st.show = null;
+    showR.g.visible = false; showS.g.visible = false;
+    if (then) pullOut(then.kind, then.idx); else { focus(null); panel(); }
     return;
   }
-  if (!st.row) return;
-  if (o.spin) { o.spin.v += 14; } else { o.hop.v += 3; }
-  burst(o.g.position, 16, 1.4);
-  post({ type: 'service', id: o.it.id, s: st.row });
+  const item = sh.kind === 'racket' ? showR : showS;
+  const other = sh.kind === 'racket' ? showS : showR;
+  other.g.visible = false;
+  // In his hand once it has come out from behind his back.
+  const out = sh.phase === 'in' ? sh.t >= 0.3 : sh.phase === 'held' || sh.t < 0.3;
+  item.g.visible = out;
+  const hand = legend.arms[1].hand.position;
+  const blank = !currentOf(sh);
+  if (sh.kind === 'racket') {
+    const spin = sh.phase === 'in' ? TAU * (1 - smooth((sh.t - 0.3) / 0.55)) : 0;
+    const grow = sh.phase === 'in' ? 0.25 + 0.75 * smooth((sh.t - 0.3) / 0.3) : sh.phase === 'out' ? 1 - smooth(sh.t / 0.3) : 1;
+    showR.g.position.copy(hand);
+    showR.g.rotation.set(0, spin + 0.12 * Math.sin(st.clock * 0.9), 0.22 + 0.04 * Math.sin(st.clock * 1.3));
+    showR.g.scale.setScalar(0.9 * Math.max(0.05, grow));
+    showR.bed.visible = !blank;
+    showR.frame.material = blank ? blankMat : frameMat;
+  } else {
+    // A pendulum off his finger, pushed when he swings it out.
+    const gL = 9.8 / (showS.len * 2.1);
+    if (sh.phase === 'in' && Math.abs(sh.t - 0.62) < dt) showS.a.v += 4;
+    showS.a.v += (-gL * Math.sin(showS.a.x) - 0.8 * showS.a.v) * dt;
+    showS.a.x += showS.a.v * dt;
+    showS.g.position.copy(hand).add(V(0, 0.08, 0));
+    showS.g.rotation.set(0, 0.5 + 0.3 * Math.sin(st.clock * 0.7), showS.a.x);
+    showS.lace.scale.y = showS.len;
+    showS.pair.position.y = -showS.len - 0.06;
+    const grow = sh.phase === 'in' ? 0.3 + 0.7 * smooth((sh.t - 0.3) / 0.3) : sh.phase === 'out' ? 1 - smooth(sh.t / 0.3) : 1;
+    showS.g.scale.setScalar(2.1 * Math.max(0.05, grow));
+    showS.pair.userData.upperMat.opacity = blank ? 0.35 : 1;
+    showS.pair.userData.upperMat.transparent = blank;
+  }
 }
+const blankMat = new THREE.MeshToonMaterial({ color: 0xf4f1ea, gradientMap: tones, transparent: true, opacity: 0.35 });
+
+// Scrubbing: paint new string where your finger goes; done at three quarters of the bed.
+const CELLS_X = 8; const CELLS_Y = 10;
+const bedCells = (() => { const out = []; for (let j = 0; j < CELLS_Y; j += 1) for (let i = 0; i < CELLS_X; i += 1) { const u = (i + 0.5) / CELLS_X; const v = (j + 0.5) / CELLS_Y; if ((u - 0.5) ** 2 + (v - 0.5) ** 2 < 0.24) out.push(j * CELLS_X + i); } return new Set(out); })();
+function scrubAt(x, y) {
+  const sh = st.show;
+  const it = sh && currentOf(sh);
+  if (!it || !st.scrub || st.scrub.done) return;
+  ray.setFromCamera(ndc(x, y), camera);
+  if (sh.kind === 'racket') {
+    const hit = ray.intersectObject(showR.bed, false)[0];
+    if (!hit || !hit.uv) return;
+    const px = hit.uv.x * 256; const py = (1 - hit.uv.y) * 320;
+    bedG.clearRect(px - 26, py - 26, 52, 52);
+    strings(bedG, FRESH_STR, { x: px, y: py, r: 26 });
+    showBedTex.needsUpdate = true;
+    const cell = Math.floor((1 - hit.uv.y) * CELLS_Y) * CELLS_X + Math.floor(hit.uv.x * CELLS_X);
+    if (bedCells.has(cell) && !st.scrub.cells.has(cell)) {
+      st.scrub.cells.add(cell);
+      if (st.scrub.cells.size % 3 === 0) post({ type: 'tick' });
+    }
+    st.scrub.progress = st.scrub.cells.size / bedCells.size;
+    if (Math.random() < 0.3) burst(hit.point, 2, 0.6);
+    if (st.scrub.progress >= 0.75) finishScrub(it, 'strings', hit.point);
+  } else {
+    const hit = ray.intersectObject(showS.hit, false)[0];
+    if (!hit) return;
+    if (st.scrub.last) st.scrub.dist += Math.hypot(x - st.scrub.last.x, y - st.scrub.last.y);
+    st.scrub.last = { x, y };
+    st.scrub.progress = clamp(st.scrub.dist / 1300, 0, 1);
+    showS.pair.userData.upperMat.color.set(0xf4f1ea).lerp(new THREE.Color(0x9e978a), clamp(wornOf(it, 'soles'), 0, 1) * (1 - st.scrub.progress));
+    showS.a.v += (Math.random() - 0.5) * 0.8;
+    if (Math.random() < 0.35) burst(hit.point, 3, 1);
+    if (Math.floor(st.scrub.progress * 10) > (st.scrub.ticks || 0)) { st.scrub.ticks = Math.floor(st.scrub.progress * 10); post({ type: 'tick' }); }
+    if (st.scrub.progress >= 1) finishScrub(it, 'soles', hit.point);
+  }
+  notes();
+}
+function finishScrub(it, s, at) {
+  st.scrub.done = true;
+  if (s === 'strings') drawBed(0, true);
+  else showS.pair.userData.upperMat.color.set(0xf4f1ea);
+  burst(at, 30, 2);
+  legend.laugh = 0.6;
+  post({ type: 'service', id: it.id, s });
+  notes();
+}
+
+// ---------- The dock ----------
+// The same floating platforms and hopping ball as home. Three: RACKET, SHOES and the domain, which is its own kind of button.
+let dock = null;
+let dockSig = '';
+st.dockSlots = [];
+function buildDock() {
+  const slots = [
+    { kind: 'racket', label: 'RACKET', due: ofKind('racket').some((i) => dueWord(i)) },
+    { kind: 'shoes', label: 'SHOES', due: ofKind('shoes').some((i) => dueWord(i)) },
+    { domain: true, label: st.open ? 'LEAVE' : 'DOMAIN' },
+  ];
+  const sig = JSON.stringify(slots);
+  if (sig === dockSig) return;
+  dockSig = sig;
+  st.dockSlots = slots;
+  // A fresh element each time, so old click handlers go with the old one.
+  const old = $('dock');
+  const fresh = old.cloneNode(false);
+  fresh.innerHTML = '<div id="dshadow"></div><div id="dball"><i></i></div>';
+  old.replaceWith(fresh);
+  dock = createDock({ slots: slots.map((x, k) => ({ i: k + 1, label: x.label })), onPick: (i) => pickSlot(i), post });
+  fresh.querySelectorAll('.slot').forEach((b, k) => { b.classList.toggle('due', !!slots[k].due); b.classList.toggle('dom', !!slots[k].domain); });
+  dock.place(3);
+  markDock();
+}
+function markDock() {
+  if (!dock) return;
+  const k = st.show ? st.dockSlots.findIndex((x) => x.kind === st.show.kind) : -1;
+  dock.mark(k >= 0 ? k + 1 : -1);
+}
+function pickSlot(i) {
+  const x = st.dockSlots[i - 1];
+  if (!x) return;
+  dock.hop(i);
+  if (x.kind) { tab(x.kind); markDock(); return; }
+  if (x.domain) {
+    putAway();
+    if (st.open) collapse(); else if (!st.charge.auto) { st.charge.auto = true; st.charge.ticks = 0; }
+  }
+}
+
+// ---------- Notes on the thing he is holding ----------
+// Lettered next to it with an ink line to the part they are about, and the name on a tag you can tap.
+const notesEl = $('notes');
+const lineEl = $('nline');
+function notes() {
+  const sh = st.show;
+  const on = sh && (sh.phase === 'held' || (sh.phase === 'in' && sh.t > 0.7));
+  notesEl.classList.toggle('on', !!on);
+  $('tag').classList.toggle('on', !!on);
+  if (!on) return;
+  const it = currentOf(sh);
+  const anchor = sh.kind === 'racket' ? showR.bed.getWorldPosition(new THREE.Vector3()) : showS.pair.getWorldPosition(new THREE.Vector3());
+  const a = anchor.clone().project(camera);
+  const ax = (a.x * 0.5 + 0.5) * window.innerWidth; const ay = (-a.y * 0.5 + 0.5) * window.innerHeight;
+  const box = $('note');
+  if (!it) {
+    $('nword').textContent = sh.kind === 'racket' ? 'NEW RACKET?' : 'NEW SHOES?';
+    $('nwhat').textContent = '';
+    $('ntext').textContent = 'tap it to add one';
+  } else {
+    const s = sh.kind === 'racket' ? 'strings' : 'soles';
+    const row = rowsOf(it).find((r) => r.s === s);
+    const w = row ? row.worn : 0;
+    const sc = st.scrub;
+    $('nword').textContent = sc && sc.done ? 'FRESH' : sc && sc.progress > 0 ? `${Math.round(sc.progress * 100)}%` : w >= 1 ? (s === 'strings' ? 'DEAD' : 'WORN OUT') : w >= 0.6 ? 'TIRED' : 'FRESH';
+    $('nwhat').textContent = s === 'strings' ? 'STRINGS' : 'SOLES';
+    $('ntext').textContent = sc && sc.done ? (s === 'strings' ? 'restrung. logged.' : 'new pair. logged.') : row ? row.text : '';
+  }
+  box.classList.toggle('due', !!(it && dueWord(it)) && !(st.scrub && st.scrub.done));
+  const r = box.getBoundingClientRect();
+  const right = ax < window.innerWidth / 2;
+  const bx = right ? window.innerWidth - 16 - r.width : 16; const by = clamp(ay - r.height - 40, 70, window.innerHeight * 0.5);
+  box.style.transform = `translate(${bx}px,${by}px)`;
+  lineEl.setAttribute('x1', String(right ? bx : bx + r.width)); lineEl.setAttribute('y1', String(by + r.height * 0.6));
+  lineEl.setAttribute('x2', String(ax)); lineEl.setAttribute('y2', String(ay));
+  $('ndot').setAttribute('cx', String(ax)); $('ndot').setAttribute('cy', String(ay));
+  // The name tag hangs at his hand.
+  const h = legend.arms[1].hand.getWorldPosition(new THREE.Vector3()).project(camera);
+  const tg = $('tag');
+  tg.textContent = it ? it.name : sh.kind === 'racket' ? '+ NEW RACKET' : '+ NEW SHOES';
+  tg.style.transform = `translate(${(h.x * 0.5 + 0.5) * window.innerWidth}px,${(-h.y * 0.5 + 0.5) * window.innerHeight + 26}px) translateX(-50%) rotate(-4deg)`;
+}
+let pressTimer = 0;
+$('tag').addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  const it = st.show && currentOf(st.show);
+  if (!it) return;
+  pressTimer = setTimeout(() => { pressTimer = -1; post({ type: 'remove', id: it.id }); }, 650);
+});
+$('tag').addEventListener('pointerup', (e) => {
+  e.stopPropagation();
+  const it = st.show && currentOf(st.show);
+  if (!it) { post({ type: 'add', kind: st.show ? st.show.kind : 'racket' }); return; }
+  if (pressTimer !== -1) { clearTimeout(pressTimer); post({ type: 'edit', id: it.id }); }
+  pressTimer = 0;
+});
+$('tag').addEventListener('pointercancel', () => { clearTimeout(pressTimer); pressTimer = 0; });
 
 // ---------- Panel ----------
 const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
-const KIND = { racket: 'RACKET', shoes: 'SHOES', balls: 'BALLS', grips: 'OVERGRIPS' };
 function panel() {
   const ui = $('ui');
   const past = st.focus && (st.rackets.get(st.focus) || st.shoes.get(st.focus));
-  const cur = !past && st.focus && nowById(st.focus);
-  ui.classList.toggle('focus', !!(past || cur));
+  ui.classList.toggle('focus', !!past);
   ui.classList.toggle('past', !!past);
-  ui.classList.toggle('now', !!cur);
   if (past) {
     const d = past.it;
     $('kind').textContent = d.kind === 'shoes' ? 'SHOES' : 'RACKET';
@@ -839,89 +1031,67 @@ function panel() {
     $('sub').textContent = 'WON-LOST WITH IT';
     $('facts').replaceChildren(...(d.lines || []).map((t) => { const li = document.createElement('li'); li.textContent = t; return li; }));
     $('how').textContent = st.held ? 'tap anywhere to put it back in the ground' : 'pull it up out of the ground';
-    slide.setKey('', '', '');
     return;
   }
-  if (cur) {
-    const it = cur.it;
-    $('nkind').textContent = KIND[it.kind];
-    $('nname').textContent = it.name;
-    const rows = rowsOf(it);
-    if (!st.row || !rows.find((r) => r.s === st.row)) st.row = rows.length ? [...rows].sort((a, b) => b.worn - a.worn)[0].s : null;
-    let html = rows.map((r) => `<button class="row${r.s === st.row && rows.length > 1 ? ' on' : ''}${r.worn >= 1 ? ' due' : ''}" data-s="${r.s}"><b>${r.word}</b><span>${esc(r.text)}</span><i class="bar"><u style="width:${Math.round(Math.min(1, r.worn) * 100)}%"></u></i><em>${r.worn >= 1 ? 'DUE NOW' : r.worn >= 0.6 ? 'WEARING' : 'FRESH'}</em></button>`).join('');
-    if (it.kind === 'balls' || it.kind === 'grips') {
-      const n = it.stock || 0;
-      const what = it.kind === 'balls' ? (n === 1 ? 'can' : 'cans') : (n === 1 ? 'overgrip' : 'overgrips');
-      html += `<div class="stock${it.low ? ' due' : ''}"><b>${n}</b><span>${what} left${it.low ? '. running low.' : ''}</span><button id="addone">+1</button><button id="order">ORDER</button></div>`;
-    }
-    if (it.kind === 'racket' || it.kind === 'shoes') html += '<p class="how">tap the name to rename it. hold it to retire it into the ground.</p>';
-    $('rows').innerHTML = html;
-    const row = rows.find((r) => r.s === st.row);
-    if (it.kind === 'balls') slide.setKey((it.stock || 0) > 0 ? '01' : '', 'CRACK A NEW CAN', 'SLIDE TO OPEN ONE');
-    else if (row) slide.setKey('01', row.verb, 'SLIDE WHEN IT IS DONE');
-    else slide.setKey('', '', '');
-    return;
-  }
-  slide.setKey('', '', '');
   const d = st.data || {};
   const inside = d.inside || {};
+  const sh = st.show;
+  if (sh) {
+    const n = ofKind(sh.kind).length;
+    const it = currentOf(sh);
+    $('h1').textContent = it ? it.name : sh.kind === 'racket' ? 'A NEW RACKET.' : 'NEW SHOES.';
+    $('h2').textContent = it ? `${sh.kind === 'racket' ? 'RACKET' : 'SHOES'} ${sh.idx + 1} OF ${n}` : '';
+    $('due').innerHTML = '';
+    $('hint').textContent = !it ? 'tap the tag to add it' : sh.kind === 'racket' ? `scrub the strings to restring them.${showCount('racket') > 1 ? ' tap RACKET for the next one.' : ''}` : 'scrub them clean when you get a new pair.';
+    return;
+  }
   $('h1').textContent = st.open ? 'YOUR DOMAIN.' : d.title || 'YOUR GEAR.';
   $('h2').textContent = st.open ? inside.sub || '' : d.sub || '';
   const due = st.open ? [] : d.due || [];
   $('due').innerHTML = due.slice(0, 3).map((t) => `<li>${esc(t)}</li>`).join('');
-  $('hint').textContent = st.open ? inside.hint || '' : d.hint || 'hold your fighter to expand your domain';
+  $('hint').textContent = st.open ? inside.hint || '' : d.hint || 'hold your fighter, or tap DOMAIN, to expand it';
 }
-function focus(id) {
-  if (st.focus !== id) st.row = null;
+function focus(id, quiet) {
   st.focus = id;
+  markDock();
   panel();
-  post({ type: 'focus', id });
+  if (!quiet) post({ type: 'focus', id });
 }
-$('rows').addEventListener('click', (e) => {
-  const b = e.target.closest('.row');
-  if (b && b.dataset.s !== st.row) { st.row = b.dataset.s; post({ type: 'tick' }); panel(); }
-  const o = st.focus && nowById(st.focus);
-  if (!o || !o.it) return;
-  if (e.target.closest('#order')) post({ type: 'order', kind: o.it.kind });
-  if (e.target.closest('#addone')) { o.hop.v += 2.5; post({ type: 'restock', kind: o.it.kind }); }
-});
-let pressTimer = 0;
-$('nname').addEventListener('pointerdown', () => { pressTimer = setTimeout(() => { pressTimer = -1; post({ type: 'remove', id: st.focus }); }, 650); });
-$('nname').addEventListener('pointerup', () => { if (pressTimer !== -1) { clearTimeout(pressTimer); post({ type: 'edit', id: st.focus }); } pressTimer = 0; });
-$('nname').addEventListener('pointercancel', () => { clearTimeout(pressTimer); pressTimer = 0; });
 
-/** The app retired something in use: it leaves the ghost's hands and gets planted. */
+/** The app retired something in use: it leaves his hand and gets planted. */
 window.retire = (id) => {
-  const r = now.rackets.get(id);
-  if (r) st.gone.set(id, r.g.getWorldPosition(new THREE.Vector3()));
+  if (st.show && showR.g.visible) st.gone.set(id, showR.bed.getWorldPosition(new THREE.Vector3()));
+  else if (st.show && showS.g.visible) st.gone.set(id, showS.pair.getWorldPosition(new THREE.Vector3()));
   st.planting = id;
   st.queue.push(id);
-  if (st.focus === id) focus(null);
+  // Gone from his hand at once.
+  st.show = null; showR.g.visible = false; showS.g.visible = false;
+  focus(null, true);
 };
 
 // ---------- Input ----------
 const ray = new THREE.Raycaster();
 const ndc = (x, y) => new THREE.Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
 let down = null;
+let down_dx = 0;
 
 function pick(x, y) {
   ray.setFromCamera(ndc(x, y), camera);
   const objs = [];
   for (const r of st.rackets.values()) if ((r.mode === 'planted' && st.open && r.e.x > -0.3) || r.mode === 'held') objs.push(r.hit);
   for (const s of st.shoes.values()) objs.push(s.hit);
-  for (const r of now.rackets.values()) objs.push(r.hit);
-  for (const o of now.shoes.values()) objs.push(o.hit);
-  for (const o of [now.balls, now.grips, now.slotR, now.slotS]) if (o.g.visible) objs.push(o.hit);
+  if (showR.g.visible) objs.push(showR.bed, showR.hit);
+  if (showS.g.visible) objs.push(showS.hit);
   if (you.body) objs.push(you.body.mesh);
-  objs.push(ghost.body.mesh);
+  objs.push(legend.body.mesh);
   const hit = ray.intersectObjects(objs, false)[0];
   if (!hit) return null;
   const o = hit.object;
-  if (o.userData.now) return { now: o.userData.now, point: hit.point };
+  if (o.userData.show || o.userData.bed) return { show: true, point: hit.point };
   if (o.userData.racket) return { racket: o.userData.racket, point: hit.point };
   if (o.userData.shoes) return { shoes: o.userData.shoes, point: hit.point };
   if (you.body && o === you.body.mesh) return { jelly: you, point: hit.point };
-  return { jelly: ghost, point: hit.point };
+  return { jelly: legend, point: hit.point };
 }
 
 function putBack(r) {
@@ -936,6 +1106,14 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   down = { x: e.clientX, y: e.clientY, t: performance.now(), hit: pick(e.clientX, e.clientY), yaw0: st.yaw.target, moved: 0 };
   if (st.held) return;
+  // Your finger on what he is holding: scrub it.
+  if (down.hit && down.hit.show && st.show && st.show.phase === 'held' && currentOf(st.show)) {
+    if (!st.scrub) st.scrub = { cells: new Set(), progress: 0, dist: 0, last: null, done: false };
+    st.scrub.last = null;
+    down.scrub = true;
+    scrubAt(e.clientX, e.clientY);
+    return;
+  }
   // Pressing your fighter outside the domain starts the charge.
   if (!st.open && down.hit && down.hit.jelly === you) { st.charge.holding = true; st.charge.ticks = 0; post({ type: 'grab' }); return; }
   const r = down.hit && down.hit.racket;
@@ -948,20 +1126,26 @@ canvas.addEventListener('pointermove', (e) => {
   if (!down) return;
   const dx = e.clientX - down.x; const dy = e.clientY - down.y;
   down.moved = Math.max(down.moved, Math.hypot(dx, dy));
+  down.dx = dx; down_dx = dx;
   if (st.held) return;
+  if (down.scrub) { scrubAt(e.clientX, e.clientY); return; }
   const r = down.hit && down.hit.racket;
   if (r && r.pull) {
     r.pull.target = Math.max(0, -dy) / (window.innerHeight * 0.22);
     r.pull.bend = clamp(dx / window.innerWidth, -0.35, 0.35) * 1.6;
     return;
   }
-  if (!down.hit) st.yaw.target = clamp(down.yaw0 - (dx / window.innerWidth) * 0.9, -0.4, 0.4);
+  if (!down.hit && !st.show) st.yaw.target = clamp(down.yaw0 - (dx / window.innerWidth) * 0.9, -0.4, 0.4);
 });
 function release() {
   if (!down) return;
   const tap = down.moved < 10 && performance.now() - down.t < 350;
   const hit = down.hit;
+  const wasScrub = down.scrub;
+  const swipe = !wasScrub && Math.abs(down.dx || 0) > 60;
   down = null;
+  if (wasScrub) return;
+  if (swipe && st.show) { pullOut(st.show.kind, (st.show.idx + (down_dx > 0 ? showCount(st.show.kind) - 1 : 1)) % showCount(st.show.kind)); return; }
   if (st.charge.holding) {
     st.charge.holding = false;
     if (!tap && st.charge.x > 0.15) { post({ type: 'fizzle' }); return; }
@@ -978,19 +1162,18 @@ function release() {
     return;
   }
   if (!tap) return;
-  if (hit && hit.now) {
-    const o = hit.now;
-    if (o.add) { post({ type: 'add', kind: o.add }); return; }
-    if (o.spin) { o.spin.v += 9; o.sway.v += 2; post({ type: 'swish' }); } else { o.hop.v += 2.4; post({ type: 'hop' }); }
-    if (o.it) focus(o.it.id);
+  if (hit && hit.show) {
+    if (st.show && !currentOf(st.show)) post({ type: 'add', kind: st.show.kind });
     return;
   }
+  // Tapping anywhere else while he holds something: he puts it away.
+  if (st.show) { putAway(); if (hit && hit.jelly === legend) { legend.body.poke(); post({ type: 'laugh' }); } return; }
   if (hit && hit.shoes) { hit.shoes.a.v += 3; post({ type: 'swing' }); focus(hit.shoes.it.id); return; }
   if (hit && hit.jelly) {
     const j = hit.jelly;
     const local = j.body.group.worldToLocal(hit.point.clone());
-    j.body.poke(local, new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.25, -1).normalize(), j === ghost ? 4 : 6, 0.5);
-    post({ type: j === ghost ? 'ghost' : 'poke' });
+    j.body.poke(local, new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.25, -1).normalize(), j === legend ? 4 : 6, 0.5);
+    post({ type: j === legend ? 'laugh' : 'poke' });
     return;
   }
   if (st.focus) focus(null);
@@ -1001,14 +1184,16 @@ canvas.addEventListener('pointerup', release);
 function expand() {
   if (st.open) return;
   st.open = true; st.t = 0;
-  st.charge.holding = false; st.charge.x = 0;
+  st.charge.holding = false; st.charge.auto = false; st.charge.x = 0;
   if (down) down = null;
+  putAway();
   if (you.body) { you.body.squash = 0; you.body.kick(0, 3.5, 0); }
-  ghost.body.kick(0, 2, 0);
+  legend.body.kick(0, 2, 0);
   st.shake.v += 7;
   burst(new THREE.Vector3(YOU_AT.x, 0, YOU_AT.z), 50, 2.8);
   if (st.focus) focus(null);
   post({ type: 'expand' });
+  buildDock();
   panel();
 }
 function collapse() {
@@ -1017,6 +1202,7 @@ function collapse() {
   st.shake.v += 4;
   if (st.focus) focus(null);
   post({ type: 'collapse' });
+  buildDock();
   panel();
 }
 window.expand = expand;
@@ -1026,9 +1212,36 @@ canvas.addEventListener('pointercancel', release);
 /** The app's back button: put down what you are holding, then let go of the focus, then leave. Returns true if it did something. */
 window.unfocus = () => {
   if (st.held) { putBack(st.held); return true; }
+  if (st.show) { putAway(); return true; }
   if (st.focus) { focus(null); return true; }
   return false;
 };
+
+
+// ---------- The domain itself: a ball of ink ----------
+// Drawn inside out, so only its far side shows: it sits behind your fighter and the legend, never over them. Charging grows it
+// round the two of them; at full charge it swells past the camera in 0.5 s and the whole world is inside; then it thins away
+// into the domain's sky. Closing, it starts all round you and shrinks to nothing in 0.55 s, letting the paper back in.
+const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), new THREE.MeshBasicMaterial({ color: 0x0b0c0e, side: THREE.BackSide, transparent: true, depthWrite: false, fog: false }));
+dome.renderOrder = -1;
+scene.add(dome);
+function domeFrame() {
+  const centre = you.carrier.position.clone().lerp(legend.carrier.position, 0.5).add(V(0, 0.6, 0));
+  dome.position.copy(centre);
+  let r = 0; let o = 1;
+  if (st.open) {
+    r = st.t < 0.5 ? lerp(2.4, 40, smooth(st.t / 0.5) ** 2) : 40;
+    o = 1 - smooth((st.t - 0.6) / 0.7);
+  } else if (st.t < 0.55 && st.t < 90) {
+    r = lerp(40, 0.01, smooth(st.t / 0.55));
+  } else if (st.charge.x > 0.001) {
+    r = 0.4 + 2.0 * smooth(st.charge.x);
+    o = 0.4 + 0.6 * st.charge.x;
+  }
+  dome.visible = r > 0.02 && o > 0.01 && !REDUCED;
+  dome.scale.setScalar(Math.max(0.01, r));
+  dome.material.opacity = o;
+}
 
 // ---------- Simulation ----------
 const v3 = new THREE.Vector3();
@@ -1155,16 +1368,6 @@ function cordProgress(k) {
   knot.scale.set(1, 0.85, 0.45).multiplyScalar(clamp((k - 0.55) / 0.2, 0, 1));
 }
 
-function bondCord() {
-  if (!you.body) { bond.visible = false; return; }
-  const a = you.carrier.localToWorld(you.body.com().add(new THREE.Vector3(0.45, 0.1, 0)));
-  const b = ghost.carrier.localToWorld(ghost.body.com().add(new THREE.Vector3(-0.5, -0.1, 0.1)));
-  const mid = a.clone().lerp(b, 0.5); mid.y -= 0.35;
-  const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
-  bond.geometry.dispose();
-  bond.geometry = new THREE.TubeGeometry(curve, 24, 0.022, 6, false);
-  bond.visible = ghost.grow.x > 0.5;
-}
 
 function step(dt) {
   st.clock += dt;
@@ -1176,13 +1379,14 @@ function step(dt) {
   }
   // The charge: hold your fighter and it fills; let go and it drains.
   const c = st.charge;
-  if (c.holding && !st.open) {
+  if ((c.holding || c.auto) && !st.open) {
     c.x = Math.min(1, c.x + dt / 1.1);
     const q = Math.floor(c.x * 4);
     if (q > c.ticks) { c.ticks = q; post({ type: 'charge', v: c.x }); }
+    if (!c.kissed && c.x >= 0.42) { c.kissed = true; post({ type: 'kiss' }); }
     st.shake.v += (Math.random() - 0.5) * 30 * c.x * dt * 10;
     if (c.x >= 1) expand();
-  } else c.x = Math.max(0, c.x - dt * 3);
+  } else { c.x = Math.max(0, c.x - dt * 3); if (c.x < 0.3) c.kissed = false; }
   if (you.body) you.body.squash = c.x * 0.7;
   // Outside, your fighter stands front and center. As your pillar comes up it hops on and rides it; as it sinks it hops off.
   const k = clamp(1 - youPillar.s.x / youPillar.down, 0, 1);
@@ -1190,17 +1394,20 @@ function step(dt) {
   you.carrier.position.set(lerp(OUT_SPOT.x, YOU_AT.x, clamp(k * 1.6, 0, 1)), Math.max(0, YOU_AT.y + youPillar.s.x) * k + hop * (1 - k), lerp(OUT_SPOT.z, YOU_AT.z, clamp(k * 1.6, 0, 1)));
   you.carrier.scale.setScalar(lerp(0.44, 0.34, k));
   // The sky turns while the ink covers the page.
-  scene.background = (st.open ? st.t > 0.3 : st.t < 0.22) && st.t < 90 ? inkSky : paperSky;
+  scene.background = st.open && st.t > 0.3 ? inkSky : paperSky;
   for (const r of st.rackets.values()) stepRacket(r, dt);
   for (const s of st.shoes.values()) stepShoes(s, dt);
-  stepNow(dt);
-  slide.step(dt);
-  // The ghost swells in after the field, and bobs.
-  if (st.clock > 0.2) spring1(ghost.grow, 1, dt, 1.6, 0.5);
-  ghost.carrier.scale.setScalar(1.25 * Math.max(0, ghost.grow.x) * (1 + 0.12 * c.x));
-  // While you charge, the ghost leans down over your fighter.
-  ghost.carrier.position.set(lerp(0.75, YOU_AT.x + 0.7, c.x * 0.5), 2.2 - c.x * 0.5 + 0.08 * Math.sin((st.clock * TAU) / 4.6), -2.6 + c.x * 0.6);
-  ghost.body.simulate(dt, st.clock);
+  if (dock) dock.step(dt);
+  // The legend swells in after the field, and bobs.
+  if (st.clock > 0.2) spring1(legend.grow, 1, dt, 1.6, 0.5);
+  legend.carrier.scale.setScalar(1.2 * Math.max(0, legend.grow.x) * (1 + 0.08 * c.x));
+  // It crouches over your fighter wherever your fighter is; while you charge it leans further down over it.
+  const gb = G_OUT.clone().lerp(G_IN, k);
+  spring1(st.lean, st.show && st.show.phase !== 'out' ? 1 : 0, dt, 1.8, 0.8);
+  legend.carrier.position.set(gb.x - 0.45 * st.lean.x, gb.y - c.x * 0.35 + 0.06 * Math.sin((st.clock * TAU) / 4.6), gb.z + c.x * 0.4);
+  legend.carrier.rotation.x = c.x * 0.25; // leans in over your fighter while you charge
+  legend.body.simulate(dt, st.clock);
+  stepShow(dt);
   if (you.body) you.body.simulate(dt, st.clock + 0.7);
   // Dirt.
   for (let i = 0; i < DUST; i += 1) {
@@ -1232,26 +1439,9 @@ function frameCam() {
 
 function pose() {
   cordProgress(st.open ? (REDUCED ? 1 : (st.t - 0.6) / 1.1) : 1 - st.t / 0.35);
-  bondCord();
-  ghost.body.render(st.clock);
-  // The ghost is not cute: pinprick pupils and a wide open maw where the smile would be.
-  ghost.body.smile.visible = false;
-  ghost.body.mouthO.visible = true;
-  ghost.body.mouthO.scale.set(1.9 + 0.15 * Math.sin(st.clock * 2.1), 2.3 + 0.2 * Math.sin(st.clock * 1.7), 0.3);
-  ghost.body.mouthO.position.set(0, -0.3, 0.03);
-  for (const e of ghost.sockets) { e.position.set(e.userData.sx * 0.15, 0.06, 0.02); e.rotation.z = -e.userData.sx * 0.25; e.userData.glint.visible = (st.clock % 3.7) > 0.12; }
+  legend.body.render(st.clock);
   if (you.body) you.body.render(st.clock + 0.7);
-  // Ink: closing in round your fighter as you charge, covering everything as it opens, a blink as it closes.
-  const vd = st.open ? clamp(1 - (st.t - 0.3) / 0.6, 0, 1) : st.t < 0.45 ? Math.sin((Math.PI * st.t) / 0.45) * 0.9 : 0;
-  $('void').style.opacity = REDUCED ? 0 : vd;
-  const veil = $('veil');
-  if (st.charge.x > 0.001 && !st.open) {
-    const p = you.carrier.position.clone().add(new THREE.Vector3(0, 0.3, 0)).project(camera);
-    const x = (p.x * 0.5 + 0.5) * 100; const y = (-p.y * 0.5 + 0.5) * 100;
-    const r = 140 - 125 * st.charge.x;
-    veil.style.opacity = 1;
-    veil.style.background = `radial-gradient(circle at ${x}% ${y}%, rgba(11,12,14,0) ${r * 0.55}%, rgba(11,12,14,.96) ${r}%)`;
-  } else veil.style.opacity = 0;
+  domeFrame();
   document.body.classList.toggle('open', st.open && st.t > 0.15);
 }
 
@@ -1283,7 +1473,8 @@ function frame(now) {
   }
   frameCam();
   pose();
-  slide.render(st.clock);
+  notes();
+  if (dock) dock.render();
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
@@ -1292,13 +1483,11 @@ requestAnimationFrame(frame);
 window.demoDomain = (planting = null) => window.setDomain({
   planting,
   you: { cast: 'wall', color: '#d7f205', name: 'TONY' },
-  title: 'YOUR GEAR.', sub: '2 THINGS DUE.', inside: { sub: '6 PLANTED. 112 MATCHES IN THE GROUND.', hint: 'pull one up to see what it won. back closes it.' }, due: ['PURE AERO: restring', 'balls: order more'], hint: 'hold your fighter to expand your domain',
+  title: 'YOUR GEAR.', sub: '1 THING DUE.', inside: { sub: '6 PLANTED. 112 MATCHES IN THE GROUND.', hint: 'pull one up to see what it won. back closes it.' }, due: ['PURE AERO: restring'], hint: 'hold your fighter, or tap DOMAIN, to expand it',
   gear: [
-    { id: 'n1', kind: 'racket', name: 'PURE AERO 2026', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '17 of 15 matches, 64 of 90 days', worn: 1.13 }, { s: 'overgrip', word: 'OVERGRIP', verb: 'NEW OVERGRIP', text: '2 of 5 matches, 9 of 30 days', worn: 0.4 }] },
-    { id: 'n2', kind: 'racket', name: 'BLADE 98 V9', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '4 of 15 matches, 20 of 90 days', worn: 0.27 }, { s: 'overgrip', word: 'OVERGRIP', verb: 'NEW OVERGRIP', text: '4 of 5 matches, 25 of 30 days', worn: 0.83 }] },
+    { id: 'n1', kind: 'racket', name: 'PURE AERO 2026', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '17 of 15 matches, 64 of 90 days', worn: 1.13 }] },
+    { id: 'n2', kind: 'racket', name: 'BLADE 98 V9', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '4 of 15 matches, 20 of 90 days', worn: 0.27 }] },
     { id: 'n3', kind: 'shoes', name: 'GEL RESOLUTION', rows: [{ s: 'soles', word: 'SOLES', verb: 'NEW PAIR', text: '30 of 50 matches, 100 of 180 days', worn: 0.6 }] },
-    { id: 'balls', kind: 'balls', name: 'PENN', stock: 1, low: true, hasOpen: true, rows: [{ s: 'can', word: 'OPEN CAN', verb: 'CRACK A NEW CAN', text: '2 of 3 matches, 9 of 14 days', worn: 0.66 }] },
-    { id: 'grips', kind: 'grips', name: 'OVERGRIPS', stock: 3, rows: [] },
   ],
   items: [
     { id: 'a', kind: 'racket', name: 'PURE AERO', matches: 41, record: '27-14', lines: ['41 matches over 7 months', 'best win 6-1 6-2 over DANIEL', 'planted MAR 2026'] },
@@ -1315,5 +1504,9 @@ window.__hold = (id) => { const r = st.rackets.get(id); if (!r) return; r.pull =
 window.__st = st;
 window.__focus = (id) => focus(id);
 window.__charge = (on) => { st.charge.holding = on; };
+window.__pose = (c) => { st.charge.x = c; };
+window.__tab = (k) => tab(k);
+window.__dbg = () => { const w = (o) => o.getWorldPosition(new THREE.Vector3()).toArray().map((n) => n.toFixed(2)).join(','); return { hand: w(legend.arms[1].hand), handL: w(legend.arms[0].hand), g: w(showR.g), bed: w(showR.bed), sx: legend.arms[1].sx }; };
+window.__scrub = (pts) => { if (!st.scrub) st.scrub = { cells: new Set(), progress: 0, dist: 0, last: null, done: false }; for (const [x, y] of pts) scrubAt(x, y); };
 
 post({ type: 'ready' });

@@ -10,7 +10,7 @@ import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
 import { DOMAIN_HTML } from '@/generated/domain-html';
 import {
   type GearItem, type GearKind, LIFE, type Service, SERVICES,
-  addItem, crackCan, dueList, lowStock, regrip, renameItem, restock, retireItem, service, useCloset, useRetired, wearOf,
+  addItem, crackCan, dueList, lowStock, renameItem, restock, retireItem, service, useCloset, useRetired, wearOf,
 } from '@/lib/gear';
 import { askInk } from '@/lib/ink-ask';
 import { counts, type Match, useMatches, winnerOf } from '@/lib/matches';
@@ -78,13 +78,15 @@ function historyOf(it: GearItem, matches: Match[], me: string, roster: Fighter[]
 }
 
 /**
- * Gear: your fighter and the ghost. The ghost holds the rackets you use now, your shoes, cans and overgrips stand at its feet,
- * and everything you have retired stands planted in the ground around them. Drawn by three.js in a WebView (web/domain.js).
+ * Gear: your fighter and the legend who floats behind it. What you use now is in the dock and on the ground in front; hold your
+ * fighter (or tap DOMAIN) to expand the domain, where everything you have retired stands planted in the ground. Drawn by three.js in a WebView (web/domain.js).
  */
 export default function Gear() {
   const params = useLocalSearchParams<{ demo?: string }>();
   const demo = params.demo === '1';
-  const items = useCloset();
+  // Rackets and shoes only for now; balls and overgrips come back once these two are right.
+  const closet = useCloset();
+  const items = useMemo(() => closet.filter((it) => it.kind === 'racket' || it.kind === 'shoes'), [closet]);
   const retired = useRetired();
   const matches = useMatches();
   const roster = useRoster();
@@ -107,10 +109,10 @@ export default function Gear() {
       due,
       title: 'YOUR GEAR.',
       sub: due.length ? `${due.length} THING${due.length > 1 ? 'S' : ''} DUE.` : 'ALL GOOD.',
-      hint: 'hold your fighter to expand your domain',
+      hint: 'hold your fighter, or tap DOMAIN, to expand it',
       inside: past.length
         ? { sub: `${past.length} PLANTED. ${planted} MATCHES IN THE GROUND.`, hint: 'pull one up to see what it won. back closes it.' }
-        : { sub: 'NOTHING PLANTED YET.', hint: 'hold a racket\'s name to retire it. the ghost plants it here. back closes it.' },
+        : { sub: 'NOTHING PLANTED YET.', hint: 'hold a racket\'s name to retire it. it gets planted here. back closes it.' },
     });
   }, [items, retired, matches, roster, you]);
   useEffect(() => { if (!demo) run(`window.setDomain(${data})`); }, [run, data, demo]);
@@ -135,15 +137,17 @@ export default function Gear() {
         scene={scene}
         html={DOMAIN_HTML}
         name="gear"
-        cues={{ slid: () => { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } }}
         onReady={() => {
           if (demo) run('window.demoDomain()');
         }}
         onMessage={(m: SceneMsg) => {
           switch (m.type) {
             case 'grab': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); break;
+            // He reaches behind his back and whips it out.
+            case 'reach': sfx('swish', 0.5); setTimeout(() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }, 300); break;
             // Holding your fighter: each quarter of the charge hits harder.
             case 'charge': void Haptics.impactAsync(m.v > 0.7 ? Haptics.ImpactFeedbackStyle.Heavy : m.v > 0.4 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light); sfx('tick', 0.3 + 0.5 * m.v); break;
+            case 'kiss': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('pock', 0.5); break;
             case 'fizzle': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('drip', 0.5); break;
             case 'expand': state.current.open = true; void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sfx('slam', 1); setTimeout(() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); }, 160); break;
             case 'collapse': state.current.open = false; void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('swish', 0.7); break;
@@ -156,7 +160,7 @@ export default function Gear() {
             case 'rise': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('clack', 0.25); break;
             case 'swing': case 'swish': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('swish', 0.4); break;
             case 'poke': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); sfx('squeak', 0.6); break;
-            case 'ghost': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); sfx('drip', 0.6); break;
+            case 'laugh': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); sfx('bloop', 0.6); setTimeout(() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, 120); break;
             case 'focus': state.current.focus = m.id ?? null; if (m.id) { void Haptics.selectionAsync(); sfx('select', 0.5); } break;
             case 'add': {
               if (demo) break;
@@ -169,16 +173,17 @@ export default function Gear() {
             case 'restock': if (!demo) restock(m.kind as GearKind, 1); sfx('pock', 0.5); break;
             case 'crack': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); sfx('can', 0.8); if (!demo) crackCan(); break;
             case 'service':
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               sfx('ping', 0.8);
               if (demo) break;
-              if (m.s === 'overgrip') regrip(m.id); else service(m.id, m.s as Service);
+              service(m.id, m.s as Service);
               break;
             case 'edit': if (!demo) startEdit(m.id); break;
             case 'remove': {
               const it = byId(m.id);
               if (!it || it.kind === 'balls' || it.kind === 'grips') break;
               void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-              Alert.alert(`Retire ${it.name}?`, 'The ghost plants it in the ground with every match it played.', [
+              Alert.alert(`Retire ${it.name}?`, 'It gets planted in your domain with every match it played.', [
                 { text: 'Keep using it', style: 'cancel' },
                 { text: 'Plant it', onPress: () => { run(`window.retire(${JSON.stringify(it.id)})`); retireItem(it.id); } },
               ]);

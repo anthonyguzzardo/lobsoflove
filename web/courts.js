@@ -660,6 +660,7 @@ function enclosure(colors, { song = null, accent = '#ffffff', mural: hasMural = 
   a.add(at(rbox(APRON.x * 2, APRON.top, APRON.z * 2, mt(0.15), mat(0xd9d4c9, { roughness: 0.95 })), 0, APRON.top / 2, 0));
   const c = court({ x: 0, z: 0, w: COURT_L, d: COURT_L * (10.97 / 23.77), rot: 0, lit: false }, M, colors);
   c.position.y = APRON.top - 0.002;
+  c.traverse((o) => { o.userData.courtFloor = true; });
   a.add(c);
   const wallColor = colors?.wall ?? 0x26302b;
   const post = mat(0x3a3f45, { metalness: 0.4, roughness: 0.6 });
@@ -1281,11 +1282,11 @@ function build(data) {
     const boards = [];
     const boardMeshes = [];
     const arena = enclosure(colors, { song, accent: v.accent, mural: !!colors?.mural, stands: v.key === 'balboa' ? colors.stands : null, lights: !!v.lights, boards, boardMeshes });
-    arena.traverse((o) => { o.userData.island = i; });
+    arena.traverse((o) => { o.userData.island = i; o.userData.arena = true; });
     g.add(arena);
     // The place: its bank of courts, then its world, then anything that flies over it.
     const bank = BANK[v.key] || [];
-    for (const [x, z] of bank) { const n = enclosure(colors); n.position.set(mt(x), 0, mt(z)); g.add(n); }
+    for (const [x, z] of bank) { const n = enclosure(colors); n.position.set(mt(x), 0, mt(z)); n.traverse((o) => { o.userData.arena = true; o.userData.island = i; }); g.add(n); }
     const B = metersGroup();
     const air = new THREE.Group();
     air.scale.setScalar(2.5); // the landmark props' aircraft were drawn small: this makes a jet ~15 m and the helicopter ~10 m
@@ -1411,9 +1412,21 @@ canvas.addEventListener('pointerup', (e) => {
   down = null;
   if (Math.hypot(dx, dy) < 10 && quick) {
     ray.setFromCamera(new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1), camera);
-    const hit = ray.intersectObjects(islands, true)[0];
-    if (hit && hit.object.userData.songBoard) {
+    const hits = ray.intersectObjects(islands, true);
+    // Look through everything the tap passes (trees, poles, wire in front), not just the first thing it touches.
+    const board = hits.find((h) => h.object.userData.songBoard);
+    const onCourt = !st.hop && hits.find((h) => h.object.userData.arena && h.object.userData.island === st.target);
+    const hit = onCourt || hits[0];
+    if (board && (!onCourt || !onCourt.object.userData.courtFloor)) {
       setMuted(!st.muted);
+      return;
+    }
+    // The whole court you're on is the mute button: fence, windscreens, apron, every court in the bank. Only where you can go
+    // in does the court surface still take you inside.
+    if (onCourt) {
+      const canEnter = presence.mode !== 'meet' || presence.you === venues[st.target].id;
+      if (hit.object.userData.courtFloor && canEnter) enter();
+      else setMuted(!st.muted);
       return;
     }
     if (hit && hit.object.userData.island != null) {

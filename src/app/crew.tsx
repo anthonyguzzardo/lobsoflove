@@ -10,7 +10,7 @@ import { P } from '@/constants/paper';
 import venues from '@/data/venues.json';
 import { CREW_HTML } from '@/generated/crew-html';
 import {
-  answerCallup, type Callup, callupLink, cancelCallup, crewNow, renameCrew, createCrew, deleteCrew, inviteLink, leaveCrew, postCallup, removePretender,
+  answerCallup, answerInvite, type Callup, callupLink, cancelCallup, crewNow, renameCrew, createCrew, deleteCrew, inviteLink, leaveCrew, postCallup, removePretender,
   startCloud, useCloud,
 } from '@/lib/cloud';
 import { useMatches } from '@/lib/matches';
@@ -73,6 +73,7 @@ export default function CrewScreen() {
     role: cloud.crew?.role ?? '',
     error: cloud.error,
     suggest,
+    invite: cloud.invites[0] ?? null,
     fighters: (inCrew ? roster : [you]).map((f) => ({ id: f.id, name: f.name, cast: f.cast, color: f.color, you: !!f.isYou, pretender: !!f.pretender })),
     callup: live ? { id: live.id, mine: live.caller === 'you', callerName: name(live.caller), message: live.message, need: live.need, status: live.status, answers: live.answers } : null,
   });
@@ -112,6 +113,8 @@ export default function CrewScreen() {
       case 'editmsg': askInk({ label: 'THE MESSAGE', max: 140, examples: [msg.text || 'Doubles at Balboa after 5?'] }, (t) => { if (t) { edited.current = true; setMessage(t); } }); break;
       case 'alt':
         if (msg.act === 'write') router.push('/ink');
+        else if (msg.act === 'find') router.push('/find');
+        else if (msg.act === 'decline') answerInvite(msg.id, false).then(() => sfx('swish', 0.6), fail);
         else if (msg.act === 'out') answerCallup(msg.id, false).then(() => run('window.nope()'), fail);
         else if (msg.act === 'calloff') cancelCallup(msg.id).then(() => sfx('swish', 0.6), fail);
         break;
@@ -120,9 +123,10 @@ export default function CrewScreen() {
   };
 
   const handleSlid = (a: { [k: string]: any }) => {
-    // Making the crew sends the link straight away: there is nothing else to set up.
-    // Starting a crew: name it (typed or written), then it is made and the link goes straight to the share sheet.
-    if (a.action === 'start') askInk({ label: 'NAME YOUR CREW', max: 40, upper: true, examples: [suggest] }, (t) => createCrew(t || suggest).then(() => { run('window.cheer()'); setTimeout(() => invite(), 600); }, fail));
+    // Starting a crew: name it (typed or written), then straight to finding players.
+    if (a.action === 'start') askInk({ label: 'NAME YOUR CREW', max: 40, upper: true, examples: [suggest] }, (t) => createCrew(t || suggest).then(() => { run('window.cheer()'); setTimeout(() => router.push('/find'), 600); }, fail));
+    else if (a.action === 'find') router.push('/find');
+    else if (a.action === 'accept') answerInvite(a.id, true).then(() => run('window.cheer()'), fail);
     else if (a.action === 'retry') void startCloud();
     else if (a.action === 'invite') invite();
     else if (a.action === 'callup') {

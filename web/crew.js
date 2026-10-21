@@ -217,7 +217,7 @@ function layout() {
   buildRisers(n);
   if (!st.chalkTag) {
     st.chalkTag = el('div', 'tag chalk');
-    st.chalkTag.append(el('b', '', 'INVITE'), el('i', '', 'TAP TO SEND THE LINK'));
+    st.chalkTag.append(el('b', '', 'ADD'), el('i', '', 'TAP TO FIND PLAYERS'));
     tagsEl.append(st.chalkTag);
   }
   st.chalkTag.style.display = showChalk ? '' : 'none';
@@ -249,10 +249,17 @@ function panel() {
   }
   if (d.mode !== 'crew') {
     st.sel.clear();
-    if (d.mode === 'solo') {
+    if (d.mode === 'solo' && d.invite) {
+      // A crew asked you in: one slide joins it.
+      const inv = d.invite;
+      h1.textContent = inv.crew; h2.textContent = 'INVITED YOU';
+      blurb.textContent = `${inv.from} wants you in. ${inv.size} ${inv.size === 1 ? 'player' : 'players'} so far.`;
+      slide.setKey('01', `JOIN ${inv.crew}`, 'SLIDE TO GET IN'); action = { type: 'accept', id: inv.id };
+      setAlt('NO THANKS', { type: 'decline', id: inv.id });
+    } else if (d.mode === 'solo') {
       h1.textContent = 'JUST YOU'; h2.textContent = 'FOR NOW';
-      blurb.textContent = 'Slide, give it a name, and send the link to your group chat. Whoever taps it is in, with their own fighter.';
-      slide.setKey('01', 'START A CREW', 'NAME IT, THEN SEND THE LINK'); action = { type: 'start' };
+      blurb.textContent = 'Slide and give it a name. Then find your friends by name, or send the link to your group chat.';
+      slide.setKey('01', 'START A CREW', 'NAME IT, THEN ADD PLAYERS'); action = { type: 'start' };
     } else if (d.mode === 'error') {
       h1.textContent = 'CAN’T REACH'; h2.textContent = 'THE SEASON'; blurb.textContent = d.error || '';
       slide.setKey('01', 'TRY AGAIN', 'SLIDE TO RECONNECT'); action = { type: 'retry' };
@@ -307,16 +314,17 @@ function panel() {
     slide.setKey('01', 'SEND THE INVITE', 'SLIDE TO TEXT THE GROUP CHAT'); action = { type: 'invite' };
     return;
   }
-  // Nobody else yet: the one job is sending the link. Once friends are in, circling who plays comes first.
+  // Nobody else yet: the one job is adding players. Once friends are in, circling who plays comes first.
   if (!st.fighters.some((g) => !g.f.you)) {
     h2.textContent = 'JUST YOU SO FAR';
-    blurb.textContent = 'Send the link to your group chat. Whoever taps it joins with their own fighter.';
-    slide.setKey('01', 'SEND THE LINK', 'TO YOUR GROUP CHAT'); action = { type: 'invite' };
+    blurb.textContent = 'Search your friends by name and tap to invite them. Not on the app yet? Send the link.';
+    slide.setKey('01', 'FIND PLAYERS', 'SEARCH BY NAME'); action = { type: 'find' };
+    setAlt('SEND THE LINK', { type: 'invite' });
     return;
   }
   blurb.textContent = 'Draw a loop around who you want to play. 1 is singles, 2 king of the court, 3 doubles.';
   slide.setKey('01', 'CIRCLE WHO PLAYS', 'DRAW A LOOP AROUND THEM'); action = { type: 'teach' };
-  setAlt('SEND THE LINK AGAIN', { type: 'invite' });
+  setAlt('FIND PLAYERS', { type: 'find' });
 }
 
 $('alt').addEventListener('click', () => {
@@ -472,7 +480,7 @@ $('c').addEventListener('pointerup', (e) => {
   }
   const hit = hitAt(down.x, down.y);
   if (!hit) { if (st.sel.size || st.anyone) clearSel(); return; }
-  if (hit.chalk) { chalkPop = 1; post({ type: 'slid', action: 'invite' }); return; } // the invite spot sends the link
+  if (hit.chalk) { chalkPop = 1; post({ type: 'slid', action: 'find' }); return; } // the empty spot finds players
   const { g } = hit;
   const dy = e.clientY - down.y;
   const flick = dy < -30 ? Math.min(2.2, -dy / 60) : 0; // swipe up on someone to throw them higher

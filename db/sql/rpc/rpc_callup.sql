@@ -52,7 +52,7 @@ BEGIN
     RETURN v_n > 0;
 END $$;
 
--- Delete a crew and everything in it: matches, beacons, call-ups, pretenders. The caller must be in it.
+-- Delete a crew and everything in it: matches, beacons, call-ups, invites, pretenders. The caller must be in it.
 -- Internal; the app reaches it through fn_delete_crew and fn_leave_crew.
 CREATE OR REPLACE FUNCTION lol.fn_wipe_crew(p_crew UUID)
 RETURNS VOID
@@ -62,6 +62,7 @@ BEGIN
     DELETE FROM lol.tb_callups WHERE crew_id = p_crew;
     DELETE FROM lol.tb_matches WHERE crew_id = p_crew;
     DELETE FROM lol.tb_beacons WHERE crew_id = p_crew;
+    DELETE FROM lol.tb_crew_invites WHERE crew_id = p_crew;
     DELETE FROM lol.tb_players WHERE user_id IS NULL AND player_id IN (SELECT player_id FROM lol.tm_crew_players WHERE crew_id = p_crew);
     DELETE FROM lol.tm_crew_players WHERE crew_id = p_crew;
     DELETE FROM lol.tb_crews WHERE crew_id = p_crew;

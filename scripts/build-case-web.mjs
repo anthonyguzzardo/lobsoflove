@@ -159,7 +159,7 @@ const courtsCssExtra = `
 #head,#h2,#facts,#blurb{display:none!important}
 /* The slide strip is off on courts for now; the user has a better idea for landing and playing. */
 #enter{display:none!important}
-#head{position:fixed;left:134px;right:12px;top:calc(env(safe-area-inset-top) + 4px);min-height:50px;box-sizing:border-box;margin:0;background:#f4f1ea;border:2px solid #16181d;border-left:6px solid var(--accent,#e2562f);border-radius:10px;box-shadow:2px 3px 0 #16181d;padding:5px 9px 5px 10px;display:flex;flex-direction:column;justify-content:center;pointer-events:auto}
+#head{position:fixed;left:134px;right:12px;top:calc(env(safe-area-inset-top) + 4px);min-height:50px;box-sizing:border-box;margin:0;background:#f4f1ea;border:2px solid #16181d;border-radius:10px;box-shadow:2px 3px 0 #16181d;padding:5px 9px 5px 10px;display:flex;flex-direction:column;justify-content:center;pointer-events:auto}
 #head #h1{font-size:13px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #who:empty{display:none}
 #who{margin-top:2px}
@@ -358,9 +358,31 @@ const enterStrip = homeBody.match(/<div id="enter"[\s\S]*?<\/svg><\/div><\/div><
 
 // The domain: retired gear planted in broken concrete, drawn like a manga panel. Paper and ink, one red cord; the title stamps in.
 const domainCss = homeCss + `
-#ui{padding-top:calc(env(safe-area-inset-top) + 56px)}
-#fade{background:linear-gradient(180deg,rgba(239,236,229,0) 0%,rgba(239,236,229,0) 74%,rgba(239,236,229,.9) 82%,rgba(239,236,229,.98) 100%)}
-#void{position:fixed;inset:0;background:#0b0c0e;pointer-events:none;z-index:1}#veil{position:fixed;inset:0;pointer-events:none;opacity:0}#de,#stamp{z-index:2}
+#ui{padding-top:calc(env(safe-area-inset-top) + 56px);padding-bottom:calc(env(safe-area-inset-bottom) + 6px)}
+/* No fade: the words sit on a cream card with an ink edge, the dock under it, and the scene runs to the bottom edge. */
+#ov,#fo{background:#fffdf8;border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);border-radius:8px;padding:10px 12px 10px;margin-bottom:4px}
+#dock .slot.due .lbl{color:var(--clay);opacity:1}
+#dock .slot.due .pf:after{content:"";position:absolute;right:-3px;top:-4px;width:9px;height:9px;border-radius:50%;background:var(--clay);box-shadow:0 0 0 2px #fffdf8}
+/* DOMAIN is the special move: bigger, ink with a red sheen running across it, and a glow. */
+#dock .slot.dom .pf{width:min(70px,calc(100% - 4px));height:20px;border-radius:5px;background:linear-gradient(105deg,#0b0c0e 0%,#0b0c0e 38%,#e2562f 50%,#ffb08f 52%,#e2562f 55%,#0b0c0e 68%,#0b0c0e 100%);background-size:280% 100%;animation:sheen 2.6s linear infinite,bob 3.6s ease-in-out infinite;box-shadow:0 6px 0 #000,0 0 0 2px #e2562f,0 0 22px rgba(226,86,47,.55),0 12px 14px rgba(40,34,26,.25)}
+@keyframes sheen{0%{background-position:100% 0}100%{background-position:-80% 0}}
+#dock .slot.dom .lbl{opacity:1;color:var(--clay);font-size:10px;letter-spacing:.2em}
+/* The notes on the thing he holds: lettered on a cream slip, an ink line to the part, the name on a tag at his hand. */
+#notes{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .18s}
+#notes.on{opacity:1}
+#notes svg{position:absolute;inset:0;width:100%;height:100%}
+#nline{stroke:var(--ink);stroke-width:2.5;stroke-dasharray:6 4}
+#ndot{fill:var(--clay);stroke:var(--ink);stroke-width:2}
+#note{position:absolute;left:0;top:0;max-width:44vw;background:#fffdf8;border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);border-radius:6px;padding:7px 10px 8px;rotate:-2deg}
+#nword{display:block;font:400 30px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.03em;line-height:1;color:#3f8f5a}
+#note.due #nword{color:var(--clay)}
+#nwhat{display:block;font:800 10px var(--mono);letter-spacing:.2em;margin-top:3px}
+#ntext{display:block;font:700 11px var(--mono);margin-top:3px;opacity:.75}
+#tag{all:unset;position:fixed;left:0;top:0;font:800 12px var(--mono);letter-spacing:.06em;padding:5px 9px;background:var(--clay);color:var(--ink);border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink);border-radius:3px;white-space:nowrap;pointer-events:auto;opacity:0;transition:opacity .18s;z-index:3}
+#tag:not(.on){pointer-events:none}
+#tag.on{opacity:1}
+#tag:active{translate:0 2px}
+#de,#stamp{z-index:2}
 #de{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 62px);font:400 15px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.12em;color:#efece5;opacity:0;pointer-events:none}
 #stamp{position:fixed;left:14px;top:calc(env(safe-area-inset-top) + 92px);display:flex;gap:6px;align-items:flex-start;pointer-events:none;opacity:0}
 #stamp b{writing-mode:vertical-rl;font:900 56px "Hiragino Mincho ProN","Hiragino Sans","Yu Mincho",serif;line-height:1;color:#16181d;letter-spacing:.02em;text-shadow:3px 0 0 #efece5,-3px 0 0 #efece5,0 3px 0 #efece5,0 -3px 0 #efece5,2px 2px 0 #efece5,-2px -2px 0 #efece5,2px -2px 0 #efece5,-2px 2px 0 #efece5}
@@ -372,7 +394,7 @@ body.open #de{opacity:1;animation:dein .5s .1s cubic-bezier(.16,1,.3,1) both}
 #panel{pointer-events:none}
 #ui.focus #ov{display:none}
 #ov #h1{font-size:25px}#ov #h2{font-size:13px;color:var(--clay);margin-top:4px;letter-spacing:.06em}
-#hint{font:700 12px var(--mono);margin:8px 0 18px;opacity:.75}
+#hint{font:700 12px var(--mono);margin:6px 0 2px;opacity:.75}
 #plate{display:flex;align-items:stretch;height:44px;border-radius:6px;overflow:hidden;background:var(--ink);box-shadow:0 5px 0 #000,0 10px 16px rgba(22,24,29,.22);margin-bottom:12px}
 #kind{flex:none;display:flex;align-items:center;padding:0 10px;background:var(--clay);color:var(--ink);font:800 12px var(--mono);letter-spacing:.08em}
 #name{flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;color:var(--paper);font:800 21px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -382,10 +404,11 @@ body.open #de{opacity:1;animation:dein .5s .1s cubic-bezier(.16,1,.3,1) both}
 #facts{list-style:none;margin:0 0 6px;padding:0}
 #facts li{font:700 12.5px var(--mono);padding:3px 0;display:flex;align-items:center;gap:8px}
 #facts li:before{content:"";width:9px;height:2px;background:var(--clay);flex:none}
-#how{font:700 11px var(--mono);letter-spacing:.06em;opacity:.6;margin:8px 0 18px}
+#how{font:700 11px var(--mono);letter-spacing:.06em;opacity:.6;margin:8px 0 2px}
 #ui.focus #plate,#ui.focus #nplate{animation:seat .38s cubic-bezier(.34,1.56,.64,1)}
 #fo,#nw{display:none}#ui.past #fo{display:block}#ui.now #nw{display:block}
 #nw{pointer-events:auto!important}#nw *{pointer-events:auto}
+#dock{pointer-events:auto!important}#dock *{pointer-events:auto}
 #nplate{display:flex;align-items:stretch;height:44px;border-radius:6px;overflow:hidden;background:var(--ink);box-shadow:0 5px 0 #000,0 10px 16px rgba(22,24,29,.22);margin-bottom:12px}
 #nkind{flex:none;display:flex;align-items:center;padding:0 10px;background:var(--clay);color:var(--ink);font:800 12px var(--mono);letter-spacing:.08em}
 #nname{all:unset;flex:1;min-width:0;display:flex;align-items:center;padding:0 12px;color:var(--paper);font:800 21px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -414,15 +437,15 @@ body.open #de{opacity:1;animation:dein .5s .1s cubic-bezier(.16,1,.3,1) both}
 #addone{all:unset;font:800 11px var(--mono);letter-spacing:.1em;padding:8px 10px;border-radius:4px;background:#fffdf8;color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink),0 3px 0 var(--ink)}
 #addone:active{transform:translateY(3px);box-shadow:inset 0 0 0 2px var(--ink)}
 #enter{margin-bottom:6px}
+#enter:not(.show){display:none}
 `;
-const domainBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div>
+const domainBody = `<canvas id="c"></canvas><div id="grain"></div>
 <div id="de">DOMAIN EXPANSION</div><div id="stamp"><i>MUTUAL LOBS</i><b>相愛</b></div>
 <div id="ui"><div class="grow"></div>
 <div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><ul id="due"></ul><div id="hint"></div></div>
 <div id="fo"><div id="plate"><div id="kind"></div><div id="name"></div></div><div id="rec"><b id="wl"></b><span id="sub"></span></div><ul id="facts"></ul><div id="how"></div></div>
-<div id="nw"><div id="nplate"><div id="nkind"></div><button id="nname" aria-label="Rename, or hold to retire"></button></div><div id="rows"></div></div>
-${enterStrip}</div>
-</div><div id="veil"></div><div id="void"></div>`;
+<div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div></div>
+</div><div id="notes"><svg><line id="nline"/><circle id="ndot" r="6"/></svg><div id="note"><b id="nword"></b><span id="nwhat"></span><span id="ntext"></span></div></div><button id="tag" aria-label="Rename, or hold to retire"></button>`;
 emit('domain-html.ts', 'DOMAIN_HTML', page({ css: domainCss, body: domainBody, js: bundle('web/domain.js') }));
 
 // The sky over San Diego: fly it like a Z fighter. Bright sky; the controls are paper-and-ink pads; tags name the courts.
@@ -473,14 +496,85 @@ body.super .orb{background:radial-gradient(circle,#fffdf0 0,#fffdf0 26%,#ffd23a 
 @keyframes breathe{0%,100%{scale:1}50%{scale:1.03}}
 #land i{width:11px;height:11px;transform:rotate(45deg);background:var(--c,#fffdf0);border:2px solid var(--ink);flex:none}
 #land span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The dragon radar: a green grid in a round case, top left under the back button. Tap it to change range. */
+#radarw{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 64px);display:flex;flex-direction:column;align-items:center;gap:6px}
+#radar{width:116px;height:116px;border-radius:50%;background:var(--paper);box-shadow:0 0 0 4px var(--paper),0 0 0 6.5px var(--ink),0 7px 0 4px var(--ink);touch-action:none;cursor:pointer}
+#rlbl{font:800 10px var(--mono);letter-spacing:.1em;background:var(--ink);color:#9fdc6c;padding:3px 7px;border-radius:3px;margin-top:6px}
+#scout{all:unset;margin-top:4px;font:800 10.5px var(--mono);letter-spacing:.12em;background:var(--paper);border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);border-radius:4px;padding:6px 9px;touch-action:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+body.scouting #scout{background:#ff4a3a;color:var(--ink)}
+/* The scouter lens: red glass with scanlines over the right of the screen, the readout inside it. */
+#scouter{position:fixed;right:10px;top:calc(env(safe-area-inset-top) + 120px);width:min(62%,280px);border-radius:14px 30px 14px 14px;background:linear-gradient(160deg,rgba(255,70,50,.34),rgba(255,40,30,.2));border:2.5px solid var(--ink);box-shadow:0 5px 0 var(--ink);overflow:hidden;opacity:0;transform:translateX(30px);transition:opacity .2s,transform .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none}
+#scouter:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.08) 0 1px,transparent 1px 4px)}
+body.scouting #scouter{opacity:1;transform:none}
+#scread{position:relative;padding:9px 11px 11px;color:#fff5ec;text-shadow:0 0 6px rgba(255,60,40,.9),0 1px 0 rgba(0,0,0,.5)}
+.sct{font:800 12px var(--mono);letter-spacing:.1em;margin-bottom:6px}
+.scs{font:800 9px var(--mono);letter-spacing:.24em;opacity:.85;margin:7px 0 3px}.scs.dim{opacity:.6}
+.scr{display:flex;align-items:center;gap:7px;font:800 12px var(--mono);letter-spacing:.04em;padding:2px 0}
+.scr i{width:8px;height:8px;transform:rotate(45deg);flex:none;box-shadow:0 0 0 1.5px #16181d}
+.scr b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scr span{font:900 15px var(--mono);letter-spacing:.02em}
+.scr small{font:700 9px var(--mono);opacity:.75;min-width:44px;text-align:right}
+.scr.big b{font:900 28px var(--mono)}
+#reticle{position:fixed;left:0;top:0;width:86px;height:86px;opacity:0;pointer-events:none;transition:opacity .15s}
+#reticle:before,#reticle:after{content:"";position:absolute;inset:0;border:2.5px solid #ff4a3a;border-radius:50%;box-shadow:0 0 8px #ff4a3a}
+#reticle:after{inset:22px;border-style:dashed;animation:spin 1.6s linear infinite}
+#reticle i{position:absolute;left:50%;top:-14px;width:2.5px;height:114px;margin-left:-1.25px;background:#ff4a3a;transform-origin:50% 57px}
+#reticle i+i{transform:rotate(90deg)}
+@keyframes spin{to{transform:rotate(360deg)}}
+body.broke #scouter{opacity:1;transform:none;animation:shatter 1.4s both}
+body.broke #scouter:after{content:"OVERLOAD";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:400 30px Impact,"Arial Narrow Bold",sans-serif;letter-spacing:.06em;color:#fff;-webkit-text-stroke:1.5px var(--ink);background:linear-gradient(115deg,transparent 46%,#16181d 46.5%,#16181d 47.5%,transparent 48%),linear-gradient(35deg,transparent 60%,#16181d 60.5%,#16181d 61.3%,transparent 62%),linear-gradient(170deg,transparent 30%,#16181d 30.5%,#16181d 31.2%,transparent 32%)}
+@keyframes shatter{0%{transform:scale(1.08) rotate(-2deg)}10%{transform:none}70%{opacity:1;transform:none}100%{opacity:0;transform:translateY(60px) rotate(8deg)}}
+/* A ball caught. */
+#got{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 230px);text-align:center;pointer-events:none;opacity:0}
+#gotn{display:block;font:400 34px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.05em;color:#ffb02e;-webkit-text-stroke:1.5px var(--ink);text-shadow:0 4px 0 var(--ink)}
+#gots{display:inline-block;margin-top:8px;font:800 10.5px var(--mono);letter-spacing:.1em;background:var(--ink);color:var(--paper);padding:4px 8px;border-radius:3px}
+body.gotball #got{animation:nine 2.6s cubic-bezier(.34,1.56,.64,1) both}
+/* The dragon: its words, and the wishes. */
+#dsay{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top) + 74px);text-align:center;font:400 26px/1.15 Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.05em;color:#e8ffd8;-webkit-text-stroke:1.2px #16181d;text-shadow:0 0 14px #3fbf5a,0 3px 0 #16181d;opacity:0;pointer-events:none}
+#dsay.in{animation:sayin .6s cubic-bezier(.16,1,.3,1) both}
+@keyframes sayin{0%{opacity:0;transform:translateY(-14px);letter-spacing:.3em}100%{opacity:1;transform:none}}
+body.dragon #pads,body.dragon #radarw,body.dragon #hud,body.dragon .vtag,body.dragon .rtag,body.dragon #hint{opacity:0!important;pointer-events:none}
+#wish{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 26px);display:flex;flex-direction:column;gap:12px;transform:translateY(calc(100% + 26px + env(safe-area-inset-bottom) + 20px));visibility:hidden;transition:transform .5s cubic-bezier(.34,1.56,.64,1),visibility 0s .5s}
+#wish.show{transform:none;visibility:visible;transition:transform .5s cubic-bezier(.34,1.56,.64,1),visibility 0s}
+#wish button{all:unset;display:flex;align-items:baseline;gap:10px;background:var(--paper);border:2.5px solid var(--ink);box-shadow:0 6px 0 var(--ink);border-radius:6px;padding:13px 14px;touch-action:none;-webkit-tap-highlight-color:transparent;transition:transform .07s,box-shadow .07s}
+#wish button.on{transform:translateY(5px);box-shadow:0 1px 0 var(--ink)}
+#wish span{font:800 15px var(--mono);letter-spacing:.06em}
+#wish small{font:700 10px var(--mono);letter-spacing:.08em;opacity:.6;flex:1}
+#wish em{font:800 9px var(--mono);font-style:normal;letter-spacing:.1em;color:var(--clay)}
+#wish button[data-w=gold]{background:#ffd23a}
+/* Instant transmission: with the wish, court tags can be tapped. */
+body.warp .vtag{pointer-events:auto;cursor:pointer;outline:1.5px dashed var(--c);outline-offset:2px}
+#it{position:fixed;left:0;right:0;top:44%;text-align:center;font:400 30px Impact,"Arial Narrow Bold",sans-serif;letter-spacing:.06em;color:#fffdf0;-webkit-text-stroke:1.5px var(--ink);text-shadow:0 4px 0 var(--ink);opacity:0;pointer-events:none}
+#it.in{animation:nine 1.6s cubic-bezier(.34,1.56,.64,1) both}
+/* The Kamehameha: the chant, the lock on a court, and what the call-up did. */
+#kame{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 170px);text-align:center;font:400 46px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.06em;color:#e6f9ff;-webkit-text-stroke:2px var(--ink);text-shadow:0 0 18px #6fd6ff,0 5px 0 var(--ink);opacity:0;pointer-events:none}
+#kame.in{animation:chant .5s cubic-bezier(.34,1.56,.64,1) both}
+#kame.ha{font-size:80px;animation:ha 1.5s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes chant{0%{opacity:0;transform:scale(2) rotate(-4deg)}30%{opacity:1;transform:scale(1) rotate(-2deg)}100%{opacity:.85;transform:scale(1.04) rotate(-2deg)}}
+@keyframes ha{0%{opacity:0;transform:scale(3)}12%{opacity:1;transform:scale(1) rotate(-3deg)}75%{opacity:1}100%{opacity:0;transform:scale(1.1) rotate(-3deg)}}
+#klock{position:fixed;left:0;top:0;width:96px;height:96px;opacity:0;pointer-events:none;transition:opacity .12s}
+#klock:before{content:"";position:absolute;inset:0;border:3px solid #8fe3ff;border-radius:50%;box-shadow:0 0 10px #8fe3ff;animation:spin 2.4s linear infinite;border-style:dashed}
+#klock.full:before{border-color:#ffd23a;box-shadow:0 0 16px #ffd23a;border-style:solid;animation:pulse .4s ease-in-out infinite alternate}
+@keyframes pulse{to{transform:scale(1.12)}}
+#klocktxt{position:absolute;left:50%;top:104px;transform:translateX(-50%);white-space:nowrap;font:800 10.5px var(--mono);letter-spacing:.08em;background:var(--ink);color:#8fe3ff;padding:4px 8px;border-radius:3px}
+#klock.full #klocktxt{color:#ffd23a}
+#calls{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top) + 290px);text-align:center;font:800 13px var(--mono);letter-spacing:.08em;pointer-events:none;opacity:0}
+#calls.in{opacity:1;animation:nine 3.2s cubic-bezier(.34,1.56,.64,1) both}
+#calls{color:var(--paper);text-shadow:none}
+#calls.in{background:var(--ink);padding:9px 12px;border-radius:5px;box-shadow:0 4px 0 rgba(0,0,0,.35)}
+#calls.ok{background:#ffd23a;color:var(--ink);font-size:15px;border:2.5px solid var(--ink);box-shadow:0 5px 0 var(--ink)}
 `;
 const flyBody = `<canvas id="c"></canvas><canvas id="lines"></canvas><div id="tags"></div><div id="flash"></div>
 <div id="hud"><div id="over">OVER SAN DIEGO</div><div id="read"><span id="alt"></span><span id="spd"></span></div></div>
 <div id="ki"><b id="kin"></b><i>POWER LEVEL</i></div><div id="nine">IT'S OVER 9000</div>
 <div id="stick"><i></i></div>
-<div id="hint">DRAG ANYWHERE TO STEER<br>HOLD BLAST TO ROCKET<br>HOLD RISE TO GO UP</div>
+<div id="hint">DRAG ANYWHERE TO STEER<br>HOLD BLAST TO ROCKET<br>HOLD RISE TO GO UP<br>HOLD TWO FINGERS: KAMEHAMEHA</div>
 <button id="land" aria-label="Land at this court"><i></i><span id="landtxt"></span></button>
-<div id="pads"><button id="rise" class="pad" aria-label="Hold to rocket up"><span class="chev"><b></b><b></b></span><em>RISE</em></button><button id="blast" class="pad" aria-label="Hold to rocket forward"><span class="orb"></span><em>BLAST</em></button></div>`;
+<div id="pads"><button id="rise" class="pad" aria-label="Hold to rocket up"><span class="chev"><b></b><b></b></span><em>RISE</em></button><button id="blast" class="pad" aria-label="Hold to rocket forward"><span class="orb"></span><em>BLAST</em></button></div>
+<div id="radarw"><canvas id="radar" width="232" height="232" aria-label="Dragon radar. Tap to change range."></canvas><span id="rlbl"></span><button id="scout" aria-label="Scouter">SCOUTER</button></div>
+<div id="scouter"><div id="scread"></div></div><div id="reticle"><i></i><i></i></div>
+<div id="got"><b id="gotn"></b><br><span id="gots"></span></div><div id="dsay"></div><div id="it">INSTANT TRANSMISSION</div><div id="kame"></div><div id="klock"><span id="klocktxt"></span></div><div id="calls"></div>
+<div id="wish"><button data-w="gold"><span>GOLDEN AURA</span><small>BURN GOLD FOR GOOD</small><em></em></button><button data-w="warp"><span>INSTANT TRANSMISSION</span><small>TAP A COURT, BE THERE</small><em></em></button><button data-w="none"><span>SCATTER THEM</span><small>HIDE THEM AGAIN</small><em></em></button></div>`;
 emit('fly-html.ts', 'FLY_HTML', page({ css: flyCss, body: flyBody, pre: `window.VENUES=${readFileSync(`${root}src/data/venues.json`)};`, js: bundle('web/fly.js') }));
 
 // Crew: the line-up. Same paper, ink, mono and slide strip as home; name plates ride under each jelly's feet.
@@ -491,10 +585,10 @@ const crewCss = homeCss + `
 #blurb{font-size:11px;opacity:.65;max-width:300px;line-height:1.4}#blurb.bad{color:var(--clay);opacity:1;font-weight:800}
 #tags{position:fixed;left:0;top:0;width:0;height:0;pointer-events:none}
 .tag{position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;will-change:transform}
-.tag b{font:800 12px var(--mono);letter-spacing:.06em;background:#fffdf8;color:var(--ink);padding:3px 7px 3px;border-radius:3px;box-shadow:inset 0 0 0 2px var(--ink),0 3px 0 var(--ink);border-left:6px solid var(--pc,var(--ink))}
+.tag b{font:800 12px var(--mono);letter-spacing:.06em;background:#fffdf8;color:var(--ink);padding:3px 7px 3px;border-radius:3px;box-shadow:inset 0 0 0 2px var(--ink),0 3px 0 var(--ink)}
 .tag i{font:800 8.5px var(--mono);font-style:normal;letter-spacing:.1em;opacity:.7}
 .tag.you i{opacity:1;color:var(--clay)}
-.tag.pre b{background:rgba(255,253,248,.92);color:rgba(22,24,29,.55);box-shadow:inset 0 0 0 2px rgba(22,24,29,.35);border-left-color:rgba(22,24,29,.25);border-style:dashed}
+.tag.pre b{background:rgba(255,253,248,.92);color:rgba(22,24,29,.55);box-shadow:inset 0 0 0 2px rgba(22,24,29,.35)}
 .tag.pre i{opacity:.6}
 .tag.chalk b{background:transparent;box-shadow:none;border:none;color:var(--clay);padding:0}
 #panel{pointer-events:auto!important}

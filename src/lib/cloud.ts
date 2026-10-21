@@ -48,9 +48,15 @@ export type CloudState = {
   claims: Record<string, string>;
   /** Live call-ups in your crew (not expired, not called off), newest first. */
   callups: Callup[];
+  /** Crews that invited you and are waiting on your yes or no, newest first. */
+  invites: Invite[];
 };
+/** A crew asking you in: its name, who asked, and how many are in it. */
+export type Invite = { id: string; crew: string; from: string; color: string; size: number };
+/** A search result: someone with the app. `crew` says if they are free, already yours, or in another crew. */
+export type Found = { id: string; name: string; cast: CastId; color: string; home: string; crew: 'free' | 'yours' | 'taken'; invited: boolean };
 
-let state: CloudState = { status: CLOUD_READY ? 'starting' : 'off', error: null, crew: null, claims: {}, callups: [] };
+let state: CloudState = { status: CLOUD_READY ? 'starting' : 'off', error: null, crew: null, claims: {}, callups: [], invites: [] };
 const listeners = new Set<() => void>();
 const set = (patch: Partial<CloudState>) => { state = { ...state, ...patch }; listeners.forEach((l) => l()); };
 
@@ -230,8 +236,16 @@ function subscribe(crewId: string) {
     .subscribe();
 }
 
+/** Invites need migration 006; before it there are none. */
+async function loadInvites() {
+  if (!db || !meId) return;
+  const { data, error } = await db.rpc('fn_my_invites');
+  set({ invites: error ? [] : ((data ?? []) as Invite[]) });
+}
+
 async function loadCrew() {
   if (!db || !meId) return;
+  void loadInvites();
   const { data: link } = await db.from('tm_crew_players').select('crew_id, role_code').eq('player_id', meId).limit(1).maybeSingle();
   if (!link) {
     if (channel && db) { void db.removeChannel(channel); channel = null; }
@@ -307,7 +321,7 @@ export function startCloud(): Promise<void> {
 if (db) {
   // Supabase on React Native: refresh the session only while the app is in front, and catch up on whatever changed meanwhile.
   AppState.addEventListener('change', (s) => {
-    if (s === 'active') { db.auth.startAutoRefresh(); if (state.crew) void refresh(); }
+    if (s === 'active') { db.auth.startAutoRefresh(); void loadInvites(); if (state.crew) void refresh(); }
     else db.auth.stopAutoRefresh();
   });
 }
@@ -326,6 +340,30 @@ export async function createCrew(name: string) {
 export async function renameCrew(name: string) {
   if (!db) throw new Error('No backend configured.');
   const { error } = await db.rpc('fn_rename_crew', { p_name: name });
+  fail(error);
+  await loadCrew();
+}
+
+/** Everyone with the app whose name matches, best match first. */
+export async function findPlayers(query: string): Promise<Found[]> {
+  await startCloud();
+  if (!db) throw new Error('No backend configured.');
+  const { data, error } = await db.rpc('fn_find_players', { p_query: query });
+  fail(error);
+  return (data ?? []) as Found[];
+}
+
+/** Ask a player into your crew. They get a push and a JOIN on their crew page. */
+export async function invitePlayer(id: string) {
+  if (!db) throw new Error('No backend configured.');
+  const { error } = await db.rpc('fn_invite_player', { p_player: id });
+  fail(error);
+}
+
+/** Yes to an invite joins that crew; no closes it. */
+export async function answerInvite(id: string, yes: boolean) {
+  if (!db) throw new Error('No backend configured.');
+  const { error } = await db.rpc('fn_answer_invite', { p_invite: id, p_yes: yes });
   fail(error);
   await loadCrew();
 }

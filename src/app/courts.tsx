@@ -3,13 +3,17 @@ import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackSwing } from '@/components/back-swing';
+import { KiOrb } from '@/components/ki-orb';
 import { SceneView, useScene } from '@/components/scene-view';
 import venues from '@/data/venues.json';
 import { COURTS_HTML } from '@/generated/courts-html';
 import { ANTHEMS, playAnthem, stopAnthem, toggleMute } from '@/lib/anthems';
 import { courtStats, pickCourt } from '@/lib/courts';
+import { useHunt } from '@/lib/dragon-balls';
+import { takeLanded } from '@/lib/fly';
 import { useMatches } from '@/lib/matches';
 import { goBack } from '@/lib/nav';
 import { demoFriends, islandState, setBeacon, useBeacon, useCrewPeople } from '@/lib/presence';
@@ -59,6 +63,14 @@ export default function Courts() {
     venues: Object.fromEntries(venues.map((v) => [v.id, islandState(friends.filter((p) => p.venue === v.key), beacon?.venue === v.id, v.courts.length, now)])),
   });
   useEffect(() => { run(`window.setPresence(${presence})`); }, [run, presence]);
+  // Landed here from the sky: hop straight onto that court (after the islands are built above).
+  useFocusEffect(useCallback(() => {
+    const id = takeLanded();
+    const i = id ? venues.findIndex((v) => v.id === id) : -1;
+    if (i >= 0) run(`window.__go(${i})`);
+  }, [run]));
+  const insets = useSafeAreaInsets();
+  const hunt = useHunt();
 
   return (
     <View style={styles.root}>
@@ -87,10 +99,14 @@ export default function Courts() {
         }}
       />
       <BackSwing floating onBack={() => run('window.back()')} />
+      <View style={[styles.fly, { top: insets.top + 2 }]} pointerEvents="box-none">
+        <KiOrb stars={hunt.got.length || 4} onPress={() => router.push({ pathname: '/fly', params: { from: 'courts' } })} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
+  fly: { position: 'absolute', right: 12 },
 });

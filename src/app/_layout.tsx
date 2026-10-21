@@ -30,6 +30,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, gestureEnabled: false, fullScreenGestureEnabled: false }}>
         <Stack.Screen name="index" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
         <Stack.Screen name="courts" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
+        <Stack.Screen name="fly" options={{ contentStyle: { backgroundColor: '#d8e9ef' } }} />
         <Stack.Screen name="case" options={{ contentStyle: { backgroundColor: '#f6f5f2' } }} />
         <Stack.Screen name="ink" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
         <Stack.Screen name="fighter" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
@@ -37,6 +38,7 @@ export default function RootLayout() {
         <Stack.Screen name="season" options={{ contentStyle: { backgroundColor: '#ebe8e2' } }} />
         <Stack.Screen name="match" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
         <Stack.Screen name="crew" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
+        <Stack.Screen name="find" options={{ contentStyle: { backgroundColor: '#efece5' } }} />
       </Stack>
       </View>
       {showIntro && <LolSplash onReady={hideNativeSplash} onFinish={finishIntro} />}

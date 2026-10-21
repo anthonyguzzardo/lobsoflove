@@ -37,7 +37,8 @@ export const LIFE: Record<Service, { matches: number; days: number; word: string
   soles: { matches: 50, days: 180, word: 'SOLES', verb: 'NEW PAIR' },
   can: { matches: 3, days: 14, word: 'OPEN CAN', verb: 'CRACK A NEW CAN' },
 };
-export const SERVICES: Record<GearKind, Service[]> = { racket: ['strings', 'overgrip'], shoes: ['soles'], balls: ['can'], grips: [] };
+// The overgrip is not tracked: a racket wears out by its strings.
+export const SERVICES: Record<GearKind, Service[]> = { racket: ['strings'], shoes: ['soles'], balls: ['can'], grips: [] };
 /** Reorder when the shelf or bin is down to this many. */
 export const REORDER_AT: Partial<Record<GearKind, number>> = { balls: 1, grips: 2 };
 export const MAX: Record<GearKind, number> = { racket: 3, shoes: 2, balls: 1, grips: 1 };

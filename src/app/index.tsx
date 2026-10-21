@@ -76,6 +76,9 @@ export default function Home() {
       />
       {cloud.status !== 'off' ? (
         <View style={[styles.pills, { top: insets.top + 10 }]} pointerEvents="box-none">
+          {cloud.status === 'solo' && cloud.invites[0] ? (
+            <Breathe><InkPill hot label={`${cloud.invites[0].from} INVITED YOU`} onPress={() => { sfx('go', 0.8); router.push('/crew'); }} /></Breathe>
+          ) : null}
           {called ? (
             <Breathe><InkPill hot label={`${roster.find((f) => f.id === called.caller)?.name ?? 'A FRIEND'} CALLED YOU UP`} onPress={() => { sfx('go', 0.8); router.push('/crew'); }} /></Breathe>
           ) : null}
