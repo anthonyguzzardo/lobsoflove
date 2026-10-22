@@ -10,7 +10,7 @@ import { P } from '@/constants/paper';
 import venues from '@/data/venues.json';
 import { CREW_HTML } from '@/generated/crew-html';
 import {
-  answerCallup, answerInvite, type Callup, callupLink, cancelCallup, crewNow, renameCrew, createCrew, deleteCrew, inviteLink, leaveCrew, postCallup, removePretender,
+  answerCallup, answerInvite, type Callup, callupLink, cancelCallup, crewNow, renameCrew, deleteCrew, inviteLink, leaveCrew, postCallup, removePretender,
   startCloud, useCloud,
 } from '@/lib/cloud';
 import { useMatches } from '@/lib/matches';
@@ -123,8 +123,9 @@ export default function CrewScreen() {
   };
 
   const handleSlid = (a: { [k: string]: any }) => {
-    // Starting a crew: straight to finding players under a stand-in name; /find asks for the real name last, at INVITE.
-    if (a.action === 'start') createCrew(suggest).then(() => { run('window.cheer()'); setTimeout(() => router.push('/find?first=1'), 600); }, fail);
+    // Starting a crew: straight to finding players. Nothing exists yet: /find names and makes the crew only when you send
+    // the invites (or the link), so backing out leaves no crew behind.
+    if (a.action === 'start') router.push('/find?first=1');
     else if (a.action === 'find') router.push('/find');
     else if (a.action === 'accept') answerInvite(a.id, true).then(() => run('window.cheer()'), fail);
     else if (a.action === 'retry') void startCloud();

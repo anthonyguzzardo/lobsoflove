@@ -112,8 +112,8 @@ export default function Gear() {
       items: past,
       due,
       title: 'YOUR GEAR.',
-      sub: due.length ? `${due.length} THING${due.length > 1 ? 'S' : ''} DUE.` : 'ALL GOOD.',
-      hint: 'hold your fighter, or tap DOMAIN, to expand it',
+      sub: due.length ? `${due.length} THING${due.length > 1 ? 'S NEED' : ' NEEDS'} WORK.` : 'NOTHING NEEDS WORK.',
+      hint: 'tap RACKET or SHOES and he pulls it out. tap DOMAIN, or hold your fighter, to see your old gear.',
       inside: past.length
         ? { sub: `${past.length} PLANTED. ${planted} MATCHES IN THE GROUND.`, hint: 'pull one up to see what it won. the arrow closes it.' }
         : { sub: 'NOTHING PLANTED YET.', hint: 'hold a racket\'s name to retire it. it gets planted here. the arrow closes it.' },

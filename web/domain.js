@@ -527,6 +527,17 @@ function poseArms(g) {
       a.cuff.position.copy(a.shoulder.clone().lerp(elbow, 0.85));
       a.band.position.copy(elbow.clone().lerp(hand, 0.78)); a.band.quaternion.copy(a.fore.quaternion);
     }
+    // While the logos float, his free hand points up at them, finger out.
+    if (a.sx < 0 && st.aside.x > 0.01 && st.flingT >= 0.55) {
+      const u = clamp(st.aside.x, 0, 1);
+      const sway = 0.06 * Math.sin(st.clock * 1.4);
+      elbow = elbow.lerp(V(-0.78, 0.92, 0.32), u); hand = hand.lerp(V(-1.0 + sway, 1.42, 0.5), u);
+      placeBone(a.upper, a.shoulder, elbow); placeBone(a.fore, elbow, hand);
+      a.elbow.position.copy(elbow); a.hand.position.copy(hand);
+      a.cuff.position.copy(a.shoulder.clone().lerp(elbow, 0.85));
+      a.band.position.copy(elbow.clone().lerp(hand, 0.78)); a.band.quaternion.copy(a.fore.quaternion);
+      if (u > 0.5) a.finger.visible = true;
+    }
     a.finger.position.copy(hand).add(V(0, 0.13, 0.02));
   }
 }
@@ -958,9 +969,6 @@ function finishScrub(it, s, at) {
 // which is its own kind of button. Back closes the domain first; outside it, your fighter hops off the left edge and the page goes.
 let dock = null;
 let dockSig = '';
-// The selected tab stamps a crest in the legend's own language. He is drawn Swedish (the Borg hair and headband), so the
-// crests are Swedish: the racket is his sword, the shoes are for running, the domain is love. Another legend, another tongue.
-const CREST = { racket: 'SVÄRD', shoes: 'LÖP', domain: 'KÄRLEK' };
 st.dockSlots = [];
 function buildDock() {
   const slots = [
@@ -1004,11 +1012,6 @@ function buildDock() {
   fresh.addEventListener('pointerdown', press(true));
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) fresh.addEventListener(ev, press(false));
   const pf = fresh.querySelector('.slot.dom .pf');
-  fresh.querySelectorAll('.slot').forEach((b, k) => {
-    const x = slots[k];
-    const word = x.kind ? CREST[x.kind] : x.domain ? CREST.domain : '';
-    if (word) b.querySelector('.pf').insertAdjacentHTML('beforeend', `<em class="crest">${word}</em>`);
-  });
   if (pf) pf.insertAdjacentHTML('afterbegin', '<svg class="knot" viewBox="0 0 44 16"><path d="M4 8c6-7 12-7 18 0s12 7 18 0M4 8c6 7 12 7 18 0s12-7 18 0"/></svg>');
   dock.place(4);
   markDock();
@@ -1133,7 +1136,7 @@ const ndcPoint = (x, y, out) => out.set(x, y, 0.5).unproject(camera).sub(camera.
 /** Floating slots, in screen space: loose rows in the upper half, every other row nudged, a little jitter. */
 function slots(n, cols, half) {
   const rows = Math.ceil(n / cols);
-  const top = 0.74; const bottom = rows > 3 ? 0.0 : 0.12;
+  const top = 0.8; const bottom = rows > 3 ? 0.14 : 0.26;
   const out = [];
   for (let k = 0; k < n; k += 1) {
     const r = Math.floor(k / cols); const inRow = Math.min(cols, n - r * cols); const c = k % cols;
@@ -1150,7 +1153,7 @@ function spawn(opts, cols) {
   const arts = opts.map((o) => o.art());
   // Keep the widest one on screen at the ends of a row.
   const widest = Math.max(...arts.map((a) => a.w));
-  const where = slots(opts.length, cols, Math.max(0.2, Math.min(0.62, 1 - (widest + 30) / window.innerWidth)));
+  const where = slots(opts.length, cols, Math.max(0.2, Math.min(0.56, 1 - (widest + 70) / window.innerWidth)));
   opts.forEach((o, k) => {
     const art = arts[k];
     const tex2 = new THREE.CanvasTexture(art.canvas);
@@ -1408,8 +1411,19 @@ function panel() {
   $('h2').classList.remove('ok');
   $('h1').textContent = st.open ? 'YOUR DOMAIN.' : d.title || 'YOUR GEAR.';
   $('h2').textContent = st.open ? inside.sub || '' : d.sub || '';
-  const due = st.open ? [] : d.due || [];
-  $('due').innerHTML = due.slice(0, 3).map((t) => `<li>${esc(t)}</li>`).join('');
+  // Outside: one line per dock button, saying exactly what you have and what shape it is in.
+  $('due').innerHTML = st.open ? '' : [['racket', 'RACKET', 'strings'], ['shoes', 'SHOES', 'soles']].map(([kind, label, s]) => {
+    const list = ofKind(kind);
+    if (!list.length) return `<li class="none"><b>${label}</b><span>none yet. tap ${label} to add one.</span></li>`;
+    const it = list.reduce((a, b) => (wornOf(b, s) > wornOf(a, s) ? b : a));
+    const w = wornOf(it, s);
+    const row = rowsOf(it).find((r) => r.s === s);
+    const n = row ? parseInt(row.text, 10) : 0;
+    const shape = s === 'strings' ? (w >= 1 ? 'strings dead' : w >= 0.6 ? 'strings tired' : 'strings fresh') : (w >= 1 ? 'worn out' : w >= 0.6 ? 'getting worn' : 'fine');
+    const since = Number.isFinite(n) ? `, ${n} match${n === 1 ? '' : 'es'} ${s === 'strings' ? 'since a restring' : 'on them'}` : '';
+    const more = list.length > 1 ? ` (+${list.length - 1} more)` : '';
+    return `<li class="${w >= 1 ? 'bad' : w >= 0.6 ? 'meh' : 'ok'}"><b>${label}</b><span>${esc(it.name)}${more}: ${shape}${since}</span></li>`;
+  }).join('');
   setHint(st.open ? inside.hint || '' : d.hint || 'hold your fighter, or tap DOMAIN, to expand it');
 }
 function focus(id, quiet) {
@@ -1804,7 +1818,13 @@ function step(dt) {
   // He steps aside to throw, so what he throws has the middle of the page.
   spring1(st.aside, flow ? 1 : 0, dt, 1.6, 0.7);
   st.flingT += dt;
-  legend.carrier.position.set(gb.x - 0.7 * st.lean.x + 0.75 * st.aside.x, -0.25 * st.aside.x + gb.y - c.x * 0.35 + 0.06 * Math.sin((st.clock * TAU) / 4.6), gb.z + c.x * 0.4);
+  // While he throws, he and your fighter shrink into the lower right corner, so what he throws floats over open page.
+  const a = st.aside.x;
+  legend.carrier.position.set(gb.x - 0.7 * st.lean.x * (1 - a) + 0.35 * a, -1.0 * a + gb.y - c.x * 0.35 + 0.06 * Math.sin((st.clock * TAU) / 4.6), gb.z + c.x * 0.4 + 0.9 * a);
+  legend.carrier.scale.multiplyScalar(1 - 0.55 * a);
+  you.carrier.position.x += 0.55 * a;
+  you.carrier.position.z += 0.9 * a;
+  you.carrier.scale.multiplyScalar(1 - 0.5 * a);
   legend.carrier.rotation.x = c.x * 0.25; // leans in over your fighter while you charge
   legend.body.simulate(dt, st.clock);
   stepShow(dt);
@@ -1886,7 +1906,7 @@ requestAnimationFrame(frame);
 window.demoDomain = (planting = null) => window.setDomain({
   planting,
   you: { cast: 'wall', color: '#d7f205', name: 'TONY' },
-  title: 'YOUR GEAR.', sub: '1 THING DUE.', inside: { sub: '6 PLANTED. 112 MATCHES IN THE GROUND.', hint: 'pull one up to see what it won. the arrow closes it.' }, due: ['PURE AERO: restring'], hint: 'hold your fighter, or tap DOMAIN, to expand it',
+  title: 'YOUR GEAR.', sub: '1 THING NEEDS WORK.', inside: { sub: '6 PLANTED. 112 MATCHES IN THE GROUND.', hint: 'pull one up to see what it won. the arrow closes it.' }, due: ['PURE AERO: restring'], hint: 'tap RACKET or SHOES and he pulls it out. tap DOMAIN, or hold your fighter, to see your old gear.',
   gear: [
     { id: 'n1', kind: 'racket', name: 'PURE AERO 2026', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '17 of 15 matches, 64 of 90 days', worn: 1.13 }] },
     { id: 'n2', kind: 'racket', name: 'BLADE 98 V9', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '4 of 15 matches, 20 of 90 days', worn: 0.27 }] },

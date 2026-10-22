@@ -5,13 +5,15 @@ import {
   type GestureResponderEvent, KeyboardAvoidingView, type LayoutChangeEvent, Platform, Pressable, ScrollView, Share, StyleSheet, Text,
   TextInput, View,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, SvgXml } from 'react-native-svg';
 
 import { MONO, P } from '@/constants/paper';
-import { crewNow, findPlayers, type Found, inviteLink, invitePlayer, refresh, renameCrew } from '@/lib/cloud';
+import { createCrew, crewNow, findPlayers, type Found, inviteLink, invitePlayer, refresh } from '@/lib/cloud';
+import { useRoster } from '@/lib/roster';
+import { CRESTS, type Crest } from '@/lib/crests';
 import { faceSvg } from '@/lib/faces';
+import { BackSwing } from '@/components/back-swing';
 import { BrushStroke } from '@/components/brush-stroke';
 import { type Brush, brushCycle } from '@/lib/brush';
 import { askInk } from '@/lib/ink-ask';
@@ -25,12 +27,14 @@ const NAME_H = 24;
 const HOLD_MS = 260;
 
 /** Three across on a phone (five on a wide screen), with room around each face. The page scrolls for the rest. */
-function layout(people: Found[], W: number): { cells: Cell[]; height: number } {
-  if (!W) return { cells: [], height: 0 };
+function layout(people: Found[], W: number): { cells: Cell[]; link: Omit<Cell, 'p'> | null; height: number } {
+  if (!W) return { cells: [], link: null, height: 0 };
   const cols = W >= 600 ? 5 : 3;
   const w = W / cols;
   const h = w * 0.72 + NAME_H + 18;
-  return { cells: people.map((p, i) => ({ p, x: (i % cols) * w, y: Math.floor(i / cols) * h, w, h })), height: Math.ceil(people.length / cols) * h + 12 };
+  const at = (i: number) => ({ x: (i % cols) * w, y: Math.floor(i / cols) * h, w, h });
+  // The last slot is the link, for anyone not on the app yet.
+  return { cells: people.map((p, i) => ({ p, ...at(i) })), link: at(people.length), height: Math.ceil((people.length + 1) / cols) * h };
 }
 
 const inside = (pt: Pt, poly: Pt[]) => {
@@ -55,12 +59,16 @@ export default function Find() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [width, setWidth] = useState(0);
+  const [headH, setHeadH] = useState(110);
+  const scrollY = useRef(0);
+  // Where the page was scrolled when the brush came out (it holds still while drawing).
+  const [offY, setOffY] = useState(0);
   const [drawing, setDrawing] = useState(false);
   const [stroke, setStroke] = useState<Pt[]>([]);
   const asked = useRef(0);
-  // A brand new crew (?first=1) gets its name last: once you have picked who is in it, naming it is easy.
-  const first = useLocalSearchParams<{ first?: string }>().first === '1';
-  const named = useRef(false);
+  const roster = useRoster();
+  const me = roster.find((f) => f.isYou);
+  const suggest = (me?.name && me.name !== 'YOU' ? `${me.name}'S CREW` : 'THE CREW').toUpperCase().slice(0, 40);
   // The same magic pen as everywhere else: each stroke takes the next brush in the cycle.
   const [nextBrush] = useState(() => brushCycle());
   const [brush, setBrush] = useState<Brush>(() => nextBrush());
@@ -77,12 +85,12 @@ export default function Find() {
     return () => clearTimeout(timer);
   }, [q]);
 
-  const { cells, height } = useMemo(() => layout(found ?? [], width), [found, width]);
+  const { cells, link, height } = useMemo(() => layout(found ?? [], width), [found, width]);
   const open = (p: Found) => p.crew === 'free' && !p.invited;
 
   // Live copies for the gesture handlers, which are made once.
-  const live = useRef({ cells, picked });
-  useEffect(() => { live.current = { cells, picked }; }, [cells, picked]);
+  const live = useRef({ cells, picked, link });
+  useEffect(() => { live.current = { cells, picked, link }; }, [cells, picked, link]);
   const pts = useRef<Pt[]>([]);
 
   /** A stroke picks: a loop takes everyone inside it; a scribble colors in every face it went over. All already picked: unpick. */
@@ -107,6 +115,8 @@ export default function Find() {
   };
 
   const tap = (pt: Pt) => {
+    const l = live.current.link;
+    if (l && pt.x >= l.x && pt.x < l.x + l.w && pt.y >= l.y && pt.y < l.y + l.h) { shareLink(); return; }
     const c = live.current.cells.find((k) => pt.x >= k.x && pt.x < k.x + k.w && pt.y >= k.y && pt.y < k.y + k.h);
     if (!c || !open(c.p)) return;
     const next = new Set(live.current.picked);
@@ -132,6 +142,7 @@ export default function Find() {
       holdTimer.current = setTimeout(() => {
         if (t.moved || t.scrolled) return;
         t.drawing = true;
+        setOffY(scrollY.current);
         setDrawing(true);
         setBrush(nextBrush());
         pts.current = [t.start];
@@ -176,15 +187,7 @@ export default function Find() {
   const send = async () => {
     const ids = [...picked];
     if (!ids.length || busy) return;
-    if (first && !named.current) {
-      // Name it now, then send. Backing out of the name keeps your picks; INVITE asks again.
-      const was = crewNow()?.name ?? 'THE CREW';
-      askInk({ label: 'NAME YOUR CREW', max: 40, upper: true, examples: [was] }, (t) => {
-        named.current = true;
-        (t && t !== was ? renameCrew(t) : Promise.resolve()).then(() => send(), (e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-      });
-      return;
-    }
+    if (!crewNow()) { makeCrew(() => send()); return; }
     setBusy(true);
     try {
       await Promise.all(ids.map((id) => invitePlayer(id)));
@@ -199,7 +202,25 @@ export default function Find() {
     }
   };
 
+  /** Drop every pick at once. */
+  const clearAll = () => {
+    if (!picked.size) return;
+    setPicked(new Set());
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    sfx('swish', 0.7);
+  };
+
+  /**
+   * No crew yet (a brand new one): name it, and only then make it. Backing out of the name makes nothing and keeps your picks.
+   */
+  const makeCrew = (then: () => void) => {
+    askInk({ label: 'NAME YOUR CREW', max: 40, upper: true, examples: [suggest] }, (t) => {
+      createCrew(t || suggest).then(then, (e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    });
+  };
+
   const shareLink = () => {
+    if (!crewNow()) { makeCrew(shareLink); return; }
     const url = inviteLink();
     const crew = crewNow();
     if (url && crew) void Share.share({ message: `Join ${crew.name} on LobsOfLove. Tap to get in: ${url}` });
@@ -210,37 +231,17 @@ export default function Find() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar style="dark" />
-      <View style={[styles.head, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={goBack} hitSlop={12}><Text style={styles.back}>{'<'} BACK</Text></Pressable>
-        <Text style={styles.title}>FIND PLAYERS</Text>
-        <View style={styles.headSpace} />
-      </View>
-      <View style={styles.searchWrap}>
-        <Svg width={20} height={20} viewBox="0 0 20 20">
-          <Circle cx={8} cy={8} r={6} stroke={P.ink} strokeWidth={2.5} fill="none" />
-          <Path d="M12.5 12.5 L18 18" stroke={P.ink} strokeWidth={2.5} strokeLinecap="round" />
-        </Svg>
-        <TextInput
-          style={styles.search}
-          value={q}
-          onChangeText={type}
-          placeholder="type a name to narrow it"
-          placeholderTextColor={P.faint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-        {q ? <Pressable onPress={() => type('')} hitSlop={10}><Text style={styles.clear}>CLEAR</Text></Pressable> : null}
-      </View>
-      <Text style={styles.hint}>{error ?? (found?.length === 0 ? `NOBODY CALLED "${q.trim().toUpperCase()}"` : 'TAP A FACE, OR HOLD AND CIRCLE A BUNCH')}</Text>
-
+      {/* Faces edge to edge, scrolling under the back button and search on top, and the buttons at the bottom. */}
       <ScrollView
-        style={styles.grid}
+        style={StyleSheet.absoluteFill}
+        contentContainerStyle={{ paddingTop: headH + 6, paddingBottom: (n ? 96 : 24) + insets.bottom }}
         scrollEnabled={!drawing}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         onScrollBeginDrag={() => { touchRef.current.scrolled = true; if (holdTimer.current) clearTimeout(holdTimer.current); }}
         onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
+        onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={32}
       >
         <View style={{ height }} {...touch}>
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -256,42 +257,103 @@ export default function Find() {
                 <View key={c.p.id} style={[styles.cell, { left: c.x, top: c.y, width: c.w, height: c.h }, tag && styles.cellDim, back && styles.cellBack]}>
                   <View style={[styles.faceWrap, { width: ring, height: ring, borderRadius: ring / 2 }, on && styles.faceOn]}>
                     <SvgXml xml={faceSvg(c.p.face, c.p.color)} width={face} height={face} />
+                    {on && CRESTS[c.p.face] ? <CrestStamp crest={CRESTS[c.p.face]} /> : null}
                   </View>
                   <Text numberOfLines={1} style={[styles.name, on && styles.nameOn]}>{tag ?? c.p.name}</Text>
                 </View>
               );
             })}
-            {stroke.length > 1 ? (
-              <BrushStroke style={StyleSheet.absoluteFill} brush={brush} points={stroke.map((p) => [p.x, p.y] as const)} />
+            {link ? (
+              <View style={[styles.cell, { left: link.x, top: link.y, width: link.w, height: link.h }]}>
+                <View style={[styles.linkTile, { width: link.w * 0.62 + 14, height: link.w * 0.62 + 14, borderRadius: (link.w * 0.62 + 14) / 2 }]}>
+                  <Text style={styles.linkPlus}>+</Text>
+                </View>
+                <Text style={styles.name}>SEND THE LINK</Text>
+              </View>
             ) : null}
           </View>
         </View>
       </ScrollView>
 
-      <View style={[styles.foot, { paddingBottom: Math.max(12, insets.bottom) }]}>
-        <Pressable onPress={send} disabled={!n || busy} style={({ pressed }) => [styles.go, !n && styles.goOff, pressed && n ? styles.goPressed : null]}>
-          <Text style={[styles.goText, !n && styles.goTextOff]}>{busy ? 'SENDING...' : n ? `INVITE ${n} ${n === 1 ? 'PLAYER' : 'PLAYERS'}` : 'PICK WHO YOU WANT'}</Text>
-        </Pressable>
-        <Pressable onPress={shareLink} hitSlop={8}><Text style={styles.link}>NOT ON THE APP YET? SEND THE LINK</Text></Pressable>
+      {/* The brush lives in one screen-sized layer. A canvas as tall as the whole scrolling list is bigger than the GPU allows
+          and crashes the app; the page holds still while drawing, so content points just shift by the scroll and top padding. */}
+      {stroke.length > 1 ? (
+        <BrushStroke style={StyleSheet.absoluteFill} brush={brush} points={stroke.map((p) => [p.x, p.y + headH + 6 - offY] as const)} />
+      ) : null}
+
+      <View style={[styles.top, { paddingTop: insets.top + 4 }]} onLayout={(e: LayoutChangeEvent) => setHeadH(e.nativeEvent.layout.height)}>
+        <View style={[styles.searchWrap, error && styles.searchError]}>
+          <Svg width={18} height={18} viewBox="0 0 20 20">
+            <Circle cx={8} cy={8} r={6} stroke={P.ink} strokeWidth={2.5} fill="none" />
+            <Path d="M12.5 12.5 L18 18" stroke={P.ink} strokeWidth={2.5} strokeLinecap="round" />
+          </Svg>
+          <TextInput
+            style={styles.search}
+            value={q}
+            onChangeText={type}
+            placeholder={error ?? (found?.length === 0 ? 'nobody by that name' : 'find players')}
+            placeholderTextColor={error ? P.red : P.faint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {q ? <Pressable onPress={() => type('')} hitSlop={10}><Text style={styles.clear}>CLEAR</Text></Pressable> : null}
+        </View>
       </View>
+      <BackSwing floating />
+
+      {n ? (
+        <View style={[styles.foot, { paddingBottom: Math.max(12, insets.bottom) }]} pointerEvents="box-none">
+          <Pressable onPress={clearAll} hitSlop={6} style={({ pressed }) => [styles.clearAll, pressed && styles.goPressed]}>
+            <Text style={styles.clearAllText}>CLEAR</Text>
+          </Pressable>
+          <Pressable onPress={send} disabled={busy} style={({ pressed }) => [styles.go, pressed && styles.goPressed]}>
+            <Text style={styles.goText}>{busy ? 'SENDING...' : `INVITE ${n} ${n === 1 ? 'PLAYER' : 'PLAYERS'}`}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </KeyboardAvoidingView>
+  );
+}
+
+/**
+ * The crest a picked face stamps on its corner, in the character's own tongue: a tennis ball with the home cheer for players,
+ * the gi kanji in a white patch for Dragon Ball, a cursed seal for Jujutsu Kaisen.
+ */
+function CrestStamp({ crest }: { crest: Crest }) {
+  if (crest.kind === 'tennis') {
+    return (
+      <View style={styles.cheer}>
+        <Svg width={14} height={14} viewBox="0 0 14 14">
+          <Circle cx={7} cy={7} r={6} fill={P.ball} stroke={P.ink} strokeWidth={1.6} />
+          <Path d="M2.4 3.6 Q6 7 2.4 10.4 M11.6 3.6 Q8 7 11.6 10.4" stroke="#fffdf4" strokeWidth={1.3} fill="none" />
+        </Svg>
+        <Text style={styles.cheerText} numberOfLines={1}>{crest.text}</Text>
+      </View>
+    );
+  }
+  const dbz = crest.kind === 'dbz';
+  return (
+    <View style={[styles.seal, dbz ? styles.sealDbz : styles.sealJjk]}>
+      <Text style={[styles.sealText, dbz ? styles.sealTextDbz : styles.sealTextJjk, crest.text.length > 1 && styles.sealTextSmall]}>{crest.text}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: P.paper },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 10 },
-  headSpace: { width: 56 },
-  back: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.2, color: P.ink, width: 56 },
-  title: { fontFamily: MONO, fontWeight: '800', fontSize: 13, letterSpacing: 1.6, color: P.red },
+  // A paper strip behind the back button and search, so faces scroll under it cleanly. The back button is the app's own
+  // (BackSwing, 112 wide, floating at the same height); the search fills the rest of the row.
+  top: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: P.paper, paddingLeft: 134, paddingRight: 12, paddingBottom: 10 },
+  searchError: { borderColor: P.red },
+  linkTile: { alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderStyle: 'dashed', borderColor: P.ink },
+  linkPlus: { fontWeight: '900', fontSize: 34, color: P.ink, marginTop: -4 },
   searchWrap: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, paddingHorizontal: 14, paddingVertical: 2,
-    borderWidth: 2.5, borderColor: P.ink, borderRadius: 24, backgroundColor: P.card,
+    flexDirection: 'row', alignItems: 'center', gap: 8, height: 50, paddingHorizontal: 14,
+    borderWidth: 2.5, borderColor: P.ink, borderRadius: 25, backgroundColor: P.card,
   },
   search: { flex: 1, fontFamily: MONO, fontWeight: '700', fontSize: 16, color: P.ink, paddingVertical: 9 },
   clear: { fontFamily: MONO, fontWeight: '800', fontSize: 10, letterSpacing: 1.2, color: P.dim },
-  hint: { fontFamily: MONO, fontWeight: '800', fontSize: 11, letterSpacing: 1.3, color: P.red, textAlign: 'center', marginTop: 10, marginBottom: 4 },
-  grid: { flex: 1, marginHorizontal: 10 },
   cell: { position: 'absolute', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 10 },
   cellDim: { opacity: 0.4 },
   cellBack: { opacity: 0.45 },
@@ -302,14 +364,31 @@ const styles = StyleSheet.create({
   },
   name: { fontFamily: MONO, fontWeight: '800', fontSize: 11, letterSpacing: 0.8, color: P.ink, marginTop: 6, paddingHorizontal: 6, paddingVertical: 2, maxWidth: '100%' },
   nameOn: { backgroundColor: P.ink, color: P.card, borderRadius: 5, overflow: 'hidden', marginTop: 9 },
-  foot: { paddingHorizontal: 16, paddingTop: 8, gap: 10, alignItems: 'center' },
-  go: {
-    alignSelf: 'stretch', alignItems: 'center', paddingVertical: 15, borderRadius: 30, backgroundColor: P.red, borderWidth: 2.5, borderColor: P.ink,
+  clearAll: {
+    paddingHorizontal: 16, justifyContent: 'center', borderRadius: 30, borderWidth: 2.5, borderColor: P.ink, backgroundColor: P.card,
     shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 4 },
   },
-  goOff: { backgroundColor: 'transparent', borderStyle: 'dashed', shadowOpacity: 0 },
+  clearAllText: { fontFamily: MONO, fontWeight: '800', fontSize: 12, letterSpacing: 1.4, color: P.ink },
+  cheer: {
+    position: 'absolute', top: -10, right: -18, flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 4, paddingRight: 7, paddingVertical: 3,
+    backgroundColor: P.card, borderWidth: 2, borderColor: P.ink, borderRadius: 12, transform: [{ rotate: '9deg' }],
+  },
+  cheerText: { fontWeight: '900', fontStyle: 'italic', fontSize: 11, color: P.ink },
+  seal: {
+    position: 'absolute', top: -8, right: -8, width: 30, height: 30, borderRadius: 15, borderWidth: 2.5, borderColor: P.ink,
+    alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }],
+  },
+  sealDbz: { backgroundColor: '#fffdf4' },
+  sealJjk: { backgroundColor: '#2a1740' },
+  sealText: { fontWeight: '900', fontSize: 16, lineHeight: 19 },
+  sealTextDbz: { color: P.ink },
+  sealTextJjk: { color: '#e9d8ff' },
+  sealTextSmall: { fontSize: 10, lineHeight: 12 },
+  foot: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', gap: 10, paddingHorizontal: 14 },
+  go: {
+    flex: 1, alignItems: 'center', paddingVertical: 15, borderRadius: 30, backgroundColor: P.red, borderWidth: 2.5, borderColor: P.ink,
+    shadowColor: '#000', shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 0, height: 4 },
+  },
   goPressed: { transform: [{ translateY: 3 }], shadowOffset: { width: 0, height: 1 } },
   goText: { fontFamily: MONO, fontWeight: '800', fontSize: 14, letterSpacing: 1.6, color: P.card },
-  goTextOff: { color: P.dim },
-  link: { fontFamily: MONO, fontWeight: '800', fontSize: 10, letterSpacing: 1.2, color: P.ink, textDecorationLine: 'underline' },
 });

@@ -7,6 +7,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 
+import { BackSwing } from '@/components/back-swing';
 import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
 import { MONO, P } from '@/constants/paper';
 import { INK_HTML } from '@/generated/ink-html';
@@ -365,22 +366,24 @@ export default function Ink() {
         </View>
       ) : null}
       {mode === 'pick' ? (
-        <View style={[styles.pick, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-          <View style={styles.pickHead}>
-            <Pressable onPress={goBack} hitSlop={12}><Text style={styles.back}>{'<'} BACK</Text></Pressable>
-            <Text style={styles.title}>{label ?? 'SAY IT'}</Text>
-          </View>
+        <View style={styles.pick}>
+          {/* Two halves, edge to edge: nothing above, nothing below. */}
           <View style={styles.halves}>
             <Pressable style={({ pressed }) => [styles.half, styles.halfType, pressed && styles.halfPressed]} onPress={() => pickMode('type')}>
-              <KeysIcon size={86} light />
+              <KeysIcon size={96} light />
               <Text style={[styles.halfWord, styles.light]}>TYPE</Text>
               <Text style={[styles.halfSub, styles.light]}>{ask ? 'on the keyboard' : friend ? 'their name, on the keyboard' : 'like texting the app'}</Text>
             </Pressable>
             <Pressable style={({ pressed }) => [styles.half, pressed && styles.halfPressed]} onPress={() => pickMode('write')}>
-              <PenIcon size={86} />
+              <PenIcon size={96} />
               <Text style={styles.halfWord}>WRITE</Text>
               <Text style={styles.halfSub}>{friend ? 'their name, with your finger' : 'with your finger'}</Text>
             </Pressable>
+          </View>
+          <BackSwing floating />
+          {/* The question, stuck on the seam like a sticker. */}
+          <View style={[styles.stickerRow, { top: insets.top + 74 }]} pointerEvents="none">
+            <View style={styles.sticker}><Text style={styles.stickerText}>{label ?? 'SAY IT'}</Text></View>
           </View>
         </View>
       ) : null}
@@ -441,12 +444,17 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
   hidden: { opacity: 0 },
   pick: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#efece5' },
-  pickHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
-  halves: { flex: 1, flexDirection: 'row', borderTopWidth: 2.5, borderColor: P.ink },
+  halves: { flex: 1, flexDirection: 'row' },
+  stickerRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  sticker: {
+    backgroundColor: P.red, borderWidth: 3, borderColor: P.ink, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10, transform: [{ rotate: '-4deg' }],
+    shadowColor: P.ink, shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 4, height: 5 }, elevation: 6, maxWidth: '86%',
+  },
+  stickerText: { fontWeight: '900', fontStyle: 'italic', fontSize: 26, letterSpacing: 0.5, color: '#fffdf4', textAlign: 'center' },
   half: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 10 },
   halfType: { backgroundColor: P.ink },
   halfPressed: { opacity: 0.8 },
-  halfWord: { fontFamily: MONO, fontWeight: '800', fontSize: 30, letterSpacing: 3, color: P.ink },
+  halfWord: { fontFamily: MONO, fontWeight: '800', fontSize: 34, letterSpacing: 3, color: P.ink },
   halfSub: { fontFamily: MONO, fontWeight: '700', fontSize: 12, color: P.ink, opacity: 0.6, textAlign: 'center' },
   light: { color: '#fffdf4' },
   switchRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },

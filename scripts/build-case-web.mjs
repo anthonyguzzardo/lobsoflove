@@ -379,12 +379,6 @@ const domainCss = homeCss + `
 #hint .wd.v{color:var(--clay);font-weight:900}
 @keyframes hwave{0%,9%,100%{font-weight:inherit;transform:none;color:inherit}3%{font-weight:900;transform:translateY(-2.5px) scale(1.12);color:var(--clay)}}
 @media (prefers-reduced-motion:reduce){#hint .wd i{animation:none}}
-/* The crest: the selected tab stamps its word onto the platform face, pressed in like a seal. */
-#dock .pf .crest{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:900 8px var(--mono);font-style:normal;letter-spacing:.08em;color:#fffdf0;opacity:0;transform:scale(1.8);pointer-events:none}
-#dock .slot.on .pf .crest{opacity:1;transform:scale(1);transition:transform .22s cubic-bezier(.2,1.6,.4,1),opacity .08s}
-#dock .slot.dom .pf .crest{color:var(--clay)}
-#dock .slot.dom .knot{transition:opacity .1s}
-#dock .slot.dom.on .knot{opacity:0}
 /* Back: the old motley pill, shrunk onto a platform. Paint drifts under ink, smoke idles across, the cream chevron nods left.
    Tapped, the paint smears left into a candy rope and the chevron shoots off. */
 #dock .slot.bk{flex:0 0 62px}
@@ -478,6 +472,11 @@ body.open #de{opacity:1;animation:dein .5s .1s cubic-bezier(.16,1,.3,1) both}
 #due{list-style:none;margin:8px 0 0;padding:0}
 #due li{font:800 13px var(--mono);letter-spacing:.03em;padding:3px 0;display:flex;align-items:center;gap:8px}
 #due li:before{content:"";width:9px;height:9px;border-radius:2px;background:var(--clay);flex:none}
+/* Gear outside: one line per dock button. The label matches the button; the square says what shape it is in. */
+#ov #due li{font:700 12px var(--mono);letter-spacing:0;align-items:baseline;padding:2px 0}
+#ov #due li b{font-weight:900;width:58px;flex:none;letter-spacing:.04em}
+#ov #due li:before{align-self:center}
+#ov #due li.ok:before{background:#3f8f5a}#ov #due li.meh:before{background:#e0a35a}#ov #due li.none:before{background:none;box-shadow:inset 0 0 0 1.5px var(--ink)}
 #rows{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
 .row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:1fr auto;grid-template-areas:"w e" "t t" "b b";gap:3px 8px;padding:8px 10px 9px;border-radius:5px;background:#fffdf8;box-shadow:inset 0 0 0 1.6px rgba(22,24,29,.22)}
 .row.on{box-shadow:inset 0 0 0 2.4px var(--ink)}
