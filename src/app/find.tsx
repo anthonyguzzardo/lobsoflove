@@ -2,36 +2,35 @@ import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  type GestureResponderEvent, KeyboardAvoidingView, type LayoutChangeEvent, Platform, Pressable, Share, StyleSheet, Text,
+  type GestureResponderEvent, KeyboardAvoidingView, type LayoutChangeEvent, Platform, Pressable, ScrollView, Share, StyleSheet, Text,
   TextInput, View,
 } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, SvgXml } from 'react-native-svg';
 
 import { MONO, P } from '@/constants/paper';
-import { crewNow, findPlayers, type Found, inviteLink, invitePlayer, refresh } from '@/lib/cloud';
+import { crewNow, findPlayers, type Found, inviteLink, invitePlayer, refresh, renameCrew } from '@/lib/cloud';
 import { faceSvg } from '@/lib/faces';
+import { BrushStroke } from '@/components/brush-stroke';
+import { type Brush, brushCycle } from '@/lib/brush';
+import { askInk } from '@/lib/ink-ask';
 import { goBack } from '@/lib/nav';
 import { sfx } from '@/lib/sfx';
 
 type Pt = { x: number; y: number };
 type Cell = { p: Found; x: number; y: number; w: number; h: number };
 
-const NAME_H = 18;
+const NAME_H = 24;
+const HOLD_MS = 260;
 
-/** Lay the people out as big as they fit: fewest columns that still fit everyone, else as many as fit at six across. */
-function layout(people: Found[], W: number, H: number): { cells: Cell[]; hidden: number } {
-  if (!W || !H) return { cells: [], hidden: 0 };
-  let cols = 3;
-  for (; cols < 6; cols++) {
-    const w = W / cols;
-    if (Math.ceil(people.length / cols) * (w * 0.86 + NAME_H) <= H) break;
-  }
+/** Three across on a phone (five on a wide screen), with room around each face. The page scrolls for the rest. */
+function layout(people: Found[], W: number): { cells: Cell[]; height: number } {
+  if (!W) return { cells: [], height: 0 };
+  const cols = W >= 600 ? 5 : 3;
   const w = W / cols;
-  const h = w * 0.86 + NAME_H;
-  const fit = cols * Math.max(1, Math.floor(H / h));
-  const shown = people.slice(0, fit);
-  return { cells: shown.map((p, i) => ({ p, x: (i % cols) * w, y: Math.floor(i / cols) * h, w, h })), hidden: people.length - shown.length };
+  const h = w * 0.72 + NAME_H + 18;
+  return { cells: people.map((p, i) => ({ p, x: (i % cols) * w, y: Math.floor(i / cols) * h, w, h })), height: Math.ceil(people.length / cols) * h + 12 };
 }
 
 const inside = (pt: Pt, poly: Pt[]) => {
@@ -55,9 +54,16 @@ export default function Find() {
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [width, setWidth] = useState(0);
+  const [drawing, setDrawing] = useState(false);
   const [stroke, setStroke] = useState<Pt[]>([]);
   const asked = useRef(0);
+  // A brand new crew (?first=1) gets its name last: once you have picked who is in it, naming it is easy.
+  const first = useLocalSearchParams<{ first?: string }>().first === '1';
+  const named = useRef(false);
+  // The same magic pen as everywhere else: each stroke takes the next brush in the cycle.
+  const [nextBrush] = useState(() => brushCycle());
+  const [brush, setBrush] = useState<Brush>(() => nextBrush());
 
   // Everyone on open; narrowed as you type, a beat after the last key.
   useEffect(() => {
@@ -71,7 +77,7 @@ export default function Find() {
     return () => clearTimeout(timer);
   }, [q]);
 
-  const { cells, hidden } = useMemo(() => layout(found ?? [], size.w, size.h), [found, size]);
+  const { cells, height } = useMemo(() => layout(found ?? [], width), [found, width]);
   const open = (p: Found) => p.crew === 'free' && !p.invited;
 
   // Live copies for the gesture handlers, which are made once.
@@ -112,25 +118,56 @@ export default function Find() {
 
   const at = (e: GestureResponderEvent): Pt => ({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY });
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Touch handlers straight on the grid: a short touch is a tap, anything longer is a stroke.
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchRef = useRef({ start: { x: 0, y: 0 } as Pt, moved: false, drawing: false, scrolled: false });
+
+  // One finger, three meanings: a quick swipe scrolls, a quick touch picks, press and hold brings out the brush (circle or
+  // scribble) and holds the page still until you lift.
   const touch = {
-    onStartShouldSetResponder: () => true,
-    onResponderTerminationRequest: () => false,
-    onResponderGrant: (e: GestureResponderEvent) => { if (clearTimer.current) clearTimeout(clearTimer.current); pts.current = [at(e)]; setStroke(pts.current); },
-    onResponderMove: (e: GestureResponderEvent) => {
+    onTouchStart: (e: GestureResponderEvent) => {
+      const t = touchRef.current;
+      t.start = at(e); t.moved = false; t.drawing = false; t.scrolled = false;
+      if (clearTimer.current) clearTimeout(clearTimer.current);
+      if (holdTimer.current) clearTimeout(holdTimer.current);
+      holdTimer.current = setTimeout(() => {
+        if (t.moved || t.scrolled) return;
+        t.drawing = true;
+        setDrawing(true);
+        setBrush(nextBrush());
+        pts.current = [t.start];
+        setStroke(pts.current);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        sfx('swish', 0.4);
+      }, HOLD_MS);
+    },
+    onTouchMove: (e: GestureResponderEvent) => {
+      const t = touchRef.current;
       const p = at(e);
+      if (!t.drawing) {
+        if (Math.hypot(p.x - t.start.x, p.y - t.start.y) > 8) t.moved = true;
+        return;
+      }
       const last = pts.current[pts.current.length - 1];
       if (Math.hypot(p.x - last.x, p.y - last.y) < 3) return;
       pts.current = [...pts.current, p];
       setStroke(pts.current);
     },
-    onResponderRelease: () => {
-      const line = pts.current;
-      const a = line[0], b = line[line.length - 1];
-      const moved = line.reduce((m, p) => Math.max(m, Math.hypot(p.x - a.x, p.y - a.y)), 0);
-      if (moved < 10) { tap(b); setStroke([]); return; }
-      finish(line);
-      clearTimer.current = setTimeout(() => setStroke([]), 380);
+    onTouchEnd: () => {
+      const t = touchRef.current;
+      if (holdTimer.current) clearTimeout(holdTimer.current);
+      if (t.drawing) {
+        const line = pts.current;
+        const moved = line.reduce((m, p) => Math.max(m, Math.hypot(p.x - t.start.x, p.y - t.start.y)), 0);
+        if (moved < 10) tap(t.start); else finish(line);
+        t.drawing = false;
+        setDrawing(false);
+        clearTimer.current = setTimeout(() => setStroke([]), 380);
+      } else if (!t.moved && !t.scrolled) tap(t.start);
+    },
+    onTouchCancel: () => {
+      const t = touchRef.current;
+      if (holdTimer.current) clearTimeout(holdTimer.current);
+      if (t.drawing) { t.drawing = false; setDrawing(false); setStroke([]); }
     },
   };
 
@@ -139,6 +176,15 @@ export default function Find() {
   const send = async () => {
     const ids = [...picked];
     if (!ids.length || busy) return;
+    if (first && !named.current) {
+      // Name it now, then send. Backing out of the name keeps your picks; INVITE asks again.
+      const was = crewNow()?.name ?? 'THE CREW';
+      askInk({ label: 'NAME YOUR CREW', max: 40, upper: true, examples: [was] }, (t) => {
+        named.current = true;
+        (t && t !== was ? renameCrew(t) : Promise.resolve()).then(() => send(), (e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+      });
+      return;
+    }
     setBusy(true);
     try {
       await Promise.all(ids.map((id) => invitePlayer(id)));
@@ -159,7 +205,6 @@ export default function Find() {
     if (url && crew) void Share.share({ message: `Join ${crew.name} on LobsOfLove. Tap to get in: ${url}` });
   };
 
-  const d = stroke.length > 1 ? `M${stroke.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' L')}` : '';
   const n = picked.size;
 
   return (
@@ -187,31 +232,41 @@ export default function Find() {
         />
         {q ? <Pressable onPress={() => type('')} hitSlop={10}><Text style={styles.clear}>CLEAR</Text></Pressable> : null}
       </View>
-      <Text style={styles.hint}>{error ?? (found?.length === 0 ? `NOBODY CALLED "${q.trim().toUpperCase()}"` : 'CIRCLE THEM, COLOR THEM IN, OR TAP')}</Text>
+      <Text style={styles.hint}>{error ?? (found?.length === 0 ? `NOBODY CALLED "${q.trim().toUpperCase()}"` : 'TAP A FACE, OR HOLD AND CIRCLE A BUNCH')}</Text>
 
-      <View style={styles.grid} onLayout={(e: LayoutChangeEvent) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })} {...touch}>
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          {cells.map((c) => {
-            const on = picked.has(c.p.id);
-            const tag = c.p.crew === 'yours' ? 'IN CREW' : c.p.crew === 'taken' ? 'IN A CREW' : c.p.invited ? 'INVITED' : null;
-            const face = c.w * 0.8;
-            return (
-              <View key={c.p.id} style={[styles.cell, { left: c.x, top: c.y, width: c.w, height: c.h }, tag && styles.cellDim]}>
-                <View style={[styles.faceWrap, { width: face + 8, height: face + 8, borderRadius: (face + 8) / 2 }, on && { backgroundColor: c.p.color, borderColor: P.ink }]}>
-                  <SvgXml xml={faceSvg(c.p.face, c.p.color)} width={face} height={face} />
+      <ScrollView
+        style={styles.grid}
+        scrollEnabled={!drawing}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        onScrollBeginDrag={() => { touchRef.current.scrolled = true; if (holdTimer.current) clearTimeout(holdTimer.current); }}
+        onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
+      >
+        <View style={{ height }} {...touch}>
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            {cells.map((c) => {
+              const on = picked.has(c.p.id);
+              const tag = c.p.crew === 'yours' ? 'IN CREW' : c.p.crew === 'taken' ? 'IN A CREW' : c.p.invited ? 'INVITED' : null;
+              const face = c.w * 0.62;
+              const ring = face + 14;
+              // Picked: lifted off the page like a sticker (ring, hard shadow, tilt) and the name flips to a black pill. None
+              // of that needs color to read. Once anyone is picked, everyone else steps back.
+              const back = !on && !tag && picked.size > 0;
+              return (
+                <View key={c.p.id} style={[styles.cell, { left: c.x, top: c.y, width: c.w, height: c.h }, tag && styles.cellDim, back && styles.cellBack]}>
+                  <View style={[styles.faceWrap, { width: ring, height: ring, borderRadius: ring / 2 }, on && styles.faceOn]}>
+                    <SvgXml xml={faceSvg(c.p.face, c.p.color)} width={face} height={face} />
+                  </View>
+                  <Text numberOfLines={1} style={[styles.name, on && styles.nameOn]}>{tag ?? c.p.name}</Text>
                 </View>
-                <Text numberOfLines={1} style={[styles.name, on && styles.nameOn]}>{tag ?? c.p.name}</Text>
-              </View>
-            );
-          })}
-          {d ? (
-            <Svg style={StyleSheet.absoluteFill}>
-              <Path d={d} stroke={P.red} strokeWidth={7} strokeOpacity={0.85} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            </Svg>
-          ) : null}
+              );
+            })}
+            {stroke.length > 1 ? (
+              <BrushStroke style={StyleSheet.absoluteFill} brush={brush} points={stroke.map((p) => [p.x, p.y] as const)} />
+            ) : null}
+          </View>
         </View>
-      </View>
-      {hidden > 0 ? <Text style={styles.more}>+{hidden} MORE: TYPE A NAME TO FIND THEM</Text> : null}
+      </ScrollView>
 
       <View style={[styles.foot, { paddingBottom: Math.max(12, insets.bottom) }]}>
         <Pressable onPress={send} disabled={!n || busy} style={({ pressed }) => [styles.go, !n && styles.goOff, pressed && n ? styles.goPressed : null]}>
@@ -237,12 +292,16 @@ const styles = StyleSheet.create({
   clear: { fontFamily: MONO, fontWeight: '800', fontSize: 10, letterSpacing: 1.2, color: P.dim },
   hint: { fontFamily: MONO, fontWeight: '800', fontSize: 11, letterSpacing: 1.3, color: P.red, textAlign: 'center', marginTop: 10, marginBottom: 4 },
   grid: { flex: 1, marginHorizontal: 10 },
-  cell: { position: 'absolute', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
+  cell: { position: 'absolute', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 10 },
   cellDim: { opacity: 0.4 },
-  faceWrap: { alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: 'transparent' },
-  name: { fontFamily: MONO, fontWeight: '800', fontSize: 9, letterSpacing: 0.6, color: P.ink, marginTop: 1, paddingHorizontal: 4, maxWidth: '100%' },
-  nameOn: { backgroundColor: P.ink, color: P.card, borderRadius: 4, overflow: 'hidden' },
-  more: { fontFamily: MONO, fontWeight: '800', fontSize: 10, letterSpacing: 1.1, color: P.dim, textAlign: 'center', marginTop: 2 },
+  cellBack: { opacity: 0.45 },
+  faceWrap: { alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: 'transparent' },
+  faceOn: {
+    borderColor: P.red, backgroundColor: P.card, transform: [{ scale: 1.12 }, { rotate: '-5deg' }],
+    shadowColor: P.ink, shadowOpacity: 1, shadowRadius: 0, shadowOffset: { width: 3, height: 5 }, elevation: 6,
+  },
+  name: { fontFamily: MONO, fontWeight: '800', fontSize: 11, letterSpacing: 0.8, color: P.ink, marginTop: 6, paddingHorizontal: 6, paddingVertical: 2, maxWidth: '100%' },
+  nameOn: { backgroundColor: P.ink, color: P.card, borderRadius: 5, overflow: 'hidden', marginTop: 9 },
   foot: { paddingHorizontal: 16, paddingTop: 8, gap: 10, alignItems: 'center' },
   go: {
     alignSelf: 'stretch', alignItems: 'center', paddingVertical: 15, borderRadius: 30, backgroundColor: P.red, borderWidth: 2.5, borderColor: P.ink,

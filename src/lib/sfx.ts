@@ -1,5 +1,7 @@
 import { type AudioPlayer, createAudioPlayer } from 'expo-audio';
 
+import { soundOn } from '@/lib/sound';
+
 /** Every sound is synthesized by scripts/build-sfx.mjs; nothing is sampled. */
 const SOURCES = {
   tick: require('../../assets/sfx/tick.wav'),
@@ -24,6 +26,7 @@ export type Sfx = keyof typeof SOURCES;
 const players: Partial<Record<Sfx, AudioPlayer>> = {};
 
 export function sfx(name: Sfx, volume = 0.8) {
+  if (!soundOn()) return;
   try {
     const p = (players[name] ??= createAudioPlayer(SOURCES[name]));
     p.volume = volume;

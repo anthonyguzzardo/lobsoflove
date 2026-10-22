@@ -15,6 +15,7 @@ import { goBack } from '@/lib/nav';
 import { clock, demoFriends, useBeacon, useCrewPeople } from '@/lib/presence';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
+import { useSound } from '@/lib/sound';
 
 /** A power level read off a real season: a base, the points, the wins, and a hot streak counts for a lot. */
 const powerOf = (r: Row | undefined) => (r ? Math.round(1200 + r.points * 18 + r.wins * 140 + Math.max(0, r.streak) * 420) : null);
@@ -35,7 +36,8 @@ export default function Fly() {
   const cloud = useCloud();
   const scene = useScene();
   const { run } = scene;
-  const you = roster.find((f) => f.isYou) ?? roster[0];
+  const sound = useSound();
+  const you =roster.find((f) => f.isYou) ?? roster[0];
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 60 * 1000); return () => clearInterval(id); }, []);
 
@@ -57,6 +59,7 @@ export default function Fly() {
     });
   }, [roster, matches, crewPeople, now, you, beacon?.venue, hunt]);
   useEffect(() => { if (params.demo !== '1') run(`window.setFly(${data})`); }, [run, data, params.demo]);
+  useEffect(() => { run(`window.setSound(${sound})`); }, [run, sound]);
 
   return (
     <View style={styles.root}>

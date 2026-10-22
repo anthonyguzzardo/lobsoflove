@@ -2,6 +2,7 @@ import { type AudioPlayer, createAudioPlayer } from 'expo-audio';
 import { useSyncExternalStore } from 'react';
 
 import raw from '@/data/anthems.json';
+import { onSoundChange, soundOn } from '@/lib/sound';
 import type { ThemeId } from '@/lib/themes';
 
 /**
@@ -21,6 +22,8 @@ let muted = false;
 let fade: ReturnType<typeof setInterval> | undefined;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
+/** The song's loudness now: silent when this court is muted or the app's sound is off. */
+const lvl = () => (!muted && soundOn() ? LEVEL : 0);
 
 function ramp(p: AudioPlayer, from: number, to: number, done?: () => void) {
   const steps = 12;
@@ -44,7 +47,7 @@ export function playAnthem(theme: ThemeId) {
   playing = theme;
   emit();
   const old = player;
-  if (old) ramp(old, muted ? 0 : LEVEL, 0, () => release(old));
+  if (old) ramp(old, lvl(), 0, () => release(old));
   try {
     const next = createAudioPlayer({ uri: a.previewUrl });
     next.loop = true;
@@ -52,7 +55,7 @@ export function playAnthem(theme: ThemeId) {
     next.play();
     player = next;
     clearInterval(fade);
-    if (!muted) fade = ramp(next, 0, LEVEL);
+    if (lvl()) fade = ramp(next, 0, LEVEL);
   } catch {
     player = null; // no network or no audio: the screen works silently
   }
@@ -63,15 +66,26 @@ export function stopAnthem() {
   player = null;
   playing = null;
   clearInterval(fade);
-  if (old) ramp(old, muted ? 0 : LEVEL, 0, () => release(old));
+  if (old) ramp(old, lvl(), 0, () => release(old));
   emit();
+}
+
+/** Fade the playing song to where `lvl()` says it belongs. */
+function follow() {
+  if (!player) return;
+  clearInterval(fade);
+  const to = lvl();
+  fade = ramp(player, to ? 0 : LEVEL, to);
 }
 
 export function toggleMute() {
   muted = !muted;
-  if (player) { clearInterval(fade); fade = ramp(player, muted ? LEVEL : 0, muted ? 0 : LEVEL); }
+  follow();
   emit();
 }
+
+// The app-wide sound switch silences the song too, and brings it back when sound returns.
+onSoundChange(() => { follow(); emit(); });
 
 export function useAnthemMuted(): boolean {
   return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => muted, () => muted);

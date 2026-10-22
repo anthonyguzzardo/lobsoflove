@@ -828,8 +828,10 @@ const st = {
   blast: false, rise: false, wasBlast: false, wasRise: false, blastT: 0, sinceBlast: 9, super: false, power: 0.4, flare: 0,
   stick: { on: false, x: 0, y: 0, ox: 0, oy: 0, id: null }, keys: new Set(),
   clock: 0, shake: 0, flash: 0, mach: false, landing: null, near: null, touched: false, edge: false,
-  camOff: new V3(0, 3, 9), camVel: new V3(), ki: 0, nineAt: -9, boltAt: 0, cloud: 0, lastTrail: new V3(),
+  camOff: new V3(0, 3, 9), camVel: new V3(), ki: 0, kiPop: 0, nineAt: -9, boltAt: 0, cloud: 0, lastTrail: new V3(), brakeT: 0,
 };
+/** A jolt to the power level: the number jumps and the readout pops. */
+function spike(n) { st.ki += n; st.kiPop = 1; }
 const UP = new V3(0, 1, 0);
 const fwd = (yaw, pitch, out = new V3()) => out.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
 function startAt(v) {
@@ -841,25 +843,66 @@ function startAt(v) {
   if (typeof hunt !== 'undefined') hunt.last.copy(st.pos);
 }
 
+// ---------- Your shadow on the ground ----------
+// Skimming low, the jelly's own silhouette races across the ground under you (its live shape pressed flat). Higher up it
+// melts into a soft spot that spreads and thins as you climb, so you can always read how high you are.
+const blobTex = tex(128, 128, (g, w) => {
+  const grd = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  grd.addColorStop(0, 'rgba(12,16,24,.8)'); grd.addColorStop(0.5, 'rgba(12,16,24,.5)'); grd.addColorStop(1, 'rgba(12,16,24,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, w, w);
+});
+const blob = new THREE.Mesh(new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
+blob.renderOrder = 2; scene.add(blob);
+// Strictly-less depth: every flattened triangle lands at the same depth, so overlaps draw once instead of stacking darker.
+const shade = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0x0c1018, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthFunc: THREE.LessDepth, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
+shade.matrixAutoUpdate = false; shade.frustumCulled = false; shade.renderOrder = 3; scene.add(shade);
+const flatM = new THREE.Matrix4();
+function poseShadow() {
+  const g = Math.max(hAt(st.pos.x, st.pos.z), 0); const alt = Math.max(0, st.pos.y - g);
+  const sp = Math.hypot(st.vel.x, st.vel.z);
+  const sA = smooth(90, 10, alt);
+  shade.visible = !!you.body && sA > 0.01;
+  if (shade.visible) {
+    shade.geometry = you.body.mesh.geometry;
+    you.body.mesh.updateWorldMatrix(true, false);
+    flatM.set(1, 0, 0, 0, 0, 0, 0, g + 0.35, 0, 0, 1, 0, 0, 0, 0, 1);
+    shade.matrix.multiplyMatrices(flatM, you.body.mesh.matrixWorld); shade.matrixWorldNeedsUpdate = true;
+    shade.material.opacity = 0.62 * sA;
+  }
+  const bA = smooth(900, 300, alt) * smooth(15, 80, alt);
+  blob.visible = bA > 0.01;
+  if (blob.visible) {
+    const r = 1.6 + alt * 0.02;
+    blob.position.set(st.pos.x, g + 0.4, st.pos.z);
+    blob.rotation.y = Math.atan2(st.vel.x, st.vel.z);
+    blob.scale.set(r, 1, r * (1 + 1.5 * clamp(sp / 950, 0, 1)));
+    blob.material.opacity = bA;
+  }
+}
+
 // ---------- Sound: the aura's hum and crackle, the wind, the booms (WebAudio, started by your first touch) ----------
 let ac = null; let au = null;
+// Every sound runs into `out`, the master gain the app's sound switch sets (window.setSound from src/app/fly.tsx).
+let out = null; let soundOn = true;
+window.setSound = (on) => { soundOn = on; if (out) out.gain.value = on ? 1 : 0; };
 function audioOn() {
   if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
   try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { ac = null; return; }
+  out = ac.createGain(); out.gain.value = soundOn ? 1 : 0; out.connect(ac.destination);
   const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); const ch = buf.getChannelData(0);
   for (let i = 0; i < ch.length; i += 1) ch[i] = Math.random() * 2 - 1;
   const noise = ac.createBufferSource(); noise.buffer = buf; noise.loop = true;
   const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8; bp.frequency.value = 400;
   const wind = ac.createGain(); wind.gain.value = 0;
-  noise.connect(bp); bp.connect(wind); wind.connect(ac.destination);
+  noise.connect(bp); bp.connect(wind); wind.connect(out);
   const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2600;
   const crack = ac.createGain(); crack.gain.value = 0;
-  noise.connect(hp); hp.connect(crack); crack.connect(ac.destination);
+  noise.connect(hp); hp.connect(crack); crack.connect(out);
   const o1 = ac.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 55;
   const o2 = ac.createOscillator(); o2.type = 'sawtooth'; o2.frequency.value = 58.5;
   const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260;
   const hum = ac.createGain(); hum.gain.value = 0;
-  o1.connect(lp); o2.connect(lp); lp.connect(hum); hum.connect(ac.destination);
+  o1.connect(lp); o2.connect(lp); lp.connect(hum); hum.connect(out);
   noise.start(); o1.start(); o2.start();
   au = { buf, bp, wind, crack, o1, o2, lp, hum };
 }
@@ -880,7 +923,7 @@ function boom(strength = 1) {
   const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 160 + 300 * strength;
   const g = ac.createGain(); const t = ac.currentTime;
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.7 * strength, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5 + 0.6 * strength);
-  src.connect(lp); lp.connect(g); g.connect(ac.destination);
+  src.connect(lp); lp.connect(g); g.connect(out);
   src.start(t, Math.random()); src.stop(t + 1.3);
 }
 
@@ -898,22 +941,26 @@ const landBtn = $('land');
 landBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); landBtn.classList.add('on'); post({ type: 'press' }); });
 landBtn.addEventListener('pointerup', (e) => { e.stopPropagation(); landBtn.classList.remove('on'); if (st.near && !st.landing && !DR.on) startLanding(st.near); });
 landBtn.addEventListener('pointercancel', () => landBtn.classList.remove('on'));
-// One finger steers; two fingers held down charge the Kamehameha (slide them to aim), and lifting one fires it.
+// One finger steers; two fingers held down charge the Kamehameha. Once it's charging, any finger left down aims it (slide),
+// and it fires only when the last finger lifts, so lifting one early doesn't loose a half-aimed shot.
 const touches = new Map();
 const midpoint = () => { let x = 0; let y = 0; for (const t of touches.values()) { x += t.x; y += t.y; } return { x: x / touches.size, y: y / touches.size }; };
 const stickOff = () => { st.stick = { on: false, x: 0, y: 0, ox: 0, oy: 0, id: null }; stickEl.classList.remove('on'); };
+// A finger came or went mid-charge: aim on from here, so the midpoint jumping doesn't jerk the aim.
+const reanchor = () => { if (touches.size) { kame.mid = midpoint(); kame.yaw0 = st.yaw; kame.pitch0 = st.pitch; } };
 window.addEventListener('pointerdown', (e) => {
   if (st.landing || DR.on) return;
   firstTouch();
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (touches.size === 2 && !kame.charging && !kame.beam) { stickOff(); startCharge(midpoint()); return; }
-  if (st.stick.id !== null || kame.charging) return;
+  if (kame.charging) { reanchor(); return; }
+  if (st.stick.id !== null) return;
   st.stick = { on: true, x: 0, y: 0, ox: e.clientX, oy: e.clientY, id: e.pointerId };
   stickEl.style.transform = `translate(${e.clientX}px,${e.clientY}px)`; stickEl.classList.add('on'); knob.style.transform = '';
 });
 window.addEventListener('pointermove', (e) => {
   if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (kame.charging && touches.size >= 2) { const m = midpoint(); aimCharge(m.x - kame.mid.x, m.y - kame.mid.y); return; }
+  if (kame.charging && touches.size >= 1) { const m = midpoint(); aimCharge(m.x - kame.mid.x, m.y - kame.mid.y); return; }
   if (e.pointerId !== st.stick.id) return;
   let dx = e.clientX - st.stick.ox; let dy = e.clientY - st.stick.oy;
   const l = Math.hypot(dx, dy); const R = 56;
@@ -923,7 +970,7 @@ window.addEventListener('pointermove', (e) => {
 });
 const stickUp = (e) => {
   touches.delete(e.pointerId);
-  if (kame.charging && touches.size < 2) release();
+  if (kame.charging) { if (touches.size === 0) release(); else reanchor(); }
   if (e.pointerId === st.stick.id) stickOff();
 };
 window.addEventListener('pointerup', stickUp); window.addEventListener('pointercancel', stickUp);
@@ -966,7 +1013,7 @@ function stepLanding(dt) {
       const ang = Math.random() * TAU; const sp = 20 + Math.random() * 60;
       emit(world, st.pos.x, st.pos.y, st.pos.z, Math.cos(ang) * sp, 8 + Math.random() * 30, Math.sin(ang) * sp, 6 + Math.random() * 12, 1.2 + Math.random(), DUST, 2.2, 9);
     }
-    st.shake = 1.4; st.flash = 0.7; boom(1.2);
+    st.shake = 1.4; st.flash = 0.7; boom(1.2); spike(3500);
     post({ type: 'thud' });
     if (you.body) you.body.kick(0, -9, 0);
   }
@@ -996,6 +1043,7 @@ function step(dt) {
     st.yaw -= sx * lerp(1.7, 0.9, sf) * dt;
     const pitchT = steering ? -sy * (st.blast ? 0.95 : 1.2) : 0;
     if (!kame.charging) st.pitch += (pitchT - st.pitch) * (1 - Math.exp(-4 * dt));
+    else if (steering) st.pitch = clamp(st.pitch - sy * 0.7 * dt, -1.35, 0.7);
     st.bank += (-sx * lerp(0.25, 0.75, sf) - st.bank) * (1 - Math.exp(-5 * dt));
     // The edge of the map turns you back toward the city.
     const out = st.pos.x < PLAY.x0 || st.pos.x > PLAY.x1 || st.pos.z < PLAY.z0 || st.pos.z > PLAY.z1;
@@ -1011,9 +1059,13 @@ function step(dt) {
     if (kame.charging) speed = 0;
     else if (st.blast) speed = st.super ? 1500 : 950;
     else if (steering) speed = 80;
+    // Let go of the thrust and you stop dead in about half a second (the ki brake); otherwise you settle, not drift.
+    if (!st.blast && st.wasBlast && sp0 > 200) brake(tmp2.copy(st.vel).normalize(), sp0);
+    else if (!st.rise && st.wasRise && st.vel.y > 140) brake(UP, st.vel.y);
+    st.brakeT = Math.max(0, st.brakeT - dt);
+    const k = st.brakeT > 0 || kame.charging ? 7 : st.blast || st.rise ? 2.3 : steering ? 1.8 : 2.4;
     const desired = tmp2.copy(f).multiplyScalar(speed);
     if (st.rise && !kame.charging) { desired.multiplyScalar(0.35); desired.y += st.super ? 650 : 420; }
-    const k = st.blast || st.rise ? 2.3 : steering ? 1.8 : 1.3;
     st.vel.lerp(desired, 1 - Math.exp(-k * dt));
     st.pos.addScaledVector(st.vel, dt);
 
@@ -1029,7 +1081,7 @@ function step(dt) {
     // Launches: a shockwave ring, a kick to the jelly, a thump.
     if (st.blast && !st.wasBlast) {
       shockwave(st.pos.clone(), f, 50, 0.6, aura.color); st.shake = Math.max(st.shake, 0.5); st.flash = 0.25; st.flare = 1;
-      post({ type: 'blast' }); boom(0.45);
+      post({ type: 'blast' }); boom(0.45); spike(2400);
       if (you.body) you.body.kick(0, 0, 6);
     }
     if (st.rise && !st.wasRise) {
@@ -1037,13 +1089,13 @@ function step(dt) {
       shockwave(st.pos.clone().add(new V3(0, -1, 0)), UP, low ? 110 : 50, low ? 0.9 : 0.6, aura.color);
       if (low) for (let i = 0; i < 60; i += 1) { const ang = Math.random() * TAU; const s = 30 + Math.random() * 50; const ground = Math.max(hAt(st.pos.x, st.pos.z), 0); emit(world, st.pos.x, ground + 1, st.pos.z, Math.cos(ang) * s, 4 + Math.random() * 14, Math.sin(ang) * s, 5 + Math.random() * 9, 1 + Math.random() * 0.8, ground > 0.5 ? DUST : SPRAY, 2.5, 8); }
       st.shake = Math.max(st.shake, low ? 0.9 : 0.4); st.flash = 0.2; st.flare = 1;
-      post({ type: 'rise' }); boom(low ? 0.9 : 0.35);
+      post({ type: 'rise' }); boom(low ? 0.9 : 0.35); spike(low ? 2600 : 1600);
       if (you.body) you.body.kick(0, -7, 0);
     }
     st.wasBlast = st.blast; st.wasRise = st.rise;
     if (st.blast) { st.blastT += dt; st.sinceBlast = 0; } else { st.sinceBlast += dt; if (st.sinceBlast > 0.3) st.blastT = Math.max(0, st.blastT - dt * 2); }
     // Hold the blast long enough and you go past nine thousand: the aura turns gold and crackles.
-    if (!st.super && st.blastT > 2.6) { st.super = true; st.nineAt = st.clock; st.flash = 0.8; st.shake = 1.1; shockwave(st.pos.clone(), f, 120, 0.9, aura.gold); post({ type: 'super' }); boom(1); document.body.classList.add('super'); }
+    if (!st.super && st.blastT > 2.6) { st.super = true; st.nineAt = st.clock; st.flash = 0.8; st.shake = 1.1; shockwave(st.pos.clone(), f, 120, 0.9, aura.gold); post({ type: 'super' }); boom(1); spike(3000); document.body.classList.add('super'); }
     if (st.super && st.sinceBlast > 1.4) { st.super = false; document.body.classList.remove('super'); }
 
     // The courts: get close and you can land.
@@ -1066,7 +1118,16 @@ function step(dt) {
   const powerT = kame.charging ? 0.55 + 0.4 * Math.min(1, kame.t / FULL) : st.landing ? 1 : st.super ? 1.15 : st.blast ? 1 : st.rise ? 0.9 : steeringNow ? 0.55 : 0.38;
   st.power += (powerT + st.flare * 0.4 - st.power) * (1 - Math.exp(-6 * dt));
   st.flare = Math.max(0, st.flare - dt * 1.6);
-  st.ki = st.blast ? Math.min(st.super ? 9001 + Math.floor((st.clock * 777) % 900) : 8999, st.ki + dt * (3200 + st.ki * 1.1)) : Math.max(0, st.ki - dt * 6000);
+  // The power level: what you're doing sets where it heads. It climbs fast and settles slow, and every launch, brake,
+  // chant and blast spikes it on top (see spike()). Charging the Kamehameha takes it way past nine thousand.
+  const cK = kame.charging ? Math.min(1, kame.t / FULL) : 0;
+  const kiT = kame.charging ? 1500 + 16500 * cK ** 1.5
+    : kame.beam ? st.ki
+      : st.super ? 9001 + ((st.clock * 777) % 900)
+        : st.blast ? Math.min(8999, 2500 + 6499 * clamp(st.blastT / 2.6, 0, 1))
+          : st.landing ? 4200 : st.rise ? 3300 : st.brakeT > 0 ? 2200 : 0;
+  st.ki += (kiT - st.ki) * (1 - Math.exp(-(kiT > st.ki ? 5 : 1.4) * dt));
+  st.kiPop = Math.max(0, st.kiPop - dt * 3.2);
 
   // Ki flames ride along with you, streaming away from where you're going.
   const dir = sp > 25 ? tmp.copy(st.vel).multiplyScalar(-1 / sp) : tmp.set(0, 1, 0);
@@ -1124,12 +1185,34 @@ function step(dt) {
   const target = tmp2.copy(fl).multiplyScalar(-dist).addScaledVector(UP, h);
   // Firing, the camera pulls back and up behind you, looking down the beam's line to where it lands.
   if (kame.beam) target.set(Math.cos(st.yaw), 0, -Math.sin(st.yaw)).multiplyScalar(9).addScaledVector(fl, -38).addScaledVector(UP, 20);
+  // Charging, it sits tight over your right shoulder and looks straight down the line you're aiming, pitch and all.
+  else if (kame.charging) target.copy(fwd(st.yaw, st.pitch, tmp)).multiplyScalar(-9).addScaledVector(tmp.set(Math.cos(st.yaw), 0, -Math.sin(st.yaw)), 2.6).addScaledVector(UP, 2.2);
   target.addScaledVector(st.acc, -0.0018);
   const w = 2.2 * TAU; const z = 0.9;
   st.camVel.addScaledVector(target.clone().sub(st.camOff), w * w * dt).multiplyScalar(Math.exp(-2 * z * w * dt));
   st.camOff.addScaledVector(st.camVel, dt);
   st.shake = Math.max(0, st.shake - dt * 2.2);
   st.flash = Math.max(0, st.flash - dt * 2.5);
+}
+
+/** The ki brake: a burst out ahead of you that kills your speed, a ring where you stopped, spray if you're low. */
+function brake(dir, speed) {
+  const s = clamp(speed / 950, 0.2, 1.4);
+  st.brakeT = 0.5;
+  shockwave(st.pos.clone().addScaledVector(dir, 3), dir, 30 + 50 * s, 0.5, st.super || st.gold ? aura.gold : aura.color);
+  for (let i = 0; i < 24; i += 1) {
+    const a = Math.random() * TAU; const r = 6 + Math.random() * 8;
+    const ox = Math.cos(a) * r; const oz = Math.sin(a) * r;
+    emit(flames, dir.x * 2, dir.y * 2, dir.z * 2, dir.x * 14 + ox, dir.y * 14 + (Math.random() - 0.5) * 8, dir.z * 14 + oz, 0.3 + Math.random() * 0.3, 0.35, Math.random() < 0.3 ? SPRAY : aura.color, 3, 0);
+  }
+  const g = Math.max(hAt(st.pos.x, st.pos.z), 0);
+  if (st.pos.y - g < 40) {
+    const wet = g < 0.3;
+    for (let i = 0; i < 40 * s; i += 1) emit(world, st.pos.x + dir.x * 6, g + 1, st.pos.z + dir.z * 6, dir.x * 40 + (Math.random() - 0.5) * 50, 10 + Math.random() * (wet ? 40 : 18), dir.z * 40 + (Math.random() - 0.5) * 50, 4 + Math.random() * 7, 1 + Math.random() * 0.8, wet ? SPRAY : DUST, 2, 12);
+  }
+  st.shake = Math.max(st.shake, 0.35 + 0.35 * s); st.flare = 1;
+  boom(0.35 + 0.3 * s); spike(900);
+  post({ type: 'brake' });
 }
 
 function impact(strength) {
@@ -1163,6 +1246,7 @@ function pose() {
   you.carrier.position.set(st.pos.x, st.pos.y + bob, st.pos.z);
   you.carrier.rotation.set(st.lean.x * (2 * clamp(away, 0, 1) - 1), st.yaw + Math.PI * away, st.bank * (1 - 2 * clamp(away, 0, 1)), 'YXZ');
   if (you.body) you.body.update(1 / 60, st.clock);
+  poseShadow();
 
   // Aura.
   const dir = sp > 25 ? tmp.copy(st.vel).multiplyScalar(-1 / sp) : tmp.set(0, 1, 0);
@@ -1233,6 +1317,9 @@ function pose() {
   DR.look = (DR.look || 0) + ((DR.on && DR.phase !== 'dark' ? 1 : 0) - (DR.look || 0)) * 0.04;
   if (DR.look > 0.001) proj.lerp(tmp.set(DR.base.x, DR.base.y + 360 * Math.max(DR.grow, 0.3), DR.base.z), DR.look * 0.85);
   if (kame.beam) { const B = kame.beam; proj.copy(st.pos).lerp(tmp.copy(B.from).addScaledVector(B.dir, Math.min(B.len, 600)), 0.45); }
+  else if (kame.charging) proj.copy(st.pos).addScaledVector(fwd(st.yaw, st.pitch, tmp), 400);
+  // Skimming the ground, the camera tips down a little so your shadow racing under you stays in view.
+  if (!kame.charging && !kame.beam && !st.landing) proj.y -= 4 * smooth(45, 6, st.pos.y - Math.max(hAt(st.pos.x, st.pos.z), 0));
   st.look = st.look || new V3(); st.look.copy(proj);
   camera.lookAt(proj);
   const fov = lerp(60, 84, sf) + (st.super ? 5 : 0) + st.flare * 3;
@@ -1303,7 +1390,14 @@ function hud(sp, sf) {
   // The power level reading, and the line everyone knows.
   const kiOn = st.ki > 30;
   $('ki').style.opacity = kiOn ? '1' : '0';
-  if (kiOn) $('kin').textContent = Math.floor(st.ki).toLocaleString('en-US');
+  if (kiOn) {
+    // Charging, the digits can't hold still.
+    const jit = kame.charging ? st.ki * 0.03 * (Math.random() - 0.5) : 0;
+    $('kin').textContent = Math.floor(st.ki + jit).toLocaleString('en-US');
+    const p = st.kiPop * st.kiPop;
+    $('kin').style.transform = p > 0.001 ? `scale(${1 + 0.45 * p}) rotate(${-4 * p}deg)` : '';
+  }
+  document.body.classList.toggle('kipop', st.kiPop > 0.5);
   document.body.classList.toggle('nine', st.clock - st.nineAt < 2.4);
   // Land button.
   const showLand = !!st.near && !st.landing && !DR.on;
@@ -1407,14 +1501,14 @@ function chime() {
   [784, 988, 1175, 1568].forEach((f, i) => {
     const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
     const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t + i * 0.07); g.gain.exponentialRampToValueAtTime(0.18, t + i * 0.07 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.07 + 0.5);
-    o.connect(g); g.connect(ac.destination); o.start(t + i * 0.07); o.stop(t + i * 0.07 + 0.55);
+    o.connect(g); g.connect(out); o.start(t + i * 0.07); o.stop(t + i * 0.07 + 0.55);
   });
 }
 function beep(f = 1800, len = 0.05, vol = 0.06) {
   if (!au) return;
   const t = ac.currentTime; const o = ac.createOscillator(); o.type = 'square'; o.frequency.value = f;
   const g = ac.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
-  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + len + 0.02);
+  o.connect(g); g.connect(out); o.start(t); o.stop(t + len + 0.02);
 }
 function collect(b) {
   hunt.got.add(b.star); syncBalls();
@@ -1574,7 +1668,7 @@ function roar(len = 2.6) {
   const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(140, t); lp.frequency.linearRampToValueAtTime(420, t + 0.5); lp.frequency.linearRampToValueAtTime(110, t + len);
   const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(48, t); o.frequency.linearRampToValueAtTime(70, t + 0.6); o.frequency.linearRampToValueAtTime(38, t + len);
   const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
-  src.connect(lp); o.connect(lp); lp.connect(g); g.connect(ac.destination); src.start(t); o.start(t); src.stop(t + len); o.stop(t + len);
+  src.connect(lp); o.connect(lp); lp.connect(g); g.connect(out); src.start(t); o.start(t); src.stop(t + len); o.stop(t + len);
 }
 function summon() {
   if (!DR.built) buildDragon();
@@ -1779,8 +1873,25 @@ const handPos = (out) => {
   const r = tmp2.set(Math.cos(st.yaw), 0, -Math.sin(st.yaw));
   return out.copy(you.carrier.position).addScaledVector(r, 1.5).add(fwd(st.yaw, 0, proj).multiplyScalar(-0.4)).add(new V3(0, -0.3, 0));
 };
+// Where the shot will land: a ki-blue ring on the ground the size of the blast it'll make.
+const aimRing = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: KI, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false }));
+aimRing.visible = false; aimRing.renderOrder = 8; scene.add(aimRing);
+/** The yaw and pitch that point you at a spot. */
+const aimAt = (x, y, z) => { const dx = x - st.pos.x; const dz = z - st.pos.z; return { yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(y - st.pos.y, Math.hypot(dx, dz)) }; };
 function startCharge(mid) {
-  kame.charging = true; kame.t = 0; kame.stage = -1; kame.mid = mid; kame.yaw0 = st.yaw; kame.pitch0 = st.pitch; kame.lock = null;
+  // Start already aimed: at the court most in front of you if one's close to your heading, else at the ground a few hundred
+  // meters ahead, so you only fine-tune instead of hunting for the target.
+  let best = null; let bs = Infinity;
+  for (const v of VENUES) {
+    const d = Math.hypot(v.x - st.pos.x, v.z - st.pos.z); if (d < 150 || d > 6000) continue;
+    let dy = aimAt(v.x, v.y, v.z).yaw - st.yaw; dy = Math.abs(Math.atan2(Math.sin(dy), Math.cos(dy)));
+    if (dy < 0.6 && dy + d / 20000 < bs) { bs = dy + d / 20000; best = v; }
+  }
+  if (best) { const a = aimAt(best.x, best.y + 2, best.z); st.yaw = a.yaw; st.pitch = clamp(a.pitch, -1.35, 0.7); } else {
+    const alt = st.pos.y - Math.max(hAt(st.pos.x, st.pos.z), 0);
+    st.pitch = clamp(Math.min(st.pitch, -Math.atan2(alt, 600)), -1.35, 0.7);
+  }
+  kame.charging = true; kame.t = 0; kame.stage = -1; kame.mid = mid; kame.yaw0 = st.yaw; kame.pitch0 = st.pitch; kame.lock = null; kame.aim = null;
   st.blast = st.rise = false; for (const el of document.querySelectorAll('.pad')) el.classList.remove('on');
   kame.orb.visible = true;
   document.body.classList.add('charging');
@@ -1789,13 +1900,14 @@ function startCharge(mid) {
     const t = ac.currentTime; const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(520, t + FULL);
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(300, t); lp.frequency.linearRampToValueAtTime(2400, t + FULL);
     const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + 0.3);
-    o.connect(lp); lp.connect(g); g.connect(ac.destination); o.start(t);
+    o.connect(lp); lp.connect(g); g.connect(out); o.start(t);
     kame.hum = { o, g };
   }
 }
 function aimCharge(dx, dy) {
-  st.yaw = kame.yaw0 - dx * 0.006;
-  st.pitch = clamp(kame.pitch0 - dy * 0.005, -1.1, 0.9);
+  // About 26 degrees per 100 px: enough to swing round, slow enough to put it on one court.
+  st.yaw = kame.yaw0 - dx * 0.0045;
+  st.pitch = clamp(kame.pitch0 - dy * 0.0045, -1.35, 0.7);
 }
 function stopHum() { if (kame.hum && au) { const t = ac.currentTime; kame.hum.g.gain.setTargetAtTime(0.0001, t, 0.05); kame.hum.o.stop(t + 0.3); } kame.hum = null; }
 /** Where the camera's center is pointing: the first court pillar it passes, or the ground (or the sea) it reaches. */
@@ -1814,7 +1926,8 @@ function aimPoint() {
     if (t <= 0 || t > lockT + 200) continue;
     const off = Math.hypot(o.x + d.x * t - v.x, o.z + d.z * t - v.z);
     const y = o.y + d.y * t;
-    if (off < 130 && y < v.y + 2600 && y > v.y - 400) { lock = v; lockT = t; }
+    // The lock is a cone (about 4 degrees), not a fixed width, so far courts are as easy to hit as near ones.
+    if (off < Math.max(130, t * 0.07) && y < v.y + 2600 && y > v.y - 400) { lock = v; lockT = t; }
   }
   if (lock) return { lock, point: new V3(lock.x, lock.y + 2, lock.z) };
   return { lock: null, point: new V3(o.x + d.x * hitT, o.y + d.y * hitT, o.z + d.z * hitT) };
@@ -1827,9 +1940,9 @@ function stepKame(dt) {
     if (stage !== kame.stage) {
       kame.stage = stage;
       const el = $('kame'); el.textContent = CHANT[stage]; el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
-      post({ type: 'chant', n: stage }); beep(300 + stage * 120, 0.08, 0.05);
+      post({ type: 'chant', n: stage }); beep(300 + stage * 120, 0.08, 0.05); spike(700 + stage * 500);
     }
-    if (kame.t >= FULL && !kame.full) { kame.full = true; st.flash = Math.max(st.flash, 0.4); post({ type: 'full' }); }
+    if (kame.t >= FULL && !kame.full) { kame.full = true; st.flash = Math.max(st.flash, 0.4); post({ type: 'full' }); spike(4000); }
     st.shake = Math.max(st.shake, 0.12 + 0.45 * c);
     st.flare = Math.max(st.flare, 0.4 * c);
     // Light pulls in to the ball from all round it.
@@ -1845,7 +1958,7 @@ function stepKame(dt) {
       const a = Math.random() * TAU; const R = 6 + Math.random() * 40;
       emit(world, st.pos.x + Math.cos(a) * R, g + 0.5, st.pos.z + Math.sin(a) * R, 0, 3 + Math.random() * 8 * c, 0, 1.5 + Math.random() * 3, 1.4, g > 0.5 ? DUST : SPRAY, 0.5, -1);
     }
-    const aim = aimPoint();
+    const aim = aimPoint(); kame.aim = aim;
     if (aim.lock !== kame.lock) { kame.lock = aim.lock; if (aim.lock) { post({ type: 'lock' }); beep(2600, 0.06, 0.06); } }
   }
   if (kame.beam) stepBeam(dt);
@@ -1870,7 +1983,7 @@ function release() {
   setTimeout(() => el.classList.remove('ha'), 1600);
   st.flash = 0.7; st.shake = Math.max(st.shake, 0.9 + c); st.vel.addScaledVector(dir, -15 - 30 * c);
   if (you.body) you.body.kick(-dir.x * 4, -dir.y * 4, -dir.z * 4);
-  post({ type: 'fire', c }); roarBeam(c);
+  post({ type: 'fire', c }); roarBeam(c); spike(2000 + 9000 * c);
   if (aim.lock && c < 1) say2('CHARGE IT ALL THE WAY TO CALL THE CREW');
 }
 function roarBeam(c) {
@@ -1879,7 +1992,7 @@ function roarBeam(c) {
   const src = ac.createBufferSource(); src.buffer = au.buf; src.loop = true;
   const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.6; bp.frequency.setValueAtTime(1800, t); bp.frequency.exponentialRampToValueAtTime(300, t + len);
   const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5 * (0.5 + c), t + 0.04); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
-  src.connect(bp); bp.connect(g); g.connect(ac.destination); src.start(t, Math.random()); src.stop(t + len);
+  src.connect(bp); bp.connect(g); g.connect(out); src.start(t, Math.random()); src.stop(t + len);
 }
 function stepBeam(dt) {
   const B = kame.beam; B.t += dt;
@@ -1913,7 +2026,7 @@ function explode(B) {
     m.position.set(p.x, g + 1, p.z); scene.add(m); kame.scorches.push({ mesh: m, life: 40 });
   }
   const near = clamp(1 - camera.position.distanceTo(p) / 6000, 0.25, 1);
-  st.flash = Math.max(st.flash, 0.9 * near); st.shake = Math.max(st.shake, 1.6 * near); boom(1.2 + 0.5 * near);
+  st.flash = Math.max(st.flash, 0.9 * near); st.shake = Math.max(st.shake, 1.6 * near); boom(1.2 + 0.5 * near); spike(1500 + 3000 * B.c);
   post({ type: 'impact', near });
   // A full charge on a court calls the crew there.
   if (B.lock && B.c >= 1) {
@@ -1937,6 +2050,21 @@ function poseKame() {
       L.classList.toggle('full', c >= 1);
     } else L.style.opacity = '0';
   } else $('klock').style.opacity = '0';
+  // The crosshair on where it'll land (the lock ring takes over on a court), and the blast-sized ring on the ground there.
+  const A = $('kaim'); const aim = kame.charging ? kame.aim : null;
+  if (aim) {
+    const c = Math.min(1, kame.t / FULL);
+    const g = Math.max(hAt(aim.point.x, aim.point.z), 0);
+    aimRing.visible = !!aim.lock || aim.point.y - g < 10; // aimed at open sky, there's no ground to mark
+    aimRing.position.set(aim.point.x, (aim.lock ? aim.lock.y : g) + 1.5, aim.point.z);
+    aimRing.scale.setScalar((90 + 220 * c) * 0.7 * (1 + 0.04 * Math.sin(st.clock * 8)));
+    aimRing.material.color.copy(aim.lock && c >= 1 ? aura.gold : KI);
+    proj.copy(aim.point).project(camera);
+    A.style.opacity = !aim.lock && proj.z < 1 ? '1' : '0';
+    A.style.transform = `translate(${(proj.x * 0.5 + 0.5) * W.w}px,${(-proj.y * 0.5 + 0.5) * W.h}px) translate(-50%,-50%)`;
+    const d = aim.point.distanceTo(st.pos);
+    $('kaimtxt').textContent = d < 1000 ? `${Math.round(d / 10) * 10} M` : `${(d / 1000).toFixed(1)} KM`;
+  } else { aimRing.visible = false; A.style.opacity = '0'; }
   if (blastDome.visible) {
     const u = blastDome.userData; u.t += 1 / 60;
     const k = clamp(u.t / 1.2, 0, 1);

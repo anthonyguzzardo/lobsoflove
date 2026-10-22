@@ -24,9 +24,10 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 import { SoftBody } from './jelly-core.js';
 import { post } from './lib/bridge.js';
-import { circlePick } from './lib/circle-pick.js';
+import { BRUSH_WIDTH, drawBrush } from './lib/brush.js';
 import { createDock } from './lib/dock.js';
 import { COLORS, GAUGES, RACKETS, SHOES, STRINGS, paintOf, stringColor } from './lib/gear-catalog.js';
+import { blobArt, brandArt, coilArt, numArt, wordArt } from './lib/toss-art.js';
 
 const INK = 0x16181d;
 const PAPER = 0xefece5;
@@ -476,6 +477,10 @@ function gesture() {
     }
     return { from: 'present', to: 'present', k: 1, back: 0, kiss: 0, sign: 0, wide: 0 };
   }
+  if (st.leave) {
+    const k = smooth(st.leave.t / 0.2);
+    return { from: 'crossed', to: 'sign', k, back: 0, kiss: 0, sign: k, wide: 0 };
+  }
   if (st.open && st.t < 2.1) {
     const out = smooth(st.t / 0.22);
     const back = smooth((st.t - 1.3) / 0.8);
@@ -510,6 +515,18 @@ function poseArms(g) {
     a.band.quaternion.copy(a.fore.quaternion);
     // Index finger up for the sign.
     a.finger.visible = g.sign > 0.5;
+    // Throwing: his free arm winds down and flings up (0.55 s), whatever the rest of him is doing.
+    if (a.sx < 0 && st.flingT < 0.55) {
+      const u = st.flingT / 0.55;
+      const w = Math.sin(Math.PI * u);
+      const up = smooth(u * 1.6);
+      const e2 = V(-0.62, lerp(0.3, 1.0, up), 0.3); const h2 = V(-0.5, lerp(0.05, 1.6, up), lerp(0.3, 0.6, up));
+      elbow = elbow.lerp(e2, w); hand = hand.lerp(h2, w);
+      placeBone(a.upper, a.shoulder, elbow); placeBone(a.fore, elbow, hand);
+      a.elbow.position.copy(elbow); a.hand.position.copy(hand);
+      a.cuff.position.copy(a.shoulder.clone().lerp(elbow, 0.85));
+      a.band.position.copy(elbow.clone().lerp(hand, 0.78)); a.band.quaternion.copy(a.fore.quaternion);
+    }
     a.finger.position.copy(hand).add(V(0, 0.13, 0.02));
   }
 }
@@ -561,6 +578,7 @@ const st = {
   yaw: { x: 0, v: 0, target: 0 },
   shake: { x: 0, v: 0 },
   queue: [],
+  leave: null, // { t, sent } while your fighter hops off the page
   gone: new Map(), // where something in use was when it was retired
   lean: { x: 0, v: 0 },
   row: null,
@@ -936,18 +954,23 @@ function finishScrub(it, s, at) {
 }
 
 // ---------- The dock ----------
-// The same floating platforms and hopping ball as home. Three: RACKET, SHOES and the domain, which is its own kind of button.
+// The same floating platforms and hopping ball as home. Back sits small on the far left, then RACKET, SHOES and the domain,
+// which is its own kind of button. Back closes the domain first; outside it, your fighter hops off the left edge and the page goes.
 let dock = null;
 let dockSig = '';
+// The selected tab stamps a crest in the legend's own language. He is drawn Swedish (the Borg hair and headband), so the
+// crests are Swedish: the racket is his sword, the shoes are for running, the domain is love. Another legend, another tongue.
+const CREST = { racket: 'SVÄRD', shoes: 'LÖP', domain: 'KÄRLEK' };
 st.dockSlots = [];
 function buildDock() {
   const slots = [
+    { back: true, label: '' },
     { kind: 'racket', label: 'RACKET', due: ofKind('racket').some((i) => dueWord(i)) },
     { kind: 'shoes', label: 'SHOES', due: ofKind('shoes').some((i) => dueWord(i)) },
-    { domain: true, label: st.open ? 'LEAVE' : 'DOMAIN' },
+    { domain: true, label: 'DOMAIN' },
   ];
   const sig = JSON.stringify(slots);
-  if (sig === dockSig) return;
+  if (sig === dockSig) { markDock(); return; }
   dockSig = sig;
   st.dockSlots = slots;
   // A fresh element each time, so old click handlers go with the old one.
@@ -956,20 +979,55 @@ function buildDock() {
   fresh.innerHTML = '<div id="dshadow"></div><div id="dball"><i></i></div>';
   old.replaceWith(fresh);
   dock = createDock({ slots: slots.map((x, k) => ({ i: k + 1, label: x.label })), onPick: (i) => pickSlot(i), post });
-  fresh.querySelectorAll('.slot').forEach((b, k) => { b.classList.toggle('due', !!slots[k].due); b.classList.toggle('dom', !!slots[k].domain); });
+  fresh.querySelectorAll('.slot').forEach((b, k) => { b.classList.toggle('due', !!slots[k].due); b.classList.toggle('dom', !!slots[k].domain); b.classList.toggle('bk', !!slots[k].back); });
+  const bk = fresh.querySelector('.slot.bk .pf');
+  // The old back button, shrunk onto a platform: motley paint drifting under ink, a smoke wisp, a cream chevron.
+  if (bk) bk.innerHTML = '<span class="mot">' + '<i></i>'.repeat(6) + '<b></b><b></b></span>'
+    + '<svg class="chev" viewBox="0 0 30 30"><path d="M19 5L8 15L19 25" stroke="#16181d" stroke-width="9"/><path d="M19 5L8 15L19 25" stroke="#fffdf0" stroke-width="4.5"/></svg>';
+  // Its own felt ball sits on the right end. Press winds it up; let go and it rushes off the left edge on a candy rope,
+  // smoke blooming behind it.
+  if (bk) bk.insertAdjacentHTML('afterend', '<svg class="trail" viewBox="0 0 180 26" preserveAspectRatio="none">'
+    + '<path d="M180 15C164 4 150 24 132 13S96 4 80 15S44 24 28 12S8 6 0 14" stroke="#2f6bff" stroke-width="4"/>'
+    + '<path d="M180 9C162 20 148 4 128 12S92 22 76 10S40 4 24 14S6 18 0 10" stroke="#ff9a1f" stroke-width="4"/>'
+    + '<path d="M180 9C162 20 148 4 128 12S92 22 76 10S40 4 24 14S6 18 0 10" stroke="#b84dff" stroke-width="4" stroke-dasharray="5 5" stroke-linecap="butt"/>'
+    + '<path d="M180 13C166 4 148 22 130 12S96 4 78 14S42 22 26 12S8 8 0 13" stroke="#ff3b30" stroke-width="6"/>'
+    + '<path d="M180 13C166 4 148 22 130 12S96 4 78 14S42 22 26 12S8 8 0 13" stroke="#fffdf0" stroke-width="2.2" stroke-dasharray="0.1 6"/></svg>'
+    + '<i class="puff"></i>'.repeat(4)
+    + '<span class="bball"><svg viewBox="0 0 28 28"><defs><radialGradient id="felt" cx="30%" cy="25%" r="80%"><stop offset="0" stop-color="#f1ff8d"/><stop offset=".55" stop-color="#d7f205"/><stop offset="1" stop-color="#8ca511"/></radialGradient></defs>'
+    + '<circle cx="14" cy="14" r="12.6" fill="url(#felt)" stroke="#16181d" stroke-width="1.6"/><path class="seam" d="M5 4C16 9 16 19 5 24M23 4C12 9 12 19 23 24" fill="none" stroke="#fffdf0" stroke-width="2"/></svg></span>');
+  // Every platform goes down under your finger and springs back when you let go.
+  const press = (on) => (e) => {
+    const b = e.target.closest && e.target.closest('.slot');
+    if (on && b) { b.classList.add('press'); if (b.classList.contains('bk')) post({ type: 'grab' }); return; }
+    fresh.querySelectorAll('.slot.press').forEach((el) => el.classList.remove('press'));
+  };
+  fresh.addEventListener('pointerdown', press(true));
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) fresh.addEventListener(ev, press(false));
   const pf = fresh.querySelector('.slot.dom .pf');
-  if (pf) pf.innerHTML = '<svg class="knot" viewBox="0 0 44 16"><path d="M4 8c6-7 12-7 18 0s12 7 18 0M4 8c6 7 12 7 18 0s12-7 18 0"/></svg>';
-  dock.place(3);
+  fresh.querySelectorAll('.slot').forEach((b, k) => {
+    const x = slots[k];
+    const word = x.kind ? CREST[x.kind] : x.domain ? CREST.domain : '';
+    if (word) b.querySelector('.pf').insertAdjacentHTML('beforeend', `<em class="crest">${word}</em>`);
+  });
+  if (pf) pf.insertAdjacentHTML('afterbegin', '<svg class="knot" viewBox="0 0 44 16"><path d="M4 8c6-7 12-7 18 0s12 7 18 0M4 8c6 7 12 7 18 0s12-7 18 0"/></svg>');
+  dock.place(4);
   markDock();
 }
 function markDock() {
   if (!dock) return;
-  const k = st.show ? st.dockSlots.findIndex((x) => x.kind === st.show.kind) : -1;
+  const k = st.show ? st.dockSlots.findIndex((x) => x.kind === st.show.kind) : st.open ? st.dockSlots.findIndex((x) => x.domain) : -1;
   dock.mark(k >= 0 ? k + 1 : -1);
 }
 function pickSlot(i) {
   const x = st.dockSlots[i - 1];
   if (!x) return;
+  if (x.back) {
+    // The back pill's own ball does the leaving; the dock ball stays where it is.
+    const el = $('dock').querySelector('.slot.bk');
+    if (el && !st.open) { el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); }
+    leave();
+    return;
+  }
   dock.hop(i);
   if (x.kind) { tab(x.kind); markDock(); return; }
   if (x.domain) {
@@ -978,142 +1036,307 @@ function pickSlot(i) {
   }
 }
 
+/** Back from the dock: close the domain if it is open; otherwise your fighter hops off left, the legend salutes, and the page goes. */
+function leave() {
+  if (st.open) { collapse(); return; }
+  if (st.leave) return;
+  putAway();
+  st.charge.holding = false; st.charge.auto = false;
+  st.leave = { t: 0, sent: false };
+  if (you.body) you.body.kick(-2.5, 3, 0);
+  legend.body.poke();
+  post({ type: 'swish' });
+}
+
+// ---------- The hint reads itself out ----------
+// What to do is the one line people skip, so it does not sit still: a bold wave rolls through it letter by letter every few
+// seconds, and the doing words (hold, tap, scrub...) stay in clay. Rebuilt only when the words change, so the wave never restarts.
+const VERB = /^(hold|tap|scrub|circle|swipe|pull|drag|slide)$/i;
+let hintWas = null;
+function setHint(text) {
+  if (text === hintWas) return;
+  hintWas = text;
+  let i = 0;
+  $('hint').innerHTML = text.split(/(\s+)/).map((w) => {
+    if (!w.trim()) return w;
+    const bare = w.replace(/[^a-z]/gi, '');
+    const letters = [...w].map((c) => `<i style="--i:${i++}">${esc(c)}</i>`).join('');
+    i += 1;
+    return `<span class="wd${VERB.test(bare) ? ' v' : ''}">${letters}</span>`;
+  }).join('');
+}
+
 // ---------- The card follows the scrub ----------
 function notes() {
   const sh = st.show;
   if (sh && st.scrub && !st.scrub.done && st.scrub.progress > 0) $('h2').textContent = `${sh.kind === 'racket' ? 'RESTRINGING' : 'CLEANING'} ${Math.round(st.scrub.progress * 100)}%`;
 }
 
-// ---------- Adding gear: circle the brand, then the model ----------
-// Rackets then ask how many you have of it; shoes ask their main color and the accent. OTHER anywhere hands off to the write page.
-let picker = null;
-const opt = (label, extra = {}) => ({ label, ...extra });
-const colorName = (hex) => (COLORS.find(([, h]) => h === hex) || ['', ''])[0];
-function addFlow(kind) {
-  if (picker) return;
-  const cat = kind === 'racket' ? RACKETS : SHOES;
-  const other = opt('OTHER', { sub: 'write it' });
-  const swatches = (title, sub, skip) => ({
-    title, sub, kind: 'swatch',
-    opts: [...COLORS.map(([n, h]) => opt(n, { color: h })), ...(skip ? [opt('NONE', { sub: 'one color' })] : [])],
-  });
-  const first = {
-    title: 'CIRCLE THE BRAND.',
-    sub: 'draw a circle round it',
-    opts: [...Object.keys(cat).map((b) => opt(b)), other],
-    next: (o) => (o.label === 'OTHER' ? null : {
-      title: `WHICH ${o.label}?`,
-      opts: [...cat[o.label].map((m) => opt(m)), other],
-      next: (m) => {
-        if (m.label === 'OTHER') return null;
-        if (kind === 'racket') return { title: 'HOW MANY OF THEM?', sub: 'same frame, same strings', kind: 'big', opts: [opt('1'), opt('2'), opt('3')], next: () => null };
-        const accent = swatches('NOW THE ACCENT.', 'the swoosh, the stripe, the sole', true);
-        accent.next = () => null;
-        const main = swatches('WHAT COLOR ARE THEY?', 'the main color of the upper', false);
-        main.next = () => accent;
-        return main;
-      },
-    }),
-  };
-  post({ type: 'pick', open: true });
-  picker = circlePick({
-    first,
-    post,
-    cancel: () => { picker = null; post({ type: 'pick', open: false }); },
-    done: (a) => {
-      picker = null;
-      post({ type: 'pick', open: false });
-      const [brand, model, third, fourth] = a.map((o) => o.label);
-      if (brand === 'OTHER') { post({ type: 'add', kind }); return; }
-      if (model === 'OTHER') { post({ type: 'add', kind, brand }); return; }
-      if (kind === 'racket') { post({ type: 'add', kind, brand, model, name: model, count: Number(third) || 1 }); return; }
-      const colors = [a[2].color, fourth === 'NONE' ? null : a[3].color].filter(Boolean);
-      post({ type: 'add', kind, brand, model, name: `${model} ${colorName(colors[0])}`.trim(), colors });
-    },
-  });
+// ---------- Ink: draw on the scene with your finger ----------
+// The same brush as the TYPE / WRITE page. A stroke stays while it means something and fades after.
+const inkCv = document.createElement('canvas');
+inkCv.id = 'ink';
+canvas.insertAdjacentElement('afterend', inkCv);
+const inkG = inkCv.getContext('2d');
+const inkStrokes = []; // { pts, brush, fade: null | seconds left }
+function sizeInk() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  inkCv.width = window.innerWidth * dpr; inkCv.height = window.innerHeight * dpr;
+  inkG.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-/** The app's back button while a sheet is up: one sheet back, or out. */
-window.closePick = () => { if (picker) picker.back(); };
+sizeInk();
+window.addEventListener('resize', sizeInk);
+function drawInk(dt) {
+  inkG.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  for (let i = inkStrokes.length - 1; i >= 0; i -= 1) {
+    const sk = inkStrokes[i];
+    if (sk.fade != null) { sk.fade -= dt; if (sk.fade <= 0) { inkStrokes.splice(i, 1); continue; } }
+    if (sk.pts.length > 1) drawBrush(inkG, [sk], sk.fade == null ? 1 : Math.min(1, sk.fade / 0.3), BRUSH_WIDTH * 0.85);
+  }
+}
+/** Is a stroke a loop? Its ends meet, near enough for its size. */
+function loopOf(pts) {
+  if (pts.length < 6) return null;
+  const xs = pts.map((p) => p[0]); const ys = pts.map((p) => p[1]);
+  const diag = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  const [x0, y0] = pts[0]; const [x1, y1] = pts[pts.length - 1];
+  if (diag < 40 || Math.hypot(x1 - x0, y1 - y0) > Math.max(70, diag * 0.45)) return null;
+  return { cx: xs.reduce((s, v) => s + v, 0) / pts.length, cy: ys.reduce((s, v) => s + v, 0) / pts.length, diag };
+}
+function insideLoop(pts, x, y) {
+  let c = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i, i += 1) {
+    const [xi, yi] = pts[i]; const [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+const toScreen = (p) => { const q = p.clone().project(camera); return [(q.x * 0.5 + 0.5) * window.innerWidth, (-q.y * 0.5 + 0.5) * window.innerHeight]; };
 
-// ---------- The string zone ----------
-// While he holds a racket the card shows how it is strung: the string (circle it from a sheet), the gauge (tap to step through),
-// and the tension of the mains and the crosses (drag a number sideways, one pound per 9 px). Mains carry the crosses with them
-// while the two match; drag the crosses on their own to split them.
+// ---------- The toss: he flings choices into the air and you circle one ----------
+// He steps aside and flings them up with his free hand; they fly out on a spring (2.4 Hz, ratio 0.5), staggered 45 ms, and
+// float in the upper half of the screen, each bobbing on its own. Circle one with the ink: it pops, flies to his hand and the rest
+// fall out of the air. Tap empty space and they all fall: that step is skipped. Tension numbers: swipe sideways for the next range.
+//
+// Adding is short on purpose: a racket is the brand and how many; shoes are the brand and the color. Everything else (model,
+// string, gauge, tension, accent) is optional: circle the thing he holds and he throws those up one at a time. What you pick is
+// kept as you go, so stopping halfway loses nothing.
+const TOSS_D = 4; // how far in front of the camera they float
+const tokens = []; // { sp, val, ndc: [x, y], p, v, state, t, delay, w, h, spin, seed }
+let flow = null; // { kind, steps, i, item, add: {} }
+st.aside = { x: 0, v: 0 };
+st.flingT = 9;
+
+function pxWorld() { return (2 * TOSS_D * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / window.innerHeight; }
+const ndcPoint = (x, y, out) => out.set(x, y, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(TOSS_D).add(camera.position);
+
+/** Floating slots, in screen space: loose rows in the upper half, every other row nudged, a little jitter. */
+function slots(n, cols, half) {
+  const rows = Math.ceil(n / cols);
+  const top = 0.74; const bottom = rows > 3 ? 0.0 : 0.12;
+  const out = [];
+  for (let k = 0; k < n; k += 1) {
+    const r = Math.floor(k / cols); const inRow = Math.min(cols, n - r * cols); const c = k % cols;
+    const x = (inRow === 1 ? 0 : -half + (2 * half * c) / (inRow - 1)) + (r % 2 ? 0.05 : -0.03) * (half / 0.5) + (Math.random() - 0.5) * 0.04;
+    const y = rows === 1 ? 0.42 : top - ((top - bottom) * r) / (rows - 1) + (Math.random() - 0.5) * 0.03;
+    out.push([x, y]);
+  }
+  return out;
+}
+
+function spawn(opts, cols) {
+  for (const tk of tokens) if (tk.state !== 'chosen') drop(tk);
+  const hand = legend.arms[0].hand.getWorldPosition(new THREE.Vector3());
+  const arts = opts.map((o) => o.art());
+  // Keep the widest one on screen at the ends of a row.
+  const widest = Math.max(...arts.map((a) => a.w));
+  const where = slots(opts.length, cols, Math.max(0.2, Math.min(0.62, 1 - (widest + 30) / window.innerWidth)));
+  opts.forEach((o, k) => {
+    const art = arts[k];
+    const tex2 = new THREE.CanvasTexture(art.canvas);
+    tex2.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex2, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    sp.renderOrder = 20;
+    sp.material.rotation = (Math.random() - 0.5) * 0.16;
+    sp.visible = false;
+    sp.position.copy(hand);
+    scene.add(sp);
+    tokens.push({
+      sp, val: o.val, o, ndc: where[k], p: hand.clone(), v: new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 1.5, 1.5),
+      state: 'fly', t: 0, delay: 0.12 + k * 0.045, w: art.w, h: art.h, spin: 0, seed: Math.random() * 10,
+    });
+  });
+  st.flingT = 0;
+  post({ type: 'toss' });
+}
+function drop(tk) {
+  if (tk.state === 'drop') return;
+  tk.state = 'drop'; tk.t = 0;
+  tk.v.set((Math.random() - 0.5) * 1.5, Math.random() * 1.2, 0);
+  tk.spin = (Math.random() - 0.5) * 6;
+}
+function stepTokens(dt) {
+  const k = pxWorld();
+  const target = new THREE.Vector3();
+  const hand = legend.arms[0].hand.getWorldPosition(new THREE.Vector3());
+  for (let i = tokens.length - 1; i >= 0; i -= 1) {
+    const tk = tokens[i];
+    tk.t += dt;
+    let scale = 1; let alpha = 1;
+    if (tk.state === 'fly' || tk.state === 'float') {
+      if (tk.t < tk.delay) { tk.p.copy(hand); tk.sp.visible = false; continue; }
+      tk.sp.visible = true;
+      const u = tk.t - tk.delay;
+      if (tk.state === 'fly' && u > 0.9) tk.state = 'float';
+      ndcPoint(tk.ndc[0] + 0.012 * Math.sin(st.clock * 1.3 + tk.seed), tk.ndc[1] + 0.014 * Math.sin(st.clock * 1.7 + tk.seed * 2), target);
+      sprV(tk.p, tk.v, target, dt, 2.4, 0.5);
+      scale = 0.35 + 0.65 * smooth(u / 0.35);
+    } else if (tk.state === 'chosen') {
+      // Pops, then flies to his hand and is gone.
+      if (tk.t > 0.18) sprV(tk.p, tk.v, hand, dt, 3, 0.8);
+      scale = tk.t < 0.18 ? 1 + 0.3 * Math.sin((Math.PI * tk.t) / 0.18) : Math.max(0, 1 - (tk.t - 0.18) / 0.35);
+      if (tk.t > 0.55) { scene.remove(tk.sp); tk.sp.material.map.dispose(); tk.sp.material.dispose(); tokens.splice(i, 1); continue; }
+    } else {
+      tk.v.y -= 7 * dt;
+      tk.p.addScaledVector(tk.v, dt);
+      tk.sp.material.rotation += tk.spin * dt;
+      alpha = Math.max(0, 1 - tk.t / 0.7);
+      if (tk.t > 0.7) { scene.remove(tk.sp); tk.sp.material.map.dispose(); tk.sp.material.dispose(); tokens.splice(i, 1); continue; }
+    }
+    tk.sp.position.copy(tk.p);
+    tk.sp.scale.set(tk.w * k * scale, tk.h * k * scale, 1);
+    tk.sp.material.opacity = alpha;
+  }
+}
+const live = () => tokens.filter((tk) => tk.state === 'fly' || tk.state === 'float');
+
+// The steps. Each throws its choices and says what to do with the pick.
+const opt = (val, art) => ({ val, art });
+const colorName = (hex) => (COLORS.find(([, h]) => h === hex) || ['', ''])[0];
+const tensionOpts = (mid) => { const out = []; for (let v = mid - 4; v <= mid + 4; v += 1) out.push(v); return out; };
+const STEP = {
+  brand: { say: 'CIRCLE THE BRAND.', cols: 2, opts: (f) => Object.keys(f.kind === 'racket' ? RACKETS : SHOES).map((b) => opt(b, () => brandArt(b))) },
+  count: { say: 'HOW MANY OF THEM?', cols: 3, opts: () => [1, 2, 3].map((n) => opt(n, () => numArt(`x${n}`, n === 1 ? 'JUST ONE' : 'SAME FRAME'))) },
+  color: { say: 'WHAT COLOR ARE THEY?', cols: 4, opts: () => COLORS.map(([n, h], k) => opt(h, () => blobArt(n, h, k))) },
+  accent: { say: 'AND THE ACCENT?', cols: 4, opts: () => COLORS.map(([n, h], k) => opt(h, () => blobArt(n, h, k + 3))) },
+  model: { say: 'WHICH ONE?', cols: 2, opts: (f) => ((f.kind === 'racket' ? RACKETS : SHOES)[f.add.brand || (f.item && f.item.brand)] || []).map((m) => opt(m, () => wordArt(m))) },
+  string: { say: 'WHAT STRING IS IN IT?', cols: 3, opts: () => STRINGS.map(([n, h]) => opt(n, () => coilArt(n, h))) },
+  gauge: { say: 'WHAT GAUGE?', cols: 3, opts: () => GAUGES.map((g) => opt(g, () => numArt(g, 'GAUGE'))) },
+  mains: { say: 'MAINS TENSION?', more: true, cols: 3, opts: (f) => tensionOpts(f.mid ?? setupOf(f.item).mains).map((v) => opt(v, () => numArt(String(v), 'MAINS LB'))) },
+  crosses: { say: 'CROSSES TENSION?', more: true, cols: 3, opts: (f) => tensionOpts(f.mid ?? setupOf(f.item).crosses).map((v) => opt(v, () => numArt(String(v), 'CROSSES LB'))) },
+};
 const DEFAULT_SETUP = { string: null, gauge: '16', mains: 52, crosses: 52 };
 const setupOf = (it) => ({ ...DEFAULT_SETUP, ...((it && it.setup) || {}) });
-let liveSetup = null;
-function strungIt() { return st.show && st.show.kind === 'racket' ? currentOf(st.show) : null; }
-function drawZone() {
-  const it = strungIt();
-  $('sz').classList.toggle('on', !!it);
-  if (!it) return;
-  const s = liveSetup || setupOf(it);
-  const set = !!(it.setup && it.setup.string);
-  $('sname').querySelector('b').textContent = s.string || 'PICK ONE';
-  $('sname').classList.toggle('unset', !set);
-  $('sname').querySelector('i').style.background = s.string ? stringColor(s.string) : 'transparent';
-  $('sgauge').querySelector('b').textContent = s.gauge;
-  $('smain').querySelector('b').textContent = `${s.mains}`;
-  $('scross').querySelector('b').textContent = `${s.crosses}`;
-  $('sz').classList.toggle('fresh', !it.setup);
+const specOf = (it) => {
+  const s = it && it.setup;
+  if (!s) return '';
+  const t = s.mains === s.crosses ? `${s.mains}` : `${s.mains}/${s.crosses}`;
+  return [s.string, s.gauge ? `${s.gauge} GA` : '', `${t} LB`].filter(Boolean).join(' / ');
+};
+
+/** Start a run of throws. kind: racket | shoes; item: what he holds (details), or null (adding a new one). */
+function startFlow(kind, item) {
+  if (flow) return;
+  let steps;
+  if (!item) steps = kind === 'racket' ? ['brand', 'count'] : ['brand', 'color'];
+  else if (kind === 'racket') steps = [...(item.brand ? [] : ['brand']), 'model', 'string', 'gauge', 'mains', 'crosses'];
+  else steps = [...(item.brand ? [] : ['brand']), 'model', 'color', 'accent'];
+  flow = { kind, steps, i: -1, item, add: {}, mid: null };
+  post({ type: 'pick', open: true });
+  nextStep();
 }
-function saveSetup(it, s) {
+function nextStep() {
+  flow.i += 1;
+  flow.mid = null;
+  // A step with nothing to throw (no models listed for that brand) is passed over.
+  while (flow.i < flow.steps.length && !STEP[flow.steps[flow.i]].opts(flow).length) flow.i += 1;
+  if (flow.i >= flow.steps.length) { endFlow(true); return; }
+  const def = STEP[flow.steps[flow.i]];
+  spawn(def.opts(flow), def.cols);
+  panel();
+}
+function endFlow(finished) {
+  const f = flow;
+  flow = null;
+  for (const tk of tokens) if (tk.state !== 'chosen') drop(tk);
+  post({ type: 'pick', open: false });
+  if (finished && !f.item) {
+    const a = f.add;
+    if (f.kind === 'racket') post({ type: 'add', kind: 'racket', brand: a.brand, name: a.brand || 'RACKET', count: a.count || 1 });
+    else {
+      const colors = a.color ? [a.color] : [];
+      post({ type: 'add', kind: 'shoes', brand: a.brand, colors, name: [a.brand, colorName(a.color)].filter(Boolean).join(' ') || 'COURT SHOES' });
+    }
+  }
+  panel();
+}
+window.closePick = () => { if (flow) { post({ type: 'swish' }); endFlow(false); } };
+
+/** What a pick does. Details are saved the moment they are picked. */
+function apply(step, val) {
+  const it = flow.item;
+  if (!it) { flow.add[step] = val; return; }
+  if (step === 'brand') { flow.add.brand = val; it.brand = val; post({ type: 'detail', id: it.id, patch: { brand: val } }); return; }
+  if (step === 'model') { it.model = val; it.name = val; post({ type: 'detail', id: it.id, patch: { model: val, name: val } }); return; }
+  if (step === 'color' || step === 'accent') {
+    const c = [...(it.colors || [])];
+    c[step === 'color' ? 0 : 1] = val;
+    if (!c[0]) c[0] = '#f4f1ea';
+    it.colors = c;
+    post({ type: 'detail', id: it.id, patch: { colors: c } });
+    dress(it, 'shoes');
+    return;
+  }
+  const s = setupOf(it);
+  if (step === 'string') s.string = val;
+  if (step === 'gauge') s.gauge = val;
+  if (step === 'mains') { s.mains = val; s.crosses = val; }
+  if (step === 'crosses') s.crosses = val;
   it.setup = s;
   post({ type: 'setup', id: it.id, setup: s });
-  drawZone();
+  if (step === 'string') dress(it, 'racket');
 }
-$('sgauge').addEventListener('click', () => {
-  const it = strungIt(); if (!it) return;
-  const s = setupOf(it);
-  s.gauge = GAUGES[(GAUGES.indexOf(s.gauge) + 1) % GAUGES.length];
-  post({ type: 'tick' });
-  saveSetup(it, s);
-});
-$('sname').addEventListener('click', () => {
-  const it = strungIt(); if (!it || picker) return;
-  post({ type: 'pick', open: true });
-  picker = circlePick({
-    first: { title: 'WHAT STRING?', sub: 'circle what is in it', kind: 'words', opts: STRINGS.map(([n, h]) => opt(n, { color: h })), next: () => null },
-    post,
-    cancel: () => { picker = null; post({ type: 'pick', open: false }); },
-    done: ([o]) => {
-      picker = null;
-      post({ type: 'pick', open: false });
-      const s = setupOf(it); s.string = o.label;
-      saveSetup(it, s);
-      dress(it, 'racket');
-    },
-  });
-});
-for (const [id, key] of [['smain', 'mains'], ['scross', 'crosses']]) {
-  const el = $(id);
-  let drag = null;
-  el.addEventListener('pointerdown', (e) => {
-    const it = strungIt(); if (!it) return;
-    el.setPointerCapture(e.pointerId);
-    const s = setupOf(it);
-    drag = { x: e.clientX, v0: s[key], linked: key === 'mains' && s.mains === s.crosses, s, it };
-    el.classList.add('drag');
-  });
-  el.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    const v = clamp(Math.round(drag.v0 + (e.clientX - drag.x) / 9), 30, 75);
-    if (v === drag.s[key]) return;
-    drag.s[key] = v;
-    if (drag.linked) drag.s.crosses = v;
-    liveSetup = drag.s;
-    post({ type: 'tick' });
-    drawZone();
-  });
-  const end = () => {
-    if (!drag) return;
-    const { it, s } = drag;
-    drag = null; liveSetup = null;
-    el.classList.remove('drag');
-    saveSetup(it, s);
-  };
-  el.addEventListener('pointerup', end);
-  el.addEventListener('pointercancel', end);
+
+/** A finished stroke while he is throwing. */
+function judge(pts) {
+  const sk = inkStrokes[inkStrokes.length - 1];
+  const fly = live();
+  const at = fly.map((tk) => toScreen(tk.p));
+  const loop = loopOf(pts);
+  let best = -1;
+  if (loop) {
+    let d0 = Infinity;
+    at.forEach(([x, y], k) => {
+      const d = Math.hypot(x - loop.cx, y - loop.cy);
+      if ((insideLoop(pts, x, y) || d < 45) && d < d0) { best = k; d0 = d; }
+    });
+  } else {
+    const [x0, y0] = pts[0]; const [x1, y1] = pts[pts.length - 1];
+    const moved = Math.hypot(x1 - x0, y1 - y0);
+    // A sideways swipe on tension: the next range of numbers.
+    const def = STEP[flow.steps[flow.i]];
+    if (def.more && Math.abs(x1 - x0) > 80) {
+      const cur = flow.mid ?? (flow.steps[flow.i] === 'mains' ? setupOf(flow.item).mains : setupOf(flow.item).crosses);
+      flow.mid = clamp(cur + (x1 < x0 ? 9 : -9), 34, 72);
+      sk.fade = 0.3;
+      spawn(def.opts(flow), def.cols);
+      return;
+    }
+    // A tap: on one picks it; on empty air skips the step.
+    if (moved < 14 && pts.length < 12) {
+      at.forEach(([x, y], k) => { const tk = fly[k]; if (Math.abs(pts[0][0] - x) < tk.w / 2 && Math.abs(pts[0][1] - y) < tk.h / 2) best = k; });
+      if (best < 0) { sk.fade = 0.01; post({ type: 'swish' }); for (const tk of tokens) drop(tk); nextStep(); return; }
+    }
+  }
+  if (best < 0) { sk.fade = 0.3; return; }
+  sk.fade = 0.6;
+  const tk = fly[best];
+  tk.state = 'chosen'; tk.t = 0; tk.v.set(0, 0, 0);
+  for (const o of fly) if (o !== tk) drop(o);
+  post({ type: 'circled' });
+  legend.laugh = 0.3;
+  apply(flow.steps[flow.i], tk.val);
+  setTimeout(() => { if (flow) nextStep(); }, 380);
 }
 
 // The name on the card: tap to rename, hold to retire. On a blank, tap to add one.
@@ -1126,7 +1349,7 @@ $('h1').addEventListener('pointerdown', () => {
 $('h1').addEventListener('pointerup', () => {
   if (!st.show) return;
   const it = currentOf(st.show);
-  if (!it) { addFlow(st.show.kind); return; }
+  if (!it) { startFlow(st.show.kind, null); return; }
   if (pressTimer !== -1) { clearTimeout(pressTimer); post({ type: 'edit', id: it.id }); }
   pressTimer = 0;
 });
@@ -1153,6 +1376,16 @@ function panel() {
   const inside = d.inside || {};
   const sh = st.show;
   document.body.classList.toggle('showing', !!sh);
+  document.body.classList.toggle('tossing', !!flow);
+  if (flow && flow.i >= 0 && flow.i < flow.steps.length) {
+    const def = STEP[flow.steps[flow.i]];
+    $('h2').classList.remove('ok');
+    $('h1').textContent = def.say;
+    $('h2').textContent = flow.steps.length > 1 ? `${flow.i + 1} OF ${flow.steps.length}` : '';
+    $('due').innerHTML = '';
+    setHint(`circle one with your finger. tap empty space to skip${def.more ? '. swipe sideways for more numbers' : ''}.`);
+    return;
+  }
   if (sh) {
     const n = ofKind(sh.kind).length;
     const it = currentOf(sh);
@@ -1165,18 +1398,19 @@ function panel() {
     $('h2').textContent = it ? `${s.toUpperCase()} ${word}${n > 1 ? `  ${sh.idx + 1} OF ${n}` : ''}` : 'TAP THE NAME TO ADD ONE';
     $('h2').classList.toggle('ok', !!it && (done || w < 0.6));
     $('due').innerHTML = '';
-    $('hint').textContent = !it ? 'tap it, then circle the brand' : done ? (s === 'strings' ? 'restrung. logged.' : 'new pair. logged.')
-      : `${row ? `${row.text}. ` : ''}${s === 'strings' ? 'scrub the strings to restring. drag a tension to change it.' : 'scrub them clean for a new pair.'} hold the name to retire it.`;
-    drawZone();
+    const spec = sh.kind === 'racket' ? specOf(it) : '';
+    const more = sh.kind === 'racket' ? (spec ? `${spec}. circle the racket to change it.` : 'circle the racket to add the string and tension, if you care.')
+      : (it && it.model ? '' : 'circle the shoes to add the model and accent, if you care.');
+    setHint(!it ? 'tap it and he throws you the brands' : done ? (s === 'strings' ? 'restrung. logged.' : 'new pair. logged.')
+      : `${more} ${s === 'strings' ? 'scrub the strings when you restring.' : 'scrub them clean for a new pair.'} hold the name to retire it.`);
     return;
   }
   $('h2').classList.remove('ok');
-  drawZone();
   $('h1').textContent = st.open ? 'YOUR DOMAIN.' : d.title || 'YOUR GEAR.';
   $('h2').textContent = st.open ? inside.sub || '' : d.sub || '';
   const due = st.open ? [] : d.due || [];
   $('due').innerHTML = due.slice(0, 3).map((t) => `<li>${esc(t)}</li>`).join('');
-  $('hint').textContent = st.open ? inside.hint || '' : d.hint || 'hold your fighter, or tap DOMAIN, to expand it';
+  setHint(st.open ? inside.hint || '' : d.hint || 'hold your fighter, or tap DOMAIN, to expand it');
 }
 function focus(id, quiet) {
   st.focus = id;
@@ -1232,6 +1466,8 @@ function putBack(r) {
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   down = { x: e.clientX, y: e.clientY, t: performance.now(), hit: pick(e.clientX, e.clientY), yaw0: st.yaw.target, moved: 0 };
+  // While he is throwing, your finger is ink.
+  if (flow) { down.ink = { pts: [[e.clientX, e.clientY]], brush: null, fade: null }; inkStrokes.push(down.ink); return; }
   if (st.held) return;
   // Your finger on what he is holding: scrub it.
   if (down.hit && down.hit.show && st.show && st.show.phase === 'held' && currentOf(st.show)) {
@@ -1240,6 +1476,11 @@ canvas.addEventListener('pointerdown', (e) => {
     down.scrub = true;
     scrubAt(e.clientX, e.clientY);
     return;
+  }
+  // While he holds something, a finger off it draws: circle what he holds for its details.
+  if (st.show && st.show.phase === 'held' && currentOf(st.show) && !(down.hit && down.hit.jelly)) {
+    down.ink = { pts: [[e.clientX, e.clientY]], brush: null, fade: null, loose: true };
+    inkStrokes.push(down.ink);
   }
   // Pressing your fighter outside the domain starts the charge.
   if (!st.open && down.hit && down.hit.jelly === you) { st.charge.holding = true; st.charge.ticks = 0; post({ type: 'grab' }); return; }
@@ -1254,6 +1495,11 @@ canvas.addEventListener('pointermove', (e) => {
   const dx = e.clientX - down.x; const dy = e.clientY - down.y;
   down.moved = Math.max(down.moved, Math.hypot(dx, dy));
   down.dx = dx; down_dx = dx;
+  if (down.ink) {
+    const l = down.ink.pts[down.ink.pts.length - 1];
+    if (Math.hypot(e.clientX - l[0], e.clientY - l[1]) > 3) down.ink.pts.push([e.clientX, e.clientY]);
+    if (flow) return;
+  }
   if (st.held) return;
   if (down.scrub) { scrubAt(e.clientX, e.clientY); return; }
   const r = down.hit && down.hit.racket;
@@ -1270,7 +1516,22 @@ function release() {
   const hit = down.hit;
   const wasScrub = down.scrub;
   const swipe = !wasScrub && Math.abs(down.dx || 0) > 60;
+  const ink = down.ink;
   down = null;
+  if (ink && flow) { judge(ink.pts); return; }
+  if (ink) {
+    // A loop round what he holds: he starts throwing its details.
+    const loop = loopOf(ink.pts);
+    const sh = st.show;
+    const at = sh && toScreen((sh.kind === 'racket' ? showR.bed : showS.pair).getWorldPosition(new THREE.Vector3()));
+    if (loop && at && (insideLoop(ink.pts, at[0], at[1]) || Math.hypot(at[0] - loop.cx, at[1] - loop.cy) < 70)) {
+      ink.fade = 0.6;
+      post({ type: 'circled' });
+      startFlow(sh.kind, currentOf(sh));
+      return;
+    }
+    ink.fade = loop ? 0.3 : 0.12;
+  }
   if (wasScrub) return;
   if (swipe && st.show) { pullOut(st.show.kind, (st.show.idx + (down_dx > 0 ? showCount(st.show.kind) - 1 : 1)) % showCount(st.show.kind)); return; }
   if (st.charge.holding) {
@@ -1290,7 +1551,7 @@ function release() {
   }
   if (!tap) return;
   if (hit && hit.show) {
-    if (st.show && !currentOf(st.show)) addFlow(st.show.kind);
+    if (st.show && !currentOf(st.show)) startFlow(st.show.kind, null);
     return;
   }
   // Tapping anywhere else while he holds something: he puts it away.
@@ -1321,6 +1582,7 @@ function expand() {
   if (st.focus) focus(null);
   post({ type: 'expand' });
   buildDock();
+  if (dock) dock.hop(4);
   panel();
 }
 function collapse() {
@@ -1520,6 +1782,14 @@ function step(dt) {
   const hop = Math.sin(Math.PI * clamp(k * 1.6, 0, 1)) * 0.5;
   you.carrier.position.set(lerp(OUT_SPOT.x, YOU_AT.x, clamp(k * 1.6, 0, 1)), Math.max(0, YOU_AT.y + youPillar.s.x) * k + hop * (1 - k), lerp(OUT_SPOT.z, YOU_AT.z, clamp(k * 1.6, 0, 1)));
   you.carrier.scale.setScalar(lerp(0.44, 0.34, k));
+  // Leaving: a hop off the left edge, then the app goes back.
+  if (st.leave) {
+    st.leave.t += dt;
+    const lt = clamp(st.leave.t / 0.55, 0, 1);
+    you.carrier.position.x -= 4 * lt * lt;
+    you.carrier.position.y += 1.1 * Math.sin(Math.PI * Math.min(1, lt * 1.3));
+    if (st.leave.t > 0.5 && !st.leave.sent) { st.leave.sent = true; post({ type: 'leave' }); }
+  }
   // The sky turns while the ink covers the page.
   scene.background = st.open && st.t > 0.3 ? inkSky : paperSky;
   for (const r of st.rackets.values()) stepRacket(r, dt);
@@ -1531,10 +1801,14 @@ function step(dt) {
   // It crouches over your fighter wherever your fighter is; while you charge it leans further down over it.
   const gb = G_OUT.clone().lerp(G_IN, k);
   spring1(st.lean, st.show && st.show.phase !== 'out' ? 1 : 0, dt, 1.8, 0.8);
-  legend.carrier.position.set(gb.x - 0.7 * st.lean.x, gb.y - c.x * 0.35 + 0.06 * Math.sin((st.clock * TAU) / 4.6), gb.z + c.x * 0.4);
+  // He steps aside to throw, so what he throws has the middle of the page.
+  spring1(st.aside, flow ? 1 : 0, dt, 1.6, 0.7);
+  st.flingT += dt;
+  legend.carrier.position.set(gb.x - 0.7 * st.lean.x + 0.75 * st.aside.x, -0.25 * st.aside.x + gb.y - c.x * 0.35 + 0.06 * Math.sin((st.clock * TAU) / 4.6), gb.z + c.x * 0.4);
   legend.carrier.rotation.x = c.x * 0.25; // leans in over your fighter while you charge
   legend.body.simulate(dt, st.clock);
   stepShow(dt);
+  stepTokens(dt);
   if (you.body) you.body.simulate(dt, st.clock + 0.7);
   // Dirt.
   for (let i = 0; i < DUST; i += 1) {
@@ -1601,6 +1875,8 @@ function frame(now) {
   frameCam();
   pose();
   notes();
+  drawInk(window.paused ? 0 : Math.min((now - (frame.prev || now)) / 1000, 0.1));
+  frame.prev = now;
   if (dock) dock.render();
   renderer.render(scene, camera);
 }
@@ -1610,7 +1886,7 @@ requestAnimationFrame(frame);
 window.demoDomain = (planting = null) => window.setDomain({
   planting,
   you: { cast: 'wall', color: '#d7f205', name: 'TONY' },
-  title: 'YOUR GEAR.', sub: '1 THING DUE.', inside: { sub: '6 PLANTED. 112 MATCHES IN THE GROUND.', hint: 'pull one up to see what it won. back closes it.' }, due: ['PURE AERO: restring'], hint: 'hold your fighter, or tap DOMAIN, to expand it',
+  title: 'YOUR GEAR.', sub: '1 THING DUE.', inside: { sub: '6 PLANTED. 112 MATCHES IN THE GROUND.', hint: 'pull one up to see what it won. the arrow closes it.' }, due: ['PURE AERO: restring'], hint: 'hold your fighter, or tap DOMAIN, to expand it',
   gear: [
     { id: 'n1', kind: 'racket', name: 'PURE AERO 2026', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '17 of 15 matches, 64 of 90 days', worn: 1.13 }] },
     { id: 'n2', kind: 'racket', name: 'BLADE 98 V9', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '4 of 15 matches, 20 of 90 days', worn: 0.27 }] },
@@ -1633,6 +1909,9 @@ window.__focus = (id) => focus(id);
 window.__charge = (on) => { st.charge.holding = on; };
 window.__pose = (c) => { st.charge.x = c; };
 window.__tab = (k) => tab(k);
+// Where each floating choice is on screen, and its value: for circling in tests.
+window.__tokens = () => live().map((tk) => ({ val: tk.val, at: toScreen(tk.p) }));
+window.__flow = (kind, id) => startFlow(kind, id ? now.list.find((i) => i.id === id) : null);
 window.__scrub = (pts) => { if (!st.scrub) st.scrub = { cells: new Set(), progress: 0, dist: 0, last: null, done: false }; for (const [x, y] of pts) scrubAt(x, y); };
 
 post({ type: 'ready' });

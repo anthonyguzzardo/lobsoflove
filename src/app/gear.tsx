@@ -5,12 +5,11 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useRef } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
-import { BackSwing } from '@/components/back-swing';
 import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
 import { DOMAIN_HTML } from '@/generated/domain-html';
 import {
   type GearItem, type GearKind, LIFE, type Service, SERVICES, type StringSetup,
-  addItem, crackCan, dueList, lowStock, renameItem, restock, retireItem, service, setSetup, useCloset, useRetired, wearOf,
+  addItem, crackCan, dueList, lowStock, renameItem, restock, retireItem, service, setSetup, updateItem, useCloset, useRetired, wearOf,
 } from '@/lib/gear';
 import { askInk } from '@/lib/ink-ask';
 import { counts, type Match, useMatches, winnerOf } from '@/lib/matches';
@@ -116,8 +115,8 @@ export default function Gear() {
       sub: due.length ? `${due.length} THING${due.length > 1 ? 'S' : ''} DUE.` : 'ALL GOOD.',
       hint: 'hold your fighter, or tap DOMAIN, to expand it',
       inside: past.length
-        ? { sub: `${past.length} PLANTED. ${planted} MATCHES IN THE GROUND.`, hint: 'pull one up to see what it won. back closes it.' }
-        : { sub: 'NOTHING PLANTED YET.', hint: 'hold a racket\'s name to retire it. it gets planted here. back closes it.' },
+        ? { sub: `${past.length} PLANTED. ${planted} MATCHES IN THE GROUND.`, hint: 'pull one up to see what it won. the arrow closes it.' }
+        : { sub: 'NOTHING PLANTED YET.', hint: 'hold a racket\'s name to retire it. it gets planted here. the arrow closes it.' },
     });
   }, [items, retired, matches, roster, you]);
   useEffect(() => { if (!demo) run(`window.setDomain(${data})`); }, [run, data, demo]);
@@ -128,11 +127,6 @@ export default function Gear() {
     const it = byId(id);
     if (!it) return;
     askInk({ label: 'WHAT IS IT CALLED', max: 22, upper: true, examples: [PLACEHOLDER[it.kind]] }, (t) => { renameItem(id, t || DEFAULT_NAME[it.kind]); void Haptics.selectionAsync(); });
-  };
-  const back = () => {
-    if (state.current.pick) run('window.closePick()'); else if (state.current.held || state.current.focus) run('window.unfocus()');
-    else if (state.current.open) run('window.collapse()');
-    else goBack();
   };
 
   return (
@@ -147,6 +141,8 @@ export default function Gear() {
         }}
         onMessage={(m: SceneMsg) => {
           switch (m.type) {
+            // Your fighter hopped off the page: go back.
+            case 'leave': goBack(); break;
             case 'grab': void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft); break;
             // He reaches behind his back and whips it out.
             case 'reach': sfx('swish', 0.5); setTimeout(() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }, 300); break;
@@ -180,6 +176,8 @@ export default function Gear() {
               break;
             }
             case 'setup': if (!demo) setSetup(m.id, m.setup as StringSetup); break;
+            case 'detail': if (!demo) updateItem(m.id, m.patch); break;
+            case 'toss': setTimeout(() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, 150); sfx('swish', 0.5); break;
             case 'pick': state.current.pick = !!m.open; break;
             case 'circled': {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -215,7 +213,6 @@ export default function Gear() {
           }
         }}
       />
-      <BackSwing floating onBack={back} />
     </View>
   );
 }

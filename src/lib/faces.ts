@@ -2,72 +2,14 @@
 // bundled by esbuild) both draw from here. A face is a head on a badge in the player's color: hair, eyes, brows, mouth and a few
 // extras (headbands, a blindfold, markings). Unknown or empty codes get the plain jelly face.
 //
-// Canvas: 100 x 100. Head is an ellipse at (50, 58), 25 wide and 28 tall each way: top of the head y 30, chin y 86.
-// Eyes sit on y 58 at x 40 and 60, brows around y 50, mouth around y 74.
+// The parts and the canvas are in faces-kit.ts; the characters are in faces-dbz.ts, faces-tennis.ts and faces-jjk.ts.
 
-const INK = '#16181d';
+import { DBZ } from './faces-dbz';
+import { circle, type Brows, type Extra, type Eyes, type Hair, INK, line, type Mouth, p, type Spec } from './faces-kit';
+import { JJK } from './faces-jjk';
+import { TENNIS } from './faces-tennis';
 
-type Eyes = 'dot' | 'fierce' | 'wide' | 'calm' | 'closed' | 'blank' | 'none';
-type Brows = 'angry' | 'thick' | 'flat' | 'raised' | 'none';
-type Mouth = 'grin' | 'smile' | 'smirk' | 'flat' | 'frown' | 'open' | 'teeth' | 'lips' | 'none';
-type Hair =
-  | 'goku' | 'vegeta' | 'gohan' | 'trunks' | 'short' | 'curly' | 'long' | 'ponytail' | 'bun' | 'topknot' | 'gojo' | 'undercut'
-  | 'megumi' | 'yuta' | 'bob' | 'sidepart' | 'mullet' | 'broly' | 'turban' | 'dome' | 'cell' | 'buu' | 'geto' | 'none';
-type Extra =
-  | 'headband' | 'bandana' | 'blindfold' | 'glasses' | 'shades' | 'dots6' | 'sukuna' | 'itadori' | 'scar' | 'highcollar'
-  | 'earrings' | 'gauges' | 'frieza' | 'cellmarks' | 'spots' | 'pointyears' | 'panda' | 'stripes' | 'blush';
-
-type Spec = {
-  skin: string; hair: Hair; hairColor?: string; eyes: Eyes; eyeColor?: string; brows: Brows; mouth: Mouth;
-  collar?: string; extras?: Extra[]; band?: string;
-};
-
-const SKIN = { light: '#f6cfa8', fair: '#fbe0c4', medium: '#e0b088', tan: '#c98e5f', brown: '#9a6240', deep: '#6e4128' };
-
-export const FACES: Record<string, Spec> = {
-  // Dragon Ball Z
-  goku: { skin: SKIN.light, hair: 'goku', hairColor: '#1b1b22', eyes: 'fierce', brows: 'angry', mouth: 'grin', collar: '#ff8a1f', extras: [] },
-  vegeta: { skin: SKIN.light, hair: 'vegeta', hairColor: '#1b1b22', eyes: 'fierce', brows: 'thick', mouth: 'frown', collar: '#2f5bd8' },
-  gohan: { skin: SKIN.light, hair: 'gohan', hairColor: '#1b1b22', eyes: 'wide', brows: 'raised', mouth: 'smile', collar: '#6b3fa0' },
-  piccolo: { skin: '#7cc85a', hair: 'turban', eyes: 'fierce', brows: 'angry', mouth: 'frown', collar: '#6b3fa0', extras: ['pointyears'] },
-  frieza: { skin: '#f4eef7', hair: 'dome', hairColor: '#8e3bbf', eyes: 'fierce', eyeColor: '#d1203a', brows: 'none', mouth: 'lips', extras: ['frieza'] },
-  trunks: { skin: SKIN.light, hair: 'trunks', hairColor: '#b9a3e3', eyes: 'calm', eyeColor: '#2f5bd8', brows: 'angry', mouth: 'flat', collar: '#2f3a4a' },
-  krillin: { skin: SKIN.light, hair: 'none', eyes: 'dot', brows: 'raised', mouth: 'grin', collar: '#ff8a1f', extras: ['dots6'] },
-  cell: { skin: '#b4e08f', hair: 'cell', hairColor: '#1d2b14', eyes: 'fierce', eyeColor: '#b0306a', brows: 'none', mouth: 'smirk', extras: ['spots', 'cellmarks'] },
-  buu: { skin: '#ff9fc7', hair: 'buu', hairColor: '#ff9fc7', eyes: 'closed', brows: 'none', mouth: 'grin', collar: '#f4f1e6', extras: ['blush'] },
-  broly: { skin: SKIN.medium, hair: 'broly', hairColor: '#c7f03b', eyes: 'blank', brows: 'thick', mouth: 'teeth', collar: '#d4a017' },
-  bulma: { skin: SKIN.fair, hair: 'bob', hairColor: '#1fb5b5', eyes: 'wide', eyeColor: '#1f6fb5', brows: 'raised', mouth: 'smile', collar: '#ff5fa2', extras: ['earrings', 'blush'] },
-  // Tennis legends
-  federer: { skin: SKIN.light, hair: 'short', hairColor: '#5a3b24', eyes: 'calm', brows: 'flat', mouth: 'smile', collar: '#f4f1e6', extras: ['headband'], band: '#f4f1e6' },
-  nadal: { skin: SKIN.tan, hair: 'long', hairColor: '#3b2414', eyes: 'fierce', brows: 'thick', mouth: 'teeth', collar: '#d7f205', extras: ['bandana'], band: '#1aa36f' },
-  djokovic: { skin: SKIN.light, hair: 'short', hairColor: '#2a1d14', eyes: 'calm', eyeColor: '#3a6b3a', brows: 'flat', mouth: 'smile', collar: '#1f3d99' },
-  serena: { skin: SKIN.deep, hair: 'bun', hairColor: '#1b1b22', eyes: 'wide', brows: 'raised', mouth: 'grin', collar: '#e0218a', extras: ['earrings'] },
-  venus: { skin: SKIN.deep, hair: 'long', hairColor: '#1b1b22', eyes: 'calm', brows: 'flat', mouth: 'smile', collar: '#ffd23f', extras: ['headband'], band: '#ffd23f' },
-  agassi: { skin: SKIN.medium, hair: 'mullet', hairColor: '#8a5a2b', eyes: 'calm', brows: 'flat', mouth: 'smirk', collar: '#ff5fa2', extras: ['bandana', 'earrings'], band: '#16181d' },
-  mcenroe: { skin: SKIN.light, hair: 'curly', hairColor: '#5a3b24', eyes: 'fierce', brows: 'angry', mouth: 'open', collar: '#f4f1e6', extras: ['headband'], band: '#d1203a' },
-  borg: { skin: SKIN.light, hair: 'long', hairColor: '#e8c870', eyes: 'calm', eyeColor: '#3a7bd5', brows: 'flat', mouth: 'flat', collar: '#f4f1e6', extras: ['headband', 'stripes'], band: '#f4f1e6' },
-  graf: { skin: SKIN.fair, hair: 'ponytail', hairColor: '#e2b858', eyes: 'calm', brows: 'flat', mouth: 'smile', collar: '#f4f1e6' },
-  sampras: { skin: SKIN.medium, hair: 'short', hairColor: '#2a1d14', eyes: 'calm', brows: 'thick', mouth: 'smirk', collar: '#3a86ff' },
-  navratilova: { skin: SKIN.fair, hair: 'short', hairColor: '#d9b46a', eyes: 'fierce', brows: 'flat', mouth: 'grin', collar: '#06d6a0' },
-  // Jujutsu Kaisen
-  gojo: { skin: SKIN.fair, hair: 'gojo', hairColor: '#f2f4f8', eyes: 'none', brows: 'none', mouth: 'smirk', collar: '#1b1f3a', extras: ['blindfold'] },
-  sukuna: { skin: SKIN.light, hair: 'undercut', hairColor: '#ff8fae', eyes: 'fierce', eyeColor: '#d1203a', brows: 'angry', mouth: 'teeth', collar: '#f4f1e6', extras: ['sukuna'] },
-  itadori: { skin: SKIN.light, hair: 'undercut', hairColor: '#ff8fae', eyes: 'wide', eyeColor: '#7a4a2e', brows: 'raised', mouth: 'grin', collar: '#1b1f3a', extras: ['itadori'] },
-  megumi: { skin: SKIN.fair, hair: 'megumi', hairColor: '#1b1b22', eyes: 'calm', eyeColor: '#2f5b8a', brows: 'flat', mouth: 'flat', collar: '#1b1f3a' },
-  nobara: { skin: SKIN.fair, hair: 'bob', hairColor: '#e8742f', eyes: 'fierce', eyeColor: '#8a4a2a', brows: 'angry', mouth: 'grin', collar: '#1b1f3a' },
-  nanami: { skin: SKIN.light, hair: 'sidepart', hairColor: '#e8cf72', eyes: 'none', brows: 'flat', mouth: 'flat', collar: '#c9b037', extras: ['shades'] },
-  todo: { skin: SKIN.tan, hair: 'topknot', hairColor: '#1b1b22', eyes: 'fierce', brows: 'thick', mouth: 'grin', collar: '#1b1f3a', extras: ['scar'] },
-  maki: { skin: SKIN.fair, hair: 'ponytail', hairColor: '#2f5f3a', eyes: 'fierce', eyeColor: '#8a6a2a', brows: 'angry', mouth: 'smirk', collar: '#1b1f3a', extras: ['glasses'] },
-  toge: { skin: SKIN.fair, hair: 'yuta', hairColor: '#e6e8ef', eyes: 'calm', eyeColor: '#8a3fa0', brows: 'flat', mouth: 'none', extras: ['highcollar'] },
-  panda: { skin: '#fbfbf7', hair: 'none', eyes: 'dot', brows: 'none', mouth: 'smile', collar: '#1b1f3a', extras: ['panda'] },
-  geto: { skin: SKIN.light, hair: 'geto', hairColor: '#1b1b22', eyes: 'closed', brows: 'flat', mouth: 'smirk', collar: '#2a2a2a', extras: ['gauges'] },
-  yuta: { skin: SKIN.fair, hair: 'yuta', hairColor: '#1b1b22', eyes: 'calm', brows: 'raised', mouth: 'flat', collar: '#f4f1e6' },
-};
-
-const p = (d: string, fill: string, extra = '') => `<path d="${d}" fill="${fill}" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"${extra}/>`;
-const line = (d: string, color = INK, w = 2.6) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
-const circle = (cx: number, cy: number, r: number, fill: string, stroke = true) =>
-  `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}"${stroke ? ` stroke="${INK}" stroke-width="2.2"` : ''}/>`;
+export const FACES: Record<string, Spec> = { ...DBZ, ...TENNIS, ...JJK };
 
 /** Hair behind the head (long hair, buns, crests), drawn before the head. */
 function hairBack(h: Hair, c: string): string {
@@ -79,7 +21,9 @@ function hairBack(h: Hair, c: string): string {
     case 'geto': return circle(50, 22, 10, c);
     case 'topknot': return circle(50, 24, 6.5, c) + p('M46 22 L44 14 L50 18 L56 14 L54 22 Z', c);
     case 'mullet': return p('M27 58 L22 88 L37 84 L35 64 Z', c) + p('M73 58 L78 88 L63 84 L65 64 Z', c);
-    case 'cell': return p('M20 74 L12 34 L28 16 L50 8 L72 16 L88 34 L80 74 L70 60 L30 60 Z', c);
+    case 'cell':
+      return p('M21 84 Q15 56 20 40 L9 4 L33 24 Q50 17 67 24 L91 4 L80 40 Q85 56 79 84 Q70 74 50 72 Q30 74 21 84 Z', c)
+        + [[16, 18], [84, 18], [19, 52], [81, 52], [22, 68], [78, 68], [13, 30], [87, 30]].map(([x, y]) => circle(x, y, 2.6, INK, false)).join('');
     case 'broly': return p('M24 44 L4 62 L19 61 L8 84 L27 71 L29 92 L38 70 L62 70 L71 92 L73 71 L92 84 L81 61 L96 62 L76 44 Z', c);
     case 'trunks': return p('M22 72 Q16 28 50 25 Q84 28 78 72 Z', c);
     default: return '';
@@ -123,7 +67,9 @@ function hairFront(h: Hair, c: string, band?: string): string {
     case 'turban':
       return p('M23 52 Q20 20 50 18 Q80 20 77 52 Q50 42 23 52 Z', '#f4f1e6') + p('M23 52 Q50 42 77 52 L77 45 Q50 35 23 45 Z', band ?? '#6b3fa0');
     case 'dome': return p('M26 47 Q24 21 50 19 Q76 21 74 47 Q50 38 26 47 Z', c);
-    case 'cell': return p('M28 40 L22 22 L38 30 L50 14 L62 30 L78 22 L72 40 Q50 32 28 40 Z', '#2e4a22');
+    case 'cell':
+      return p('M26 48 Q28 29 50 27 Q72 29 74 48 Q64 39 50 46 Q36 39 26 48 Z', c) + line('M50 29 L50 45', INK, 2)
+        + [[36, 36], [64, 36], [44, 32], [56, 32]].map(([x, y]) => circle(x, y, 2.1, INK, false)).join('');
     case 'buu':
       return p('M50 32 Q50 12 66 8 Q80 5 84 18 Q74 12 66 17 Q58 22 57 33 Z', c) + circle(38, 40, 1.8, INK, false) + circle(62, 40, 1.8, INK, false) + circle(50, 36, 1.8, INK, false);
     default: return '';
@@ -181,7 +127,7 @@ function extrasUnder(x: Extra[]): string {
   }
   if (x.includes('itadori')) s += line('M37 64 L36 67', '#a03030', 2) + line('M63 64 L64 67', '#a03030', 2);
   if (x.includes('frieza')) s += line('M35 62 Q37 66 36 70', '#8e3bbf', 2.4) + line('M65 62 Q63 66 64 70', '#8e3bbf', 2.4);
-  if (x.includes('cellmarks')) s += line('M34 63 L38 72', '#b0306a', 2.4) + line('M66 63 L62 72', '#b0306a', 2.4);
+  if (x.includes('cellmarks')) s += line('M36 62 L39 76', '#8a3fa0', 3.2) + line('M64 62 L61 76', '#8a3fa0', 3.2) + line('M31 64 L33 72', '#8a3fa0', 2.4) + line('M69 64 L67 72', '#8a3fa0', 2.4);
   if (x.includes('spots')) for (const [cx, cy] of [[30, 48], [70, 46], [28, 70], [72, 68], [36, 80], [64, 81]]) s += circle(cx, cy, 2.4, '#4c8a2e', false);
   if (x.includes('blush')) s += circle(33, 67, 3.6, 'rgba(255,90,120,0.45)', false) + circle(67, 67, 3.6, 'rgba(255,90,120,0.45)', false);
   if (x.includes('panda')) {
@@ -223,17 +169,17 @@ export function faceSvg(code: string | null | undefined, color: string, size = 1
   }
   const hc = f.hairColor ?? INK;
   const x = f.extras ?? [];
-  const ears = x.includes('pointyears') || f.hair === 'turban'
+  const ears = f.noEars || f.hair === 'cell' ? '' : x.includes('pointyears') || f.hair === 'turban'
     ? p('M27 54 L12 44 L26 66 Z', f.skin) + p('M73 54 L88 44 L74 66 Z', f.skin)
     : x.includes('panda') ? circle(30, 34, 9, INK) + circle(70, 34, 9, INK)
     : circle(25, 60, 5, f.skin) + circle(75, 60, 5, f.skin);
   const collar = f.collar ? p('M14 100 Q18 86 36 84 L64 84 Q82 86 86 100 Z', f.collar) : '';
-  const head = `<ellipse cx="50" cy="58" rx="25" ry="28" fill="${f.skin}" stroke="${INK}" stroke-width="2.6"/>`;
+  const head = f.head ?? `<ellipse cx="50" cy="58" rx="25" ry="28" fill="${f.skin}" stroke="${INK}" stroke-width="2.6"/>`;
   return [
     open, clip, badge, '<g clip-path="url(#fc)">',
-    collar, hairBack(f.hair, hc), ears, head,
-    extrasUnder(x), eyesSvg(f.eyes, f.eyeColor ?? INK), browsSvg(f.brows, f.hair === 'none' || f.hair === 'dome' || f.hair === 'turban' ? INK : hc === '#f2f4f8' || hc === '#e6e8ef' ? '#9aa0b0' : hc),
-    mouthSvg(f.mouth), hairFront(f.hair, hc, f.band), extrasOver(x, f.band ?? '#f4f1e6'),
+    collar, hairBack(f.hair, hc), f.back ?? '', ears, head,
+    extrasUnder(x), f.under ?? '', eyesSvg(f.eyes, f.eyeColor ?? INK), browsSvg(f.brows, f.hair === 'none' || f.hair === 'dome' || f.hair === 'turban' ? INK : hc === '#f2f4f8' || hc === '#e6e8ef' ? '#9aa0b0' : hc),
+    mouthSvg(f.mouth), hairFront(f.hair, hc, f.band), f.front ?? '', extrasOver(x, f.band ?? '#f4f1e6'), f.over ?? '',
     '</g>', rim, '</svg>',
   ].join('');
 }

@@ -132,7 +132,7 @@ FROM (VALUES
     ,('FRIEZA',      'ghost',   '#b05be0', 'Calls the lines. All of them. In his favor.',          'BORG',       'Roosevelt',                  'Final Form 95',      'frieza')
     ,('TRUNKS',      'rabbit',  '#35d6ff', 'From the future. Already knows your serve.',           'SAMPRAS',    'North Park Rec Center',      'Time Blade 100',     'trunks')
     ,('KRILLIN',     'junk',    '#ffb347', 'Dinks, slices, and survives. Somehow.',                'NAVRATILOVA','Linda Vista Community Park', 'Destructo Disc 105', 'krillin')
-    ,('CELL',        'moon',    '#7bc043', 'Absorbed everyone''s best shots. Uses them on you.',   'AGASSI',     'Barnes Tennis Center',       'Perfect 98',         'cell')
+    ,('CELL',        'moon',    '#4a2d6b', 'Absorbed everyone''s best shots. Uses them on you.',   'AGASSI',     'Barnes Tennis Center',       'Perfect 98',         'cell')
     ,('MAJIN BUU',   'goblin',  '#ff7eb6', 'Bounces back from everything. Eats the balls.',        'GRAF',       'North Park Rec Center',      'Candy Beam 110',     'buu')
     ,('BROLY',       'grunter', '#9be22d', 'Only hits one speed. Maximum.',                        'SERENA',     'Barnes Tennis Center',       'Legendary 100',      'broly')
     ,('BULMA',       'bot',     '#00b3b3', 'Built her own ball machine. It is better than you.',   'GRAF',       'UCSD North Campus',          'Capsule Corp 100',   'bulma')

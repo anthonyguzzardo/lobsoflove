@@ -148,6 +148,8 @@ export function addItem(kind: GearKind, name: string, photo: string | null, extr
   return id;
 }
 export function setSetup(id: string, setup: StringSetup) { patch(id, (it) => ({ ...it, setup })); }
+/** Details picked later: brand, model (it becomes the name), colors. */
+export function updateItem(id: string, p: Partial<Pick<GearItem, 'brand' | 'model' | 'name' | 'colors'>>) { patch(id, (it) => ({ ...it, ...p })); }
 export function renameItem(id: string, name: string) { patch(id, (it) => ({ ...it, name })); }
 export function setPhoto(id: string, photo: string) { patch(id, (it) => ({ ...it, photo })); }
 export function removeItem(id: string) { set(items.filter((it) => it.id !== id)); }

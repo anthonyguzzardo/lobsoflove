@@ -123,8 +123,8 @@ export default function CrewScreen() {
   };
 
   const handleSlid = (a: { [k: string]: any }) => {
-    // Starting a crew: name it (typed or written), then straight to finding players.
-    if (a.action === 'start') askInk({ label: 'NAME YOUR CREW', max: 40, upper: true, examples: [suggest] }, (t) => createCrew(t || suggest).then(() => { run('window.cheer()'); setTimeout(() => router.push('/find'), 600); }, fail));
+    // Starting a crew: straight to finding players under a stand-in name; /find asks for the real name last, at INVITE.
+    if (a.action === 'start') createCrew(suggest).then(() => { run('window.cheer()'); setTimeout(() => router.push('/find?first=1'), 600); }, fail);
     else if (a.action === 'find') router.push('/find');
     else if (a.action === 'accept') answerInvite(a.id, true).then(() => run('window.cheer()'), fail);
     else if (a.action === 'retry') void startCloud();

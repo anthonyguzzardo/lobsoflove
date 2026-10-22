@@ -358,7 +358,7 @@ const enterStrip = homeBody.match(/<div id="enter"[\s\S]*?<\/svg><\/div><\/div><
 
 // The domain: retired gear planted in broken concrete, drawn like a manga panel. Paper and ink, one red cord; the title stamps in.
 const domainCss = homeCss + `
-#ui{padding-top:calc(env(safe-area-inset-top) + 56px);padding-bottom:calc(env(safe-area-inset-bottom) + 6px)}
+#ui{padding-top:calc(env(safe-area-inset-top) + 10px);padding-bottom:calc(env(safe-area-inset-bottom) + 6px)}
 /* No fade: the words sit on a cream card with an ink edge, the dock under it, and the scene runs to the bottom edge. */
 #ov,#fo{background:#fffdf8;border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);border-radius:8px;padding:10px 12px 10px;margin-bottom:4px}
 #dock .slot.due .lbl{color:var(--clay);opacity:1}
@@ -367,51 +367,87 @@ const domainCss = homeCss + `
 #dock .slot.dom .pf{background:var(--ink);box-shadow:0 6px 0 #000,0 12px 14px rgba(40,34,26,.22);display:flex;align-items:center;justify-content:center}
 #dock .slot.dom .knot{width:30px;height:11px;fill:none;stroke:var(--clay);stroke-width:2.6;stroke-linecap:round}
 #dock .slot.dom .lbl{opacity:1;color:var(--clay)}
-/* The string zone: how the racket he holds is strung. Tap the string to circle a new one, tap the gauge to step it, drag a tension. */
-#sz{display:none;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:9px 0 2px;pointer-events:auto}
-#sz.on{display:grid}
-#sz button{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;padding:6px 8px 7px;border-radius:5px;background:#f6f3ec;box-shadow:inset 0 0 0 2px var(--ink);touch-action:none;user-select:none;-webkit-user-select:none}
-#sz button:active,#sz button.drag{background:#fff;box-shadow:inset 0 0 0 2.6px var(--clay)}
-#sz span{font:800 9px var(--mono);letter-spacing:.14em;opacity:.6}
-#sz b{font:800 17px var(--mono);letter-spacing:.02em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#sz .ten b:before{content:"‹ ";opacity:.35}#sz .ten b:after{content:" ›";opacity:.35}
-#sz #sname{grid-column:1 / -1;flex-direction:row!important;align-items:center;gap:9px!important}
-#sz #sname i{width:22px;height:22px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 2px var(--ink)}
-#sname div{display:flex;flex-direction:column;gap:2px;min-width:0}
-#sname.unset b{color:var(--clay)}
-#sz.fresh .ten b,#sz.fresh #sgauge b{opacity:.5}
-/* Circle to pick: a paper sheet over everything. */
-#cpick{position:fixed;inset:0;z-index:20;background:#efece5;padding:calc(env(safe-area-inset-top) + 64px) 16px calc(env(safe-area-inset-bottom) + 20px);display:flex;flex-direction:column;touch-action:none;user-select:none;-webkit-user-select:none;animation:cpin .28s cubic-bezier(.16,1,.3,1) both}
-#cpick.out{animation:cpout .22s ease-in both}
-@keyframes cpin{0%{transform:translateY(24px);opacity:0}100%{transform:none;opacity:1}}
-@keyframes cpout{100%{transform:translateY(24px);opacity:0}}
-.cp-head{display:flex;justify-content:flex-end;margin:6px 0 14px}
-.cp-step{font:800 11px var(--mono);letter-spacing:.14em;opacity:.5}
-.cp-title{font:800 28px var(--mono);letter-spacing:.02em;line-height:1.05}
-.cp-sub{font:700 12px var(--mono);opacity:.65;margin:6px 0 18px}
-.cp-opts{display:flex;flex-wrap:wrap;gap:14px 12px;align-content:flex-start;flex:1}
-.cp-o{display:flex;align-items:center;gap:8px;padding:10px 13px;border-radius:6px;background:#fffdf8;box-shadow:inset 0 0 0 2px var(--ink),0 3px 0 var(--ink);transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
-.cp-o b{font:800 16px var(--mono);letter-spacing:.04em}
-.cp-o span{font:700 10px var(--mono);opacity:.55}
-.cp-o i{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--ink);flex:none}
-.cp-o.hit{transform:scale(1.08)}
-.cp-opts.swatch{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 12px}
-.cp-opts.swatch .cp-o{flex-direction:column;padding:12px 6px 9px}
-.cp-opts.swatch .cp-o i{width:42px;height:42px;box-shadow:inset 0 0 0 2.5px var(--ink)}
-.cp-opts.swatch .cp-o b{font-size:12px}
-.cp-opts.big{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding-top:30px}
-.cp-opts.big .cp-o{justify-content:center;padding:26px 0}
-.cp-opts.big .cp-o b{font-size:48px}
-.cp-ink{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
-.cp-stroke{fill:none;stroke:var(--ink);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
-.cp-loop{fill:none;stroke:var(--clay);stroke-width:4.5;opacity:0;stroke-dasharray:600;stroke-dashoffset:600}
-.cp-loop.on{opacity:1;animation:cploop .3s cubic-bezier(.16,1,.3,1) forwards}
-@keyframes cploop{100%{stroke-dashoffset:0}}
+/* Idle platforms read clearly: cream tops with an ink edge, like the card; labels in ink. */
+#dock .slot:not(.dom):not(.bk) .pf{background:#fffdf8;box-shadow:0 0 0 2px var(--ink),0 5px 0 var(--ink),0 12px 14px rgba(40,34,26,.18)}
+#dock .slot:not(.dom):not(.bk).on .pf{background:var(--clay)}
+#dock .lbl{opacity:.82;color:var(--ink)}
+#dock .slot.on .lbl{opacity:1}
+/* The hint: a bold wave rolls through every 4.2 s, about 25 ms a letter; the doing words stay clay and heavy. */
+#ov #hint{opacity:1}
+#hint .wd{white-space:nowrap}
+#hint .wd i{font-style:normal;display:inline-block;animation:hwave 4.2s calc(var(--i) * 25ms) ease-in-out infinite}
+#hint .wd.v{color:var(--clay);font-weight:900}
+@keyframes hwave{0%,9%,100%{font-weight:inherit;transform:none;color:inherit}3%{font-weight:900;transform:translateY(-2.5px) scale(1.12);color:var(--clay)}}
+@media (prefers-reduced-motion:reduce){#hint .wd i{animation:none}}
+/* The crest: the selected tab stamps its word onto the platform face, pressed in like a seal. */
+#dock .pf .crest{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:900 8px var(--mono);font-style:normal;letter-spacing:.08em;color:#fffdf0;opacity:0;transform:scale(1.8);pointer-events:none}
+#dock .slot.on .pf .crest{opacity:1;transform:scale(1);transition:transform .22s cubic-bezier(.2,1.6,.4,1),opacity .08s}
+#dock .slot.dom .pf .crest{color:var(--clay)}
+#dock .slot.dom .knot{transition:opacity .1s}
+#dock .slot.dom.on .knot{opacity:0}
+/* Back: the old motley pill, shrunk onto a platform. Paint drifts under ink, smoke idles across, the cream chevron nods left.
+   Tapped, the paint smears left into a candy rope and the chevron shoots off. */
+#dock .slot.bk{flex:0 0 62px}
+#dock .slot.bk .lbl{display:none}
+#dock .slot.bk .pf{z-index:1;width:54px;height:26px;margin-bottom:13px;border-radius:13px;background:#16181d;overflow:hidden;box-shadow:0 0 0 2px var(--ink),3px 5px 0 var(--ink),0 12px 14px rgba(40,34,26,.22)}
+#dock .bk .mot{position:absolute;inset:0;border-radius:13px;overflow:hidden}
+#dock .bk .mot i{position:absolute;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle,var(--c) 0,var(--c) 45%,transparent 70%);animation:orb var(--d) linear infinite;animation-delay:var(--p)}
+#dock .bk .mot i:nth-child(1){--c:#ff3b30;left:-6px;top:-10px;--d:6s;--p:0s}
+#dock .bk .mot i:nth-child(2){--c:#2f6bff;left:10px;top:6px;--d:3s;--p:-1s}
+#dock .bk .mot i:nth-child(3){--c:#ff9a1f;left:24px;top:-12px;--d:6s;--p:-3.3s}
+#dock .bk .mot i:nth-child(4){--c:#b84dff;left:34px;top:6px;--d:3s;--p:-2.4s}
+#dock .bk .mot i:nth-child(5){--c:#1fd17a;left:0;top:10px;--d:2s;--p:-.3s;width:22px;height:22px}
+#dock .bk .mot i:nth-child(6){--c:#ff3d7f;left:18px;top:-4px;--d:6s;--p:-3.9s;width:20px;height:20px}
+@keyframes orb{0%{transform:translate(7px,0) scale(1)}25%{transform:translate(0,4px) scale(1.12)}50%{transform:translate(-7px,0) scale(1)}75%{transform:translate(0,-4px) scale(.9)}100%{transform:translate(7px,0) scale(1)}}
+#dock .bk .mot b{position:absolute;top:2px;left:0;width:22px;height:22px;border-radius:50%;background:radial-gradient(circle,rgba(244,240,255,.9),rgba(217,210,234,.4) 50%,transparent 70%);animation:wisp 3s linear infinite}
+#dock .bk .mot b+b{animation-delay:-1.5s;top:-2px}
+@keyframes wisp{0%{transform:translateX(60px) scale(.7);opacity:0}50%{opacity:.35}100%{transform:translateX(-24px) scale(1.2);opacity:0}}
+#dock .bk .chev{position:absolute;left:14px;top:2px;width:22px;height:22px;fill:none;stroke-linecap:round;stroke-linejoin:round;animation:nod 1.5s ease-in-out infinite}
+@keyframes nod{50%{transform:translateX(-3px)}}
+/* Pressing: every platform sinks onto its shadow. translate, not transform, so it adds to the bob instead of fighting it. */
+#dock .slot .pf{transition:background .2s,translate .09s ease-out,box-shadow .09s ease-out}
+#dock .slot.press .pf{translate:0 4px}
+#dock .slot:not(.dom):not(.bk).press .pf{box-shadow:0 0 0 2px var(--ink),0 1px 0 var(--ink),0 4px 6px rgba(40,34,26,.18)}
+#dock .slot.dom.press .pf{box-shadow:0 2px 0 #000,0 4px 6px rgba(40,34,26,.22)}
+#dock .slot.bk.press .pf{translate:2px 3px;scale:.97;box-shadow:0 0 0 2px var(--ink),1px 2px 0 var(--ink),0 4px 6px rgba(40,34,26,.22)}
+#dock .slot.press .lbl{translate:0 2px}
+#dock .slot.bk.press .chev{translate:-5px 0}
+/* The back ball: idles bobbing on the pill's right end, winds up under your finger, rushes off left when you let go. */
+#dock .bk .bball{position:absolute;left:38px;bottom:20px;width:20px;height:20px;pointer-events:none;z-index:7;animation:bbob .75s ease-in-out infinite}
+#dock .bk .bball svg{display:block;width:100%;height:100%}
+#dock .bk .bball .seam{transform-origin:14px 14px;animation:seam 6s ease-in-out infinite}
+@keyframes bbob{50%{transform:translateY(-3px)}}
+@keyframes seam{50%{transform:rotate(30deg)}}
+#dock .bk.press .bball{animation:none;transform:translateX(6px) scale(.84,1.12);transition:transform .12s ease-out}
+#dock .bk.go .bball{animation:rush .36s cubic-bezier(.55,0,.85,.35) forwards}
+#dock .bk.go .bball .seam{animation:spin .36s linear forwards}
+@keyframes rush{0%{transform:translateX(6px) scale(.84,1.12)}100%{transform:translateX(-190px) scale(1.55,.72)}}
+@keyframes spin{to{transform:rotate(-720deg)}}
+/* The candy rope unrolls from the ball's rest spot out past the left edge, then fades. */
+#dock .bk .trail{position:absolute;right:6px;bottom:17px;width:190px;height:26px;fill:none;stroke-linecap:round;pointer-events:none;z-index:6;clip-path:inset(0 0 0 100%);opacity:0}
+#dock .bk.go .trail{animation:unroll .36s cubic-bezier(.55,0,.85,.35) forwards,ropefade .3s .45s forwards}
+@keyframes unroll{0%{opacity:1;clip-path:inset(0 0 0 100%)}100%{opacity:1;clip-path:inset(0 0 0 0%)}}
+@keyframes ropefade{from{opacity:1;clip-path:inset(0 0 0 0%)}to{opacity:0;clip-path:inset(0 0 0 0%)}}
+/* Smoke blooms along the flight. */
+#dock .bk .puff{position:absolute;bottom:14px;width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 45% 40%,rgba(244,240,255,.95),rgba(217,210,234,.5) 50%,transparent 70%);opacity:0;pointer-events:none;z-index:4}
+#dock .bk .puff:nth-of-type(1){left:30px}#dock .bk .puff:nth-of-type(2){left:-8px}#dock .bk .puff:nth-of-type(3){left:-50px}#dock .bk .puff:nth-of-type(4){left:-96px}
+#dock .bk.go .puff{animation:puff .55s ease-out forwards}
+#dock .bk.go .puff:nth-of-type(2){animation-delay:.1s}#dock .bk.go .puff:nth-of-type(3){animation-delay:.18s}#dock .bk.go .puff:nth-of-type(4){animation-delay:.25s}
+@keyframes puff{0%{opacity:.95;transform:scale(.35)}100%{opacity:0;transform:translateY(-10px) scale(1.45)}}
+#dock .bk.go .chev{animation:shoot .36s cubic-bezier(.55,0,.85,.35) forwards}
+#dock .bk.go .mot i{animation:smear .36s cubic-bezier(.55,0,.85,.35) forwards}
+@keyframes shoot{to{transform:translateX(-40px);opacity:0}}
+@keyframes smear{to{transform:translateX(-18px) scale(1.4)}}
+#dock .slot.bk{overflow:visible;z-index:5}
+@media (prefers-reduced-motion:reduce){#dock .bk .mot i,#dock .bk .mot b,#dock .bk .chev,#dock .bk .bball{animation:none}}
+/* Ink you draw on the scene, over it and under the card. While he throws, the dock rests. */
+#ink{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
+body.tossing #dock{opacity:.35;pointer-events:none!important}body.tossing #dock *{pointer-events:none!important}
 #h2.ok{color:#3f8f5a}
 body.showing #h1{pointer-events:auto;text-decoration:underline dotted 3px;text-underline-offset:6px}
 #de,#stamp{z-index:2}
-#de{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 62px);font:400 15px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.12em;color:#efece5;opacity:0;pointer-events:none}
-#stamp{position:fixed;left:14px;top:calc(env(safe-area-inset-top) + 92px);display:flex;gap:6px;align-items:flex-start;pointer-events:none;opacity:0}
+#de{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 16px);font:400 15px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.12em;color:#efece5;opacity:0;pointer-events:none}
+#stamp{position:fixed;left:14px;top:calc(env(safe-area-inset-top) + 46px);display:flex;gap:6px;align-items:flex-start;pointer-events:none;opacity:0}
 #stamp b{writing-mode:vertical-rl;font:900 56px "Hiragino Mincho ProN","Hiragino Sans","Yu Mincho",serif;line-height:1;color:#16181d;letter-spacing:.02em;text-shadow:3px 0 0 #efece5,-3px 0 0 #efece5,0 3px 0 #efece5,0 -3px 0 #efece5,2px 2px 0 #efece5,-2px -2px 0 #efece5,2px -2px 0 #efece5,-2px 2px 0 #efece5}
 #stamp i{writing-mode:vertical-rl;font:800 10px var(--mono);font-style:normal;letter-spacing:.3em;color:#efece5;margin-top:10px}
 body.open #stamp{opacity:1;animation:stamp .42s cubic-bezier(.34,1.56,.64,1) both}
@@ -469,7 +505,7 @@ body.open #de{opacity:1;animation:dein .5s .1s cubic-bezier(.16,1,.3,1) both}
 const domainBody = `<canvas id="c"></canvas><div id="grain"></div>
 <div id="de">DOMAIN EXPANSION</div><div id="stamp"><i>MUTUAL LOBS</i><b>相愛</b></div>
 <div id="ui"><div class="grow"></div>
-<div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><div id="sz"><button id="sname"><i></i><div><span>STRING</span><b></b></div></button><button id="sgauge"><span>GAUGE</span><b></b></button><button class="ten" id="smain"><span>MAINS LB</span><b></b></button><button class="ten" id="scross"><span>CROSSES LB</span><b></b></button></div><ul id="due"></ul><div id="hint"></div></div>
+<div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><ul id="due"></ul><div id="hint"></div></div>
 <div id="fo"><div id="plate"><div id="kind"></div><div id="name"></div></div><div id="rec"><b id="wl"></b><span id="sub"></span></div><ul id="facts"></ul><div id="how"></div></div>
 <div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div></div>
 </div>`;
@@ -496,6 +532,19 @@ body{background:#d8e9ef;color:var(--ink);font-family:var(--mono)}
 #ki b{display:block;font:900 36px var(--mono);letter-spacing:.02em;color:#fffdf0;-webkit-text-stroke:2px var(--ink);text-shadow:0 4px 0 var(--ink)}
 #ki i{display:block;font:800 9.5px var(--mono);font-style:normal;letter-spacing:.32em;margin-top:6px;text-shadow:0 0 3px #efece5,0 0 6px #efece5}
 body.super #ki b{color:#ffd23a}
+#ki b{transform-origin:50% 60%;will-change:transform}
+body.charging #ki b{color:#d8f6ff;text-shadow:0 0 14px #6fd6ff,0 4px 0 var(--ink)}
+body.kipop #ki b{color:#fff;text-shadow:0 0 18px var(--acc),0 4px 0 var(--ink)}
+/* Kamehameha crosshair: where the beam will land when it isn't locked on a court. */
+#kaim{position:fixed;left:0;top:0;width:54px;height:54px;opacity:0;pointer-events:none;transition:opacity .1s}
+#kaim:before{content:"";position:absolute;inset:0;border:2.5px solid #8fe3ff;border-radius:50%;box-shadow:0 0 8px #8fe3ff,inset 0 0 0 2px rgba(22,24,29,.5)}
+#kaim i{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;background:#fff;border:2px solid var(--ink);border-radius:50%}
+#kaim b{position:absolute;background:#8fe3ff;box-shadow:0 0 0 1.5px var(--ink)}
+#kaim b:nth-of-type(1){left:50%;top:-10px;width:3px;height:14px;margin-left:-1.5px}
+#kaim b:nth-of-type(2){left:50%;bottom:-10px;width:3px;height:14px;margin-left:-1.5px}
+#kaim b:nth-of-type(3){top:50%;left:-10px;height:3px;width:14px;margin-top:-1.5px}
+#kaim b:nth-of-type(4){top:50%;right:-10px;height:3px;width:14px;margin-top:-1.5px}
+#kaimtxt{position:absolute;left:50%;top:66px;transform:translateX(-50%);white-space:nowrap;font:800 10px var(--mono);letter-spacing:.08em;background:var(--ink);color:#8fe3ff;padding:3px 7px;border-radius:3px}
 #nine{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 168px);text-align:center;font:400 34px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.05em;color:#ffd23a;-webkit-text-stroke:1.5px var(--ink);text-shadow:0 4px 0 var(--ink);opacity:0;pointer-events:none}
 body.nine #nine{animation:nine 2.4s cubic-bezier(.34,1.56,.64,1) both}
 @keyframes nine{0%{transform:scale(2.6) rotate(-6deg);opacity:0}12%{transform:scale(1) rotate(-3deg);opacity:1}80%{opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:0}}
@@ -595,12 +644,12 @@ const flyBody = `<canvas id="c"></canvas><canvas id="lines"></canvas><div id="ta
 <div id="hud"><div id="over">OVER SAN DIEGO</div><div id="read"><span id="alt"></span><span id="spd"></span></div></div>
 <div id="ki"><b id="kin"></b><i>POWER LEVEL</i></div><div id="nine">IT'S OVER 9000</div>
 <div id="stick"><i></i></div>
-<div id="hint">DRAG ANYWHERE TO STEER<br>HOLD BLAST TO ROCKET<br>HOLD RISE TO GO UP<br>HOLD TWO FINGERS: KAMEHAMEHA</div>
+<div id="hint">DRAG ANYWHERE TO STEER<br>HOLD BLAST TO ROCKET, LET GO TO STOP<br>HOLD RISE TO GO UP<br>TWO FINGERS: KAMEHAMEHA, SLIDE TO AIM, LIFT TO FIRE</div>
 <button id="land" aria-label="Land at this court"><i></i><span id="landtxt"></span></button>
 <div id="pads"><button id="rise" class="pad" aria-label="Hold to rocket up"><span class="chev"><b></b><b></b></span><em>RISE</em></button><button id="blast" class="pad" aria-label="Hold to rocket forward"><span class="orb"></span><em>BLAST</em></button></div>
 <div id="radarw"><canvas id="radar" width="232" height="232" aria-label="Dragon radar. Tap to change range."></canvas><span id="rlbl"></span><button id="scout" aria-label="Scouter">SCOUTER</button></div>
 <div id="scouter"><div id="scread"></div></div><div id="reticle"><i></i><i></i></div>
-<div id="got"><b id="gotn"></b><br><span id="gots"></span></div><div id="dsay"></div><div id="it">INSTANT TRANSMISSION</div><div id="kame"></div><div id="klock"><span id="klocktxt"></span></div><div id="calls"></div>
+<div id="got"><b id="gotn"></b><br><span id="gots"></span></div><div id="dsay"></div><div id="it">INSTANT TRANSMISSION</div><div id="kame"></div><div id="klock"><span id="klocktxt"></span></div><div id="kaim"><b></b><b></b><b></b><b></b><i></i><span id="kaimtxt"></span></div><div id="calls"></div>
 <div id="wish"><button data-w="gold"><span>GOLDEN AURA</span><small>BURN GOLD FOR GOOD</small><em></em></button><button data-w="warp"><span>INSTANT TRANSMISSION</span><small>TAP A COURT, BE THERE</small><em></em></button><button data-w="none"><span>SCATTER THEM</span><small>HIDE THEM AGAIN</small><em></em></button></div>`;
 emit('fly-html.ts', 'FLY_HTML', page({ css: flyCss, body: flyBody, pre: `window.VENUES=${readFileSync(`${root}src/data/venues.json`)};`, js: bundle('web/fly.js') }));
 

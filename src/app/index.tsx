@@ -6,12 +6,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Breathe, InkPill } from '@/components/ink-button';
 import { SceneView, useScene } from '@/components/scene-view';
+import { SOUND_BUTTON_SIZE, SoundButton } from '@/components/sound-button';
 import { HOME_HTML } from '@/generated/home-html';
 import { toAnswer, toCallupAnswer, useCloud } from '@/lib/cloud';
 import { dueList, useCloset } from '@/lib/gear';
 import { computeSeason, counts, personalLine, scoreLine, useMatches, winnerOf } from '@/lib/matches';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
+import { setSound, useSound } from '@/lib/sound';
 import { featured, findPro, proLine, proMatch, tourLine, useTour } from '@/lib/tour';
 
 const ROUTES: Record<'play' | 'courts' | 'standings' | 'fighter' | 'write' | 'gear' | 'crew' | 'intro', Href> = { play: '/courts', courts: '/courts', standings: '/standings', fighter: '/fighter', write: '/ink', gear: '/gear', crew: '/crew', intro: '/splash' };
@@ -27,6 +29,7 @@ export default function Home() {
   const { run } = scene;
   const cloud = useCloud();
   const insets = useSafeAreaInsets();
+  const sound = useSound();
   const waiting = toAnswer(matches).length;
   const called = toCallupAnswer(cloud.callups)[0];
 
@@ -74,8 +77,11 @@ export default function Home() {
           if (msg.type === 'go') { sfx('go', 0.8); router.push(ROUTES[msg.to as keyof typeof ROUTES]); }
         }}
       />
+      <View style={[styles.sound, { top: insets.top + 10 }]} pointerEvents="box-none">
+        <SoundButton on={sound} onToggle={() => setSound(!sound)} />
+      </View>
       {cloud.status !== 'off' ? (
-        <View style={[styles.pills, { top: insets.top + 10 }]} pointerEvents="box-none">
+        <View style={[styles.pills, { top: insets.top + 10 + SOUND_BUTTON_SIZE + 10 }]} pointerEvents="box-none">
           {cloud.status === 'solo' && cloud.invites[0] ? (
             <Breathe><InkPill hot label={`${cloud.invites[0].from} INVITED YOU`} onPress={() => { sfx('go', 0.8); router.push('/crew'); }} /></Breathe>
           ) : null}
@@ -94,4 +100,5 @@ export default function Home() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
   pills: { position: 'absolute', right: 14, flexDirection: 'row', gap: 8 },
+  sound: { position: 'absolute', right: 14 },
 });
