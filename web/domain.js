@@ -1024,6 +1024,11 @@ function markDock() {
 function pickSlot(i) {
   const x = st.dockSlots[i - 1];
   if (!x) return;
+  // While he throws, back just stops the throwing; another tab stops it and goes there.
+  if (flow) {
+    window.closePick();
+    if (x.back) return;
+  }
   if (x.back) {
     // The back pill's own ball does the leaving; the dock ball stays where it is.
     const el = $('dock').querySelector('.slot.bk');
@@ -1133,40 +1138,45 @@ st.flingT = 9;
 function pxWorld() { return (2 * TOSS_D * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / window.innerHeight; }
 const ndcPoint = (x, y, out) => out.set(x, y, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(TOSS_D).add(camera.position);
 
-/** Floating slots, in screen space: loose rows in the upper half, every other row nudged, a little jitter. */
-function slots(n, cols, half) {
+/**
+ * Floating slots, in screen space: a grid in the band between the status bar and the characters (who have shrunk into the
+ * lower right). Each cell is one choice; fit scales every choice down until the biggest one fits its cell, so nothing overlaps.
+ */
+function slots(n, cols, arts) {
+  const W = window.innerWidth; const H = window.innerHeight;
   const rows = Math.ceil(n / cols);
-  const top = 0.8; const bottom = rows > 3 ? 0.14 : 0.26;
+  const top = (parseFloat(getComputedStyle($('ui')).paddingTop) || 30) + 8;
+  const bottom = H * (rows > 2 ? 0.48 : 0.42);
+  const rowH = (bottom - top) / rows; const colW = (W - 24) / cols;
+  const fit = Math.min(1, (rowH * 0.92) / Math.max(...arts.map((a) => a.h)), (colW * 0.94) / Math.max(...arts.map((a) => a.w)));
   const out = [];
   for (let k = 0; k < n; k += 1) {
     const r = Math.floor(k / cols); const inRow = Math.min(cols, n - r * cols); const c = k % cols;
-    const x = (inRow === 1 ? 0 : -half + (2 * half * c) / (inRow - 1)) + (r % 2 ? 0.05 : -0.03) * (half / 0.5) + (Math.random() - 0.5) * 0.04;
-    const y = rows === 1 ? 0.42 : top - ((top - bottom) * r) / (rows - 1) + (Math.random() - 0.5) * 0.03;
-    out.push([x, y]);
+    const px = 12 + ((cols - inRow) * colW) / 2 + colW * (c + 0.5) + (inRow < cols ? 0 : (r % 2 ? 1 : -1) * colW * 0.04);
+    const py = top + rowH * (r + 0.5);
+    out.push([(px / W) * 2 - 1, 1 - (py / H) * 2]);
   }
-  return out;
+  return { where: out, fit };
 }
 
 function spawn(opts, cols) {
   for (const tk of tokens) if (tk.state !== 'chosen') drop(tk);
   const hand = legend.arms[0].hand.getWorldPosition(new THREE.Vector3());
   const arts = opts.map((o) => o.art());
-  // Keep the widest one on screen at the ends of a row.
-  const widest = Math.max(...arts.map((a) => a.w));
-  const where = slots(opts.length, cols, Math.max(0.2, Math.min(0.56, 1 - (widest + 70) / window.innerWidth)));
+  const { where, fit } = slots(opts.length, cols, arts);
   opts.forEach((o, k) => {
     const art = arts[k];
     const tex2 = new THREE.CanvasTexture(art.canvas);
     tex2.colorSpace = THREE.SRGBColorSpace;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex2, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     sp.renderOrder = 20;
-    sp.material.rotation = (Math.random() - 0.5) * 0.16;
+    sp.material.rotation = (Math.random() - 0.5) * 0.06;
     sp.visible = false;
     sp.position.copy(hand);
     scene.add(sp);
     tokens.push({
       sp, val: o.val, o, ndc: where[k], p: hand.clone(), v: new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 1.5, 1.5),
-      state: 'fly', t: 0, delay: 0.12 + k * 0.045, w: art.w, h: art.h, spin: 0, seed: Math.random() * 10,
+      state: 'fly', t: 0, delay: 0.12 + k * 0.045, w: art.w * fit, h: art.h * fit, spin: 0, seed: Math.random() * 10,
     });
   });
   st.flingT = 0;
@@ -1191,7 +1201,7 @@ function stepTokens(dt) {
       tk.sp.visible = true;
       const u = tk.t - tk.delay;
       if (tk.state === 'fly' && u > 0.9) tk.state = 'float';
-      ndcPoint(tk.ndc[0] + 0.012 * Math.sin(st.clock * 1.3 + tk.seed), tk.ndc[1] + 0.014 * Math.sin(st.clock * 1.7 + tk.seed * 2), target);
+      ndcPoint(tk.ndc[0] + 0.008 * Math.sin(st.clock * 1.3 + tk.seed), tk.ndc[1] + 0.006 * Math.sin(st.clock * 1.7 + tk.seed * 2), target);
       sprV(tk.p, tk.v, target, dt, 2.4, 0.5);
       scale = 0.35 + 0.65 * smooth(u / 0.35);
     } else if (tk.state === 'chosen') {
@@ -1216,7 +1226,6 @@ const live = () => tokens.filter((tk) => tk.state === 'fly' || tk.state === 'flo
 // The steps. Each throws its choices and says what to do with the pick.
 const opt = (val, art) => ({ val, art });
 const colorName = (hex) => (COLORS.find(([, h]) => h === hex) || ['', ''])[0];
-const tensionOpts = (mid) => { const out = []; for (let v = mid - 4; v <= mid + 4; v += 1) out.push(v); return out; };
 const STEP = {
   brand: { say: 'CIRCLE THE BRAND.', cols: 2, opts: (f) => Object.keys(f.kind === 'racket' ? RACKETS : SHOES).map((b) => opt(b, () => brandArt(b))) },
   count: { say: 'HOW MANY OF THEM?', cols: 3, opts: () => [1, 2, 3].map((n) => opt(n, () => numArt(`x${n}`, n === 1 ? 'JUST ONE' : 'SAME FRAME'))) },
@@ -1224,9 +1233,9 @@ const STEP = {
   accent: { say: 'AND THE ACCENT?', cols: 4, opts: () => COLORS.map(([n, h], k) => opt(h, () => blobArt(n, h, k + 3))) },
   model: { say: 'WHICH ONE?', cols: 2, opts: (f) => ((f.kind === 'racket' ? RACKETS : SHOES)[f.add.brand || (f.item && f.item.brand)] || []).map((m) => opt(m, () => wordArt(m))) },
   string: { say: 'WHAT STRING IS IN IT?', cols: 3, opts: () => STRINGS.map(([n, h]) => opt(n, () => coilArt(n, h))) },
-  gauge: { say: 'WHAT GAUGE?', cols: 3, opts: () => GAUGES.map((g) => opt(g, () => numArt(g, 'GAUGE'))) },
-  mains: { say: 'MAINS TENSION?', more: true, cols: 3, opts: (f) => tensionOpts(f.mid ?? setupOf(f.item).mains).map((v) => opt(v, () => numArt(String(v), 'MAINS LB'))) },
-  crosses: { say: 'CROSSES TENSION?', more: true, cols: 3, opts: (f) => tensionOpts(f.mid ?? setupOf(f.item).crosses).map((v) => opt(v, () => numArt(String(v), 'CROSSES LB'))) },
+  gauge: { say: 'WHAT GAUGE?', cols: 3, opts: () => GAUGES.map((g) => opt(g, () => numArt(g, ''))) },
+  mains: { say: 'MAINS TENSION, IN LB?', write: true, cols: 1, opts: (f) => [opt(setupOf(f.item).mains, () => numArt(String(setupOf(f.item).mains), ''))] },
+  crosses: { say: 'CROSSES TENSION, IN LB?', write: true, cols: 1, opts: (f) => [opt(setupOf(f.item).crosses, () => numArt(String(setupOf(f.item).crosses), ''))] },
 };
 const DEFAULT_SETUP = { string: null, gauge: '16', mains: 52, crosses: 52 };
 const setupOf = (it) => ({ ...DEFAULT_SETUP, ...((it && it.setup) || {}) });
@@ -1244,13 +1253,13 @@ function startFlow(kind, item) {
   if (!item) steps = kind === 'racket' ? ['brand', 'count'] : ['brand', 'color'];
   else if (kind === 'racket') steps = [...(item.brand ? [] : ['brand']), 'model', 'string', 'gauge', 'mains', 'crosses'];
   else steps = [...(item.brand ? [] : ['brand']), 'model', 'color', 'accent'];
-  flow = { kind, steps, i: -1, item, add: {}, mid: null };
+  flow = { kind, steps, i: -1, item, add: {}, pen: null };
   post({ type: 'pick', open: true });
   nextStep();
 }
 function nextStep() {
   flow.i += 1;
-  flow.mid = null;
+  penClear();
   // A step with nothing to throw (no models listed for that brand) is passed over.
   while (flow.i < flow.steps.length && !STEP[flow.steps[flow.i]].opts(flow).length) flow.i += 1;
   if (flow.i >= flow.steps.length) { endFlow(true); return; }
@@ -1260,6 +1269,7 @@ function nextStep() {
 }
 function endFlow(finished) {
   const f = flow;
+  penClear();
   flow = null;
   for (const tk of tokens) if (tk.state !== 'chosen') drop(tk);
   post({ type: 'pick', open: false });
@@ -1315,48 +1325,107 @@ function judge(pts) {
     });
   } else {
     const [x0, y0] = pts[0]; const [x1, y1] = pts[pts.length - 1];
-    const moved = Math.hypot(x1 - x0, y1 - y0);
-    // A sideways swipe on tension: the next range of numbers.
-    const def = STEP[flow.steps[flow.i]];
-    if (def.more && Math.abs(x1 - x0) > 80) {
-      const cur = flow.mid ?? (flow.steps[flow.i] === 'mains' ? setupOf(flow.item).mains : setupOf(flow.item).crosses);
-      flow.mid = clamp(cur + (x1 < x0 ? 9 : -9), 34, 72);
-      sk.fade = 0.3;
-      spawn(def.opts(flow), def.cols);
-      return;
-    }
+    const moved = Math.hypot(...pts.reduce(([w, h], [x, y]) => [Math.max(w, Math.abs(x - x0)), Math.max(h, Math.abs(y - y0))], [0, 0]));
     // A tap: on one picks it; on empty air skips the step.
-    if (moved < 14 && pts.length < 12) {
+    if (moved < 14 && pts.length < 12 && !flow.pen) {
       at.forEach(([x, y], k) => { const tk = fly[k]; if (Math.abs(pts[0][0] - x) < tk.w / 2 && Math.abs(pts[0][1] - y) < tk.h / 2) best = k; });
       if (best < 0) { sk.fade = 0.01; post({ type: 'swish' }); for (const tk of tokens) drop(tk); nextStep(); return; }
     }
   }
+  // On tension, anything that is not circling his number is you writing yours.
+  if (best < 0 && STEP[flow.steps[flow.i]].write) { penAdd(sk); return; }
   if (best < 0) { sk.fade = 0.3; return; }
+  penClear();
   sk.fade = 0.6;
   const tk = fly[best];
   tk.state = 'chosen'; tk.t = 0; tk.v.set(0, 0, 0);
   for (const o of fly) if (o !== tk) drop(o);
+  choose(tk);
+}
+function choose(tk) {
   post({ type: 'circled' });
   legend.laugh = 0.3;
   apply(flow.steps[flow.i], tk.val);
-  setTimeout(() => { if (flow) nextStep(); }, 380);
+  const at = flow.i;
+  setTimeout(() => { if (flow && flow.i === at) nextStep(); }, 380);
 }
+
+// ---------- Writing a number ----------
+// On tension you write the number where his guess floats. The strokes wait 0.8 s after your finger lifts (a 5 then an 8),
+// then go to the app, which reads the handwriting and hands back its guesses. The first one that is a tension wins: it
+// becomes a number in the air and flies to his hand, like a circled one.
+function penAdd(sk) {
+  if (!flow.pen) flow.pen = { strokes: [], timer: 0, sent: false };
+  const pen = flow.pen;
+  if (pen.sent) return;
+  pen.strokes.push(sk);
+  clearTimeout(pen.timer);
+  pen.timer = setTimeout(penSend, 800);
+  setHint('keep writing, or wait and he reads it.');
+}
+function penHold() { if (flow && flow.pen && !flow.pen.sent) clearTimeout(flow.pen.timer); }
+function penSend() {
+  const pen = flow && flow.pen;
+  if (!pen || pen.sent) return;
+  pen.sent = true;
+  const all = pen.strokes.flatMap((sk) => sk.pts);
+  const x0 = Math.min(...all.map((p) => p[0])) - 10; const y0 = Math.min(...all.map((p) => p[1])) - 10;
+  const w = Math.max(...all.map((p) => p[0])) - x0 + 10; const h = Math.max(...all.map((p) => p[1])) - y0 + 10;
+  const t0 = pen.strokes[0].ts[0];
+  post({ type: 'read', w, h, strokes: pen.strokes.map((sk) => sk.pts.map(([x, y], k) => [x - x0, y - y0, Math.round(sk.ts[k] - t0)])) });
+  setHint('reading it...');
+  pen.giveUp = setTimeout(() => window.readNum(null), 5000);
+}
+function penClear() {
+  if (!flow || !flow.pen) return;
+  clearTimeout(flow.pen.timer); clearTimeout(flow.pen.giveUp);
+  for (const sk of flow.pen.strokes) if (sk.fade == null) sk.fade = 0.3;
+  flow.pen = null;
+}
+const DIGIT = { o: '0', O: '0', D: '0', l: '1', I: '1', i: '1', '|': '1', z: '2', Z: '2', S: '5', s: '5', b: '6', G: '6', B: '8', g: '9', q: '9' };
+/** The app's reading of what you wrote: guesses, best first; null when it could not read. */
+window.readNum = (cands) => {
+  const pen = flow && flow.pen;
+  if (!pen || !pen.sent) return;
+  clearTimeout(pen.giveUp);
+  const nums = (cands || []).map((c) => Number([...c.replace(/\s/g, '')].map((ch) => DIGIT[ch] ?? ch).join('')));
+  const v = nums.find((n) => Number.isInteger(n) && n >= 30 && n <= 80);
+  const all = pen.strokes.flatMap((sk) => sk.pts);
+  const cx = all.reduce((a, p) => a + p[0], 0) / all.length; const cy = all.reduce((a, p) => a + p[1], 0) / all.length;
+  penClear();
+  if (v == null) { post({ type: 'swish' }); setHint('he could not read that. write it again, bigger.'); return; }
+  // Your number appears where you wrote it and flies to him.
+  for (const tk of tokens) if (tk.state !== 'chosen') drop(tk);
+  const art = numArt(String(v), '');
+  const tex2 = new THREE.CanvasTexture(art.canvas);
+  tex2.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex2, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+  sp.renderOrder = 20;
+  scene.add(sp);
+  const p = ndcPoint((cx / window.innerWidth) * 2 - 1, 1 - (cy / window.innerHeight) * 2, new THREE.Vector3());
+  const tk = { sp, val: v, ndc: [0, 0], p, v: new THREE.Vector3(), state: 'chosen', t: 0, delay: 0, w: art.w, h: art.h, spin: 0, seed: 0 };
+  tokens.push(tk);
+  choose(tk);
+};
 
 // The name on the card: tap to rename, hold to retire. On a blank, tap to add one.
 let pressTimer = 0;
+const arm = (on) => { $('h1').classList.toggle('arming', on); if (!on) panel(); };
 $('h1').addEventListener('pointerdown', () => {
   const it = st.show && currentOf(st.show);
   if (!it) return;
-  pressTimer = setTimeout(() => { pressTimer = -1; post({ type: 'remove', id: it.id }); }, 650);
+  arm(true);
+  $('h2').textContent = 'KEEP HOLDING TO RETIRE IT';
+  pressTimer = setTimeout(() => { pressTimer = -1; arm(false); post({ type: 'remove', id: it.id }); }, 900);
 });
 $('h1').addEventListener('pointerup', () => {
   if (!st.show) return;
   const it = currentOf(st.show);
   if (!it) { startFlow(st.show.kind, null); return; }
-  if (pressTimer !== -1) { clearTimeout(pressTimer); post({ type: 'edit', id: it.id }); }
+  if (pressTimer !== -1) { clearTimeout(pressTimer); arm(false); post({ type: 'edit', id: it.id }); }
   pressTimer = 0;
 });
-$('h1').addEventListener('pointercancel', () => { clearTimeout(pressTimer); pressTimer = 0; });
+for (const ev of ['pointercancel', 'pointerleave']) $('h1').addEventListener(ev, () => { if (pressTimer > 0) { clearTimeout(pressTimer); arm(false); } pressTimer = 0; });
 
 // ---------- Panel ----------
 const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
@@ -1386,7 +1455,7 @@ function panel() {
     $('h1').textContent = def.say;
     $('h2').textContent = flow.steps.length > 1 ? `${flow.i + 1} OF ${flow.steps.length}` : '';
     $('due').innerHTML = '';
-    setHint(`circle one with your finger. tap empty space to skip${def.more ? '. swipe sideways for more numbers' : ''}.`);
+    if (!flow.pen) setHint(def.write ? 'write the number with your finger. circle his to keep it. tap empty space to skip.' : 'circle one with your finger. tap empty space to skip.');
     return;
   }
   if (sh) {
@@ -1400,12 +1469,17 @@ function panel() {
     $('h1').textContent = it ? `${it.name}${it.count > 1 ? ` x${it.count}` : ''}` : sh.kind === 'racket' ? '+ NEW RACKET' : '+ NEW SHOES';
     $('h2').textContent = it ? `${s.toUpperCase()} ${word}${n > 1 ? `  ${sh.idx + 1} OF ${n}` : ''}` : 'TAP THE NAME TO ADD ONE';
     $('h2').classList.toggle('ok', !!it && (done || w < 0.6));
-    $('due').innerHTML = '';
-    const spec = sh.kind === 'racket' ? specOf(it) : '';
-    const more = sh.kind === 'racket' ? (spec ? `${spec}. circle the racket to change it.` : 'circle the racket to add the string and tension, if you care.')
-      : (it && it.model ? '' : 'circle the shoes to add the model and accent, if you care.');
-    setHint(!it ? 'tap it and he throws you the brands' : done ? (s === 'strings' ? 'restrung. logged.' : 'new pair. logged.')
-      : `${more} ${s === 'strings' ? 'scrub the strings when you restring.' : 'scrub them clean for a new pair.'} hold the name to retire it.`);
+    // Two kinds of line: what is in it now, and what has been done to it (newest first).
+    const racket = sh.kind === 'racket';
+    const lines = !it ? [] : [
+      racket ? ['IN IT', specOf(it) || 'not set. circle the racket to add it.'] : null,
+      ...(it.log || []).map((t, k) => [k ? '' : 'LOG', t]),
+    ].filter(Boolean);
+    $('due').innerHTML = lines.map(([b, t]) => `<li class="log"><b>${b}</b><span>${esc(t)}</span></li>`).join('');
+    setHint(!it ? 'tap it and he throws you the brands'
+      : done ? (racket ? 'restrung. logged.' : 'new pair. logged.')
+        : racket ? 'just restrung? scrub the strings. circle the racket to change the string. done with it? hold the name and it goes to your DOMAIN.'
+          : 'new pair? scrub them. circle the shoes for model and color. done with them? hold the name and they go to your DOMAIN.');
     return;
   }
   $('h2').classList.remove('ok');
@@ -1481,7 +1555,7 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   down = { x: e.clientX, y: e.clientY, t: performance.now(), hit: pick(e.clientX, e.clientY), yaw0: st.yaw.target, moved: 0 };
   // While he is throwing, your finger is ink.
-  if (flow) { down.ink = { pts: [[e.clientX, e.clientY]], brush: null, fade: null }; inkStrokes.push(down.ink); return; }
+  if (flow) { penHold(); down.ink = { pts: [[e.clientX, e.clientY]], ts: [performance.now()], brush: null, fade: null }; inkStrokes.push(down.ink); return; }
   if (st.held) return;
   // Your finger on what he is holding: scrub it.
   if (down.hit && down.hit.show && st.show && st.show.phase === 'held' && currentOf(st.show)) {
@@ -1511,7 +1585,7 @@ canvas.addEventListener('pointermove', (e) => {
   down.dx = dx; down_dx = dx;
   if (down.ink) {
     const l = down.ink.pts[down.ink.pts.length - 1];
-    if (Math.hypot(e.clientX - l[0], e.clientY - l[1]) > 3) down.ink.pts.push([e.clientX, e.clientY]);
+    if (Math.hypot(e.clientX - l[0], e.clientY - l[1]) > 3) { down.ink.pts.push([e.clientX, e.clientY]); if (down.ink.ts) down.ink.ts.push(performance.now()); }
     if (flow) return;
   }
   if (st.held) return;
@@ -1856,7 +1930,20 @@ function frameCam() {
   camera.position.x += st.shake.x * 0.02;
   camera.lookAt(lookNow);
   camera.updateMatrixWorld();
+  // Your fighter never stands behind the card: when its feet would go under the card's top edge, the whole picture slides
+  // up until they clear it by 24 px. The card grows and shrinks with what it says, so this is measured, not guessed.
+  camera.clearViewOffset();
+  const q = you.carrier.getWorldPosition(v3).project(camera);
+  const feet = (-q.y * 0.5 + 0.5) * window.innerHeight;
+  const want = Math.max(0, feet - (cardTop - 24));
+  st.lift += (want - st.lift) * 0.08;
+  if (st.lift > 0.5) camera.setViewOffset(window.innerWidth, window.innerHeight, 0, st.lift, window.innerWidth, window.innerHeight);
 }
+st.lift = 0;
+let cardTop = window.innerHeight;
+const measureCard = () => { cardTop = $('panel').getBoundingClientRect().top; };
+new ResizeObserver(measureCard).observe($('panel'));
+window.addEventListener('resize', measureCard);
 
 function pose() {
   cordProgress(st.open ? (REDUCED ? 1 : (st.t - 0.6) / 1.1) : 1 - st.t / 0.35);
@@ -1908,7 +1995,7 @@ window.demoDomain = (planting = null) => window.setDomain({
   you: { cast: 'wall', color: '#d7f205', name: 'TONY' },
   title: 'YOUR GEAR.', sub: '1 THING NEEDS WORK.', inside: { sub: '6 PLANTED. 112 MATCHES IN THE GROUND.', hint: 'pull one up to see what it won. the arrow closes it.' }, due: ['PURE AERO: restring'], hint: 'tap RACKET or SHOES and he pulls it out. tap DOMAIN, or hold your fighter, to see your old gear.',
   gear: [
-    { id: 'n1', kind: 'racket', name: 'PURE AERO 2026', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '17 of 15 matches, 64 of 90 days', worn: 1.13 }] },
+    { id: 'n1', kind: 'racket', name: 'PURE AERO 2026', setup: { string: 'POLY TOUR REV', gauge: '17', mains: 58, crosses: 61 }, log: ['restrung AUG 30: POLY TOUR REV, 17 GA, 58/61 LB', 'restrung JUN 12: RPM BLAST, 17 GA, 55 LB', '4 restrings since JAN 3'], rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '17 of 15 matches, 64 of 90 days', worn: 1.13 }] },
     { id: 'n2', kind: 'racket', name: 'BLADE 98 V9', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '4 of 15 matches, 20 of 90 days', worn: 0.27 }] },
     { id: 'n3', kind: 'shoes', name: 'GEL RESOLUTION', rows: [{ s: 'soles', word: 'SOLES', verb: 'NEW PAIR', text: '30 of 50 matches, 100 of 180 days', worn: 0.6 }] },
   ],
@@ -1929,6 +2016,7 @@ window.__focus = (id) => focus(id);
 window.__charge = (on) => { st.charge.holding = on; };
 window.__pose = (c) => { st.charge.x = c; };
 window.__tab = (k) => tab(k);
+window.__skip = (n = 1) => { for (let k = 0; k < n; k += 1) if (flow) nextStep(); };
 // Where each floating choice is on screen, and its value: for circling in tests.
 window.__tokens = () => live().map((tk) => ({ val: tk.val, at: toScreen(tk.p) }));
 window.__flow = (kind, id) => startFlow(kind, id ? now.list.find((i) => i.id === id) : null);

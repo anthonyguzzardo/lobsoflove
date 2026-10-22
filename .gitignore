@@ -46,6 +46,7 @@ example
 
 # reference videos (578 MB, too big for GitHub; kept locally)
 docs/mo-design/vids/
+assets/vids/
 
 # any video file, anywhere (too big for GitHub)
 *.mov

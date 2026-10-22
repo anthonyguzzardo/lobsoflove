@@ -12,6 +12,7 @@ import {
   addItem, crackCan, dueList, lowStock, renameItem, restock, retireItem, service, setSetup, updateItem, useCloset, useRetired, wearOf,
 } from '@/lib/gear';
 import { askInk } from '@/lib/ink-ask';
+import { recognizeChar, type Stroke } from '@/lib/ink-recognize';
 import { counts, type Match, useMatches, winnerOf } from '@/lib/matches';
 import { goBack } from '@/lib/nav';
 import { type Fighter, useRoster } from '@/lib/roster';
@@ -44,7 +45,28 @@ function inUse(items: GearItem[], matches: Match[]) {
         const life = LIFE[s];
         return { s, word: life.word, verb: life.verb, text: `${w.matches} of ${life.matches} matches, ${w.days} of ${life.days} days`, worn: w.worn };
       }),
+    log: logOf(it),
   }));
+}
+
+const day = (at: number) => { const d = new Date(at); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
+const tension = (x: StringSetup) => (x.mains === x.crosses ? `${x.mains}` : `${x.mains}/${x.crosses}`);
+/** What has been done to it, newest first, for the card: every restring with what went in, or every new pair. */
+function logOf(it: GearItem): string[] {
+  const s: Service = it.kind === 'racket' ? 'strings' : 'soles';
+  const jobs = (it.jobs ?? []).filter((j) => j.s === s).sort((a, b) => b.at - a.at);
+  const verb = s === 'strings' ? 'restrung' : 'new pair';
+  if (!jobs.length) {
+    const at = it.serviced[s];
+    return [at ? `${verb} ${day(at)}` : `nothing logged since you added it ${day(it.addedAt)}`];
+  }
+  const lines = jobs.slice(0, 3).map((j) => {
+    const x = j.setup;
+    const what = x ? [x.string, x.gauge ? `${x.gauge} GA` : '', `${tension(x)} LB`].filter(Boolean).join(', ') : '';
+    return `${verb} ${day(j.at)}${what ? `: ${what}` : ''}`;
+  });
+  if (jobs.length > 3) lines.push(`${jobs.length} ${s === 'strings' ? 'restrings' : 'pairs'} since ${day(it.addedAt)}`);
+  return lines;
 }
 
 function span(ms: number): string {
@@ -193,6 +215,13 @@ export default function Gear() {
               service(m.id, m.s as Service);
               break;
             case 'edit': if (!demo) startEdit(m.id); break;
+            // A number written on the page with your finger (tension): read it and hand the guesses back.
+            case 'read':
+              recognizeChar(m.strokes as Stroke[], m.w as number, m.h as number).then(
+                (c) => run(`window.readNum(${JSON.stringify(c)})`),
+                () => run('window.readNum(null)'),
+              );
+              break;
             case 'remove': {
               const it = byId(m.id);
               if (!it || it.kind === 'balls' || it.kind === 'grips') break;

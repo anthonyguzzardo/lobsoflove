@@ -2,9 +2,10 @@ import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  type GestureResponderEvent, KeyboardAvoidingView, type LayoutChangeEvent, Platform, Pressable, ScrollView, Share, StyleSheet, Text,
+  KeyboardAvoidingView, type LayoutChangeEvent, Platform, Pressable, Share, StyleSheet, Text,
   TextInput, View,
 } from 'react-native';
+import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, SvgXml } from 'react-native-svg';
 
@@ -126,61 +127,58 @@ export default function Find() {
     sfx('pock', 0.6);
   };
 
-  const at = (e: GestureResponderEvent): Pt => ({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY });
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchRef = useRef({ start: { x: 0, y: 0 } as Pt, moved: false, drawing: false, scrolled: false });
+  const startPt = useRef<Pt>({ x: 0, y: 0 });
 
   // One finger, three meanings: a quick swipe scrolls, a quick touch picks, press and hold brings out the brush (circle or
-  // scribble) and holds the page still until you lift.
-  const touch = {
-    onTouchStart: (e: GestureResponderEvent) => {
-      const t = touchRef.current;
-      t.start = at(e); t.moved = false; t.drawing = false; t.scrolled = false;
-      if (clearTimer.current) clearTimeout(clearTimer.current);
-      if (holdTimer.current) clearTimeout(holdTimer.current);
-      holdTimer.current = setTimeout(() => {
-        if (t.moved || t.scrolled) return;
-        t.drawing = true;
-        setOffY(scrollY.current);
-        setDrawing(true);
-        setBrush(nextBrush());
-        pts.current = [t.start];
-        setStroke(pts.current);
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        sfx('swish', 0.4);
-      }, HOLD_MS);
-    },
-    onTouchMove: (e: GestureResponderEvent) => {
-      const t = touchRef.current;
-      const p = at(e);
-      if (!t.drawing) {
-        if (Math.hypot(p.x - t.start.x, p.y - t.start.y) > 8) t.moved = true;
-        return;
-      }
-      const last = pts.current[pts.current.length - 1];
-      if (Math.hypot(p.x - last.x, p.y - last.y) < 3) return;
-      pts.current = [...pts.current, p];
-      setStroke(pts.current);
-    },
-    onTouchEnd: () => {
-      const t = touchRef.current;
-      if (holdTimer.current) clearTimeout(holdTimer.current);
-      if (t.drawing) {
-        const line = pts.current;
-        const moved = line.reduce((m, p) => Math.max(m, Math.hypot(p.x - t.start.x, p.y - t.start.y)), 0);
-        if (moved < 10) tap(t.start); else finish(line);
-        t.drawing = false;
-        setDrawing(false);
-        clearTimer.current = setTimeout(() => setStroke([]), 380);
-      } else if (!t.moved && !t.scrolled) tap(t.start);
-    },
-    onTouchCancel: () => {
-      const t = touchRef.current;
-      if (holdTimer.current) clearTimeout(holdTimer.current);
-      if (t.drawing) { t.drawing = false; setDrawing(false); setStroke([]); }
-    },
+  // scribble). The brush is a gesture-handler pan that only wakes after the hold; once it wakes it owns the finger and the
+  // scroll view is cancelled on the spot, so the page holds still until you lift.
+  const beginDraw = (p: Pt) => {
+    if (clearTimer.current) { clearTimeout(clearTimer.current); clearTimer.current = null; }
+    startPt.current = p;
+    setOffY(scrollY.current);
+    setDrawing(true);
+    setBrush(nextBrush());
+    pts.current = [p];
+    setStroke(pts.current);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    sfx('swish', 0.4);
   };
+  const moveDraw = (p: Pt) => {
+    const last = pts.current[pts.current.length - 1];
+    if (!last || Math.hypot(p.x - last.x, p.y - last.y) < 3) return;
+    pts.current = [...pts.current, p];
+    setStroke(pts.current);
+  };
+  const endDraw = (done: boolean) => {
+    const line = pts.current;
+    pts.current = [];
+    setDrawing(false);
+    if (done && line.length) {
+      const s = startPt.current;
+      const moved = line.reduce((m, p) => Math.max(m, Math.hypot(p.x - s.x, p.y - s.y)), 0);
+      if (moved < 10) tap(s); else finish(line);
+    }
+    // The ink always goes: a short beat to show what it caught, then wiped. Nothing else cancels this.
+    if (clearTimer.current) clearTimeout(clearTimer.current);
+    clearTimer.current = setTimeout(() => { clearTimer.current = null; setStroke([]); }, done ? 380 : 0);
+  };
+
+  // These callbacks run on touch, not during render; the refs rule can't tell builder callbacks apart from render code.
+  /* eslint-disable react-hooks/refs */
+  const lift = (ok: boolean) => { if (pts.current.length) endDraw(ok); };
+  const draw = Gesture.Pan()
+    .runOnJS(true)
+    .activateAfterLongPress(HOLD_MS)
+    .onStart((e) => beginDraw({ x: e.x, y: e.y }))
+    .onUpdate((e) => moveDraw({ x: e.x, y: e.y }))
+    .onFinalize((_e, ok) => lift(ok));
+  const pick = Gesture.Tap()
+    .runOnJS(true)
+    .maxDuration(HOLD_MS)
+    .onEnd((e, ok) => { if (ok) tap({ x: e.x, y: e.y }); });
+  const gesture = Gesture.Exclusive(draw, pick);
+  /* eslint-enable react-hooks/refs */
 
   const type = (v: string) => setQ(v);
 
@@ -238,12 +236,12 @@ export default function Find() {
         scrollEnabled={!drawing}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        onScrollBeginDrag={() => { touchRef.current.scrolled = true; if (holdTimer.current) clearTimeout(holdTimer.current); }}
         onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
         onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={32}
       >
-        <View style={{ height }} {...touch}>
+        <GestureDetector gesture={gesture}>
+        <View style={{ height }} collapsable={false}>
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
             {cells.map((c) => {
               const on = picked.has(c.p.id);
@@ -273,6 +271,7 @@ export default function Find() {
             ) : null}
           </View>
         </View>
+        </GestureDetector>
       </ScrollView>
 
       {/* The brush lives in one screen-sized layer. A canvas as tall as the whole scrolling list is bigger than the GPU allows

@@ -436,9 +436,10 @@ const domainCss = homeCss + `
 @media (prefers-reduced-motion:reduce){#dock .bk .mot i,#dock .bk .mot b,#dock .bk .chev,#dock .bk .bball{animation:none}}
 /* Ink you draw on the scene, over it and under the card. While he throws, the dock rests. */
 #ink{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
-body.tossing #dock{opacity:.35;pointer-events:none!important}body.tossing #dock *{pointer-events:none!important}
 #h2.ok{color:#3f8f5a}
-body.showing #h1{pointer-events:auto;text-decoration:underline dotted 3px;text-underline-offset:6px}
+body.showing #h1{pointer-events:auto;text-decoration:underline dotted 3px;text-underline-offset:6px;background:linear-gradient(var(--clay),var(--clay)) left bottom/0% 5px no-repeat}
+#h1.arming{animation:arm .9s linear forwards;text-decoration-color:transparent}@keyframes arm{to{background-size:100% 5px}}
+#ov #due li.log:before{background:none}#ov #due li.log b{width:48px}
 #de,#stamp{z-index:2}
 #de{position:fixed;left:16px;top:calc(env(safe-area-inset-top) + 16px);font:400 15px Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;letter-spacing:.12em;color:#efece5;opacity:0;pointer-events:none}
 #stamp{position:fixed;left:14px;top:calc(env(safe-area-inset-top) + 46px);display:flex;gap:6px;align-items:flex-start;pointer-events:none;opacity:0}

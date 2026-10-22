@@ -36,7 +36,17 @@ export type GearItem = {
   colors?: string[];
   /** Rackets: what is in the strings. */
   setup?: StringSetup;
+  /** Every time a part was replaced, newest last: restrings keep the string that went in. */
+  jobs?: Job[];
 };
+
+/** One restring or new pair. */
+export type Job = { s: Service; at: number; setup?: StringSetup };
+const withJob = (it: GearItem, s: Service, at: number): GearItem => ({
+  ...it,
+  serviced: { ...it.serviced, [s]: at },
+  jobs: [...(it.jobs ?? []), { s, at, ...(s === 'strings' && it.setup ? { setup: it.setup } : {}) }],
+});
 
 /**
  * When a part is due: whichever comes first, matches played on it or days since it went on.
@@ -133,7 +143,7 @@ export function addGear(input: Omit<GearEntry, 'id'>): string {
   const e: GearEntry = { ...input, id: `g${Date.now()}` };
   entries = [...entries, e];
   const racket = first('racket');
-  if (input.item === 'RESTRING' && racket) patch(racket.id, (it) => ({ ...it, serviced: { ...it.serviced, strings: input.at } }));
+  if (input.item === 'RESTRING' && racket) service(racket.id, 'strings', input.at);
   else if ((input.item === 'REGRIP' || input.item === 'OVERGRIP') && racket) regrip(racket.id, input.at);
   else if (input.item === 'SHOES' && first('shoes')) service(first('shoes')!.id, 'soles', input.at);
   else if (input.item === 'BALLS' && first('balls')) restock('balls', 1);
@@ -155,7 +165,7 @@ export function setPhoto(id: string, photo: string) { patch(id, (it) => ({ ...it
 export function removeItem(id: string) { set(items.filter((it) => it.id !== id)); }
 /** Done with it: it leaves the closet and is planted in the domain, wear history and all. */
 export function retireItem(id: string, at = Date.now()) { patch(id, (it) => ({ ...it, retiredAt: at })); }
-export function service(id: string, s: Service, at = Date.now()) { patch(id, (it) => ({ ...it, serviced: { ...it.serviced, [s]: at } })); }
+export function service(id: string, s: Service, at = Date.now()) { patch(id, (it) => withJob(it, s, at)); }
 export function restock(kind: GearKind, n: number) {
   const it = first(kind);
   if (it) patch(it.id, (x) => ({ ...x, stock: Math.max(0, (x.stock ?? 0) + n) }));
