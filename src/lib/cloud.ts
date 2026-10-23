@@ -293,9 +293,13 @@ function sendBeacon(venue: string | null) {
 let starting: Promise<void> | null = null;
 
 /** Signs this phone in (anonymously: no signup screen), saves your fighter as a player, and loads your crew if you have one. */
+/** How long signing in may take before the crew page gives up and offers TRY AGAIN. */
+const START_MS = 12000;
+
 export function startCloud(): Promise<void> {
   if (!db) return Promise.resolve();
-  starting ??= (async () => {
+  if (state.status === 'error') set({ status: 'starting', error: null });
+  starting ??= withTimeout((async () => {
     await loadLocal();
     let { data: { session } } = await db.auth.getSession();
     if (!session) {
@@ -316,8 +320,28 @@ export function startCloud(): Promise<void> {
     await loadCrew();
     // This phone's push token, so confirm requests and call-ups reach it. Fire and forget: no token is fine.
     void pushToken().then((t) => { if (t && db) void db.rpc('fn_save_push_token', { p_token: t, p_platform: Platform.OS }); });
-  })();
+  })(), () => {
+    // Too slow (bad signal, server asleep): say so instead of hanging on SIGNING IN. A late answer still lands.
+    if (state.status === 'starting') set({ status: 'error', error: 'The server is taking too long. Check your signal.' });
+    starting = null;
+  });
   return starting;
+}
+
+/** Resolves when `work` does, or after START_MS, whichever comes first; `late` runs on the timeout. */
+function withTimeout(work: Promise<void>, late: () => void): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { late(); resolve(); }, START_MS);
+    work.then(
+      () => { clearTimeout(timer); resolve(); },
+      (e: unknown) => {
+        clearTimeout(timer);
+        set({ status: 'error', error: e instanceof Error ? e.message : String(e) });
+        starting = null;
+        resolve();
+      },
+    );
+  });
 }
 
 if (db) {

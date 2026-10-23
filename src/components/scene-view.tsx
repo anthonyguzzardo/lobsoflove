@@ -1,8 +1,9 @@
 import * as Haptics from 'expo-haptics';
-import { useCallback, useRef } from 'react';
-import { type StyleProp, StyleSheet, type ViewStyle } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+import { SceneCover } from '@/components/scene-cover';
 import { sfx } from '@/lib/sfx';
 
 /** A message from a page in web/ (sent with `post` from web/lib/bridge.js). */
@@ -36,7 +37,9 @@ export function useScene() {
     state.current.ready = true;
     for (const js of state.current.queue.splice(0)) ref.current?.injectJavaScript(`${js};true;`);
   }, []);
-  return { ref, run, ready };
+  /** The page is reloading: hold runs again until it says ready. */
+  const unready = useCallback(() => { state.current.ready = false; }, []);
+  return { ref, run, ready, unready };
 }
 
 type Props = {
@@ -54,15 +57,22 @@ type Props = {
   allowsInlineMediaPlayback?: boolean;
 };
 
-/** A full-bleed page from web/, drawn in a WebView that owns its own touches. Every screen with a page uses this. */
+/**
+ * A full-bleed page from web/, drawn in a WebView that owns its own touches. Every screen with a page uses this. The paper
+ * cover with the bouncing ball sits on top until the page says it is ready. If iOS kills the page (memory), it reloads.
+ */
 export function SceneView({ scene, html, name, cues, onReady, onMessage, style, allowsInlineMediaPlayback }: Props) {
-  const { ref, ready } = scene;
+  const { ref, ready, unready } = scene;
+  const [shown, setShown] = useState(false);
+  const [loads, setLoads] = useState(0);
+  const reload = () => { unready(); setShown(false); setLoads((n) => n + 1); ref.current?.reload(); };
   return (
+    <View style={[styles.web, style]}>
     <WebView
       ref={ref}
       source={{ html }}
       originWhitelist={['*']}
-      style={[styles.web, style]}
+      style={styles.web}
       scrollEnabled={false}
       bounces={false}
       overScrollMode="never"
@@ -72,12 +82,16 @@ export function SceneView({ scene, html, name, cues, onReady, onMessage, style, 
       onMessage={(e) => {
         const msg = JSON.parse(e.nativeEvent.data) as SceneMsg;
         if (msg.type === 'error') { console.warn(`${name} scene:`, msg.message, msg.at ?? ''); return; }
-        if (msg.type === 'ready') { ready(); onReady?.(); return; }
+        if (msg.type === 'ready') { ready(); setShown(true); onReady?.(); return; }
         const cue = cues && msg.type in cues ? cues[msg.type] : CUES[msg.type];
         cue?.(msg);
         onMessage?.(msg);
       }}
+      onContentProcessDidTerminate={reload}
+      onRenderProcessGone={reload}
     />
+    <SceneCover key={loads} ready={shown} />
+    </View>
   );
 }
 
