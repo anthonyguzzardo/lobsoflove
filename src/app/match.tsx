@@ -10,6 +10,7 @@ import { BackSwing } from '@/components/back-swing';
 import { type Cue, SceneView, type SceneMsg, useScene } from '@/components/scene-view';
 import { SCORE_HTML } from '@/generated/score-html';
 import { courtById, usePickedCourt } from '@/lib/courts';
+import { setSessionKind } from '@/lib/gear';
 import { addMatch, useMatches } from '@/lib/matches';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
@@ -36,7 +37,8 @@ const CUES: Record<string, Cue> = {
 
 /** The match: a flip scoreboard on the court fence (web/score.js). Flip plates as you play, seal it, then the photo. */
 export default function MatchScreen() {
-  const { vs } = useLocalSearchParams<{ vs: string }>();
+  // `session`: opened from MATCH on the courts page; the saved match is linked to that session (src/lib/gear.ts).
+  const { vs, session } = useLocalSearchParams<{ vs: string; session?: string }>();
   const roster = useRoster();
   const past = useMatches();
   const scene = useScene();
@@ -100,6 +102,7 @@ export default function MatchScreen() {
       const photo = await shoot();
       if (!photo) return;
       const id = addMatch({ p1: you.id, p2: opp.id, court: court.name, courtId: court.id, photoUri: photo, sets });
+      if (session) setSessionKind(session, 'match', id);
       AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
       router.replace({ pathname: '/card/[id]', params: { id } });
     } finally {

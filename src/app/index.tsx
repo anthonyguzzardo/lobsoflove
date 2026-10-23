@@ -9,7 +9,7 @@ import { SceneView, useScene } from '@/components/scene-view';
 import { SOUND_BUTTON_SIZE, SoundButton } from '@/components/sound-button';
 import { HOME_HTML } from '@/generated/home-html';
 import { toAnswer, toCallupAnswer, useCloud } from '@/lib/cloud';
-import { dueList, useCloset } from '@/lib/gear';
+import { dueList, useCloset, useSessions } from '@/lib/gear';
 import { computeSeason, counts, personalLine, scoreLine, useMatches, winnerOf } from '@/lib/matches';
 import { useRoster } from '@/lib/roster';
 import { sfx } from '@/lib/sfx';
@@ -23,6 +23,7 @@ export default function Home() {
   const params = useLocalSearchParams<{ demo?: string }>();
   const roster = useRoster();
   const closet = useCloset();
+  const sessions = useSessions();
   const matches = useMatches();
   const tour = useTour();
   const scene = useScene();
@@ -54,7 +55,7 @@ export default function Home() {
     record: played ? `you: ${row?.wins}–${row?.losses}, ${row?.points} points` : '',
     // Your place shows only in the top half. Lower down, home talks about you against your own past instead.
     place: played && rows.findIndex((r) => r.id === you.id) < Math.ceil(rows.length / 2) ? rows.findIndex((r) => r.id === you.id) + 1 : 0,
-    gear: (() => { const due = dueList(closet, matches); return due.length ? `${due.length} due: ${due[0]}${due.length > 1 ? ', ...' : ''}` : ''; })(),
+    gear: (() => { const due = dueList(closet, sessions); return due.length ? `${due.length} due: ${due[0]}${due.length > 1 ? ', ...' : ''}` : ''; })(),
     // The crew platform's team photo wears your crew's colors (you first), and its key says who is in it.
     crew: cloud.crew ? { name: cloud.crew.name, n: roster.length, colors: [you.color, ...roster.filter((f) => !f.isYou).map((f) => f.color)] } : null,
     last: last && lastWinner ? `${name(lastWinner)} beat ${name(lastWinner === last.p1 ? last.p2 : last.p1)} ${scoreLine(last.sets)}` : null,

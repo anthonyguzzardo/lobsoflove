@@ -206,11 +206,36 @@ const courtsCssExtra = `
 .ptag{position:absolute;left:0;top:0;font:800 9.5px var(--mono);letter-spacing:.06em;background:#16181d;color:#efece5;padding:3px 6px;border-radius:2px;white-space:nowrap;transition:opacity .2s}
 .ptag.later{background:rgba(239,236,229,.92);color:#16181d;border:1.4px dashed #16181d}
 body.dive #ptags{opacity:0}
+/* Being here: one big button above the honeycomb. LAND HERE in the court's color; HOP OFF on paper once you have landed. */
+#landbtn{all:unset;pointer-events:auto!important;align-self:center;box-sizing:border-box;min-width:200px;text-align:center;font:800 17px var(--mono);letter-spacing:.08em;color:#16181d;background:var(--accent,#e2562f);border:2px solid #16181d;border-radius:10px;box-shadow:2px 3px 0 #16181d;padding:13px 22px;margin:0 0 4px;cursor:pointer;transition:transform .08s,box-shadow .08s}
+#landbtn.off{background:#f4f1ea}
+#landbtn:active{transform:translate(2px,3px);box-shadow:0 0 0 #16181d}
+#landbtn[hidden]{display:none}
+/* While the legend is up, the page's own controls step aside (they come back the moment he goes). */
+#ui,#ptags{transition:opacity .2s}
+body.handing #ui,body.handing #ptags{opacity:0;visibility:hidden}
+/* The handoff card (web/lib/handoff.js): one status line, then big buttons. Racket names are chips. */
+#hand{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);box-sizing:border-box;background:#f4f1ea;border:2px solid #16181d;border-radius:12px;box-shadow:2px 3px 0 #16181d;padding:12px;transform:translateY(calc(100% + 40px));transition:transform .34s cubic-bezier(.34,1.56,.64,1);pointer-events:auto;font-family:var(--mono)}
+#hand.on{transform:none}
+#hand:empty{display:none}
+#hand .say{font:800 13px var(--mono);letter-spacing:.04em;line-height:1.3;color:#16181d;margin:0 2px 10px}
+#hand button{all:unset;box-sizing:border-box;cursor:pointer;text-align:center;-webkit-tap-highlight-color:transparent;transition:transform .08s,box-shadow .08s}
+#hand button:disabled{opacity:.45}
+#hand .main{display:block;width:100%;font:800 18px var(--mono);letter-spacing:.06em;padding:16px 10px;border-radius:10px;background:#16181d;color:#fffdf0;box-shadow:0 4px 0 #e2562f}
+#hand .main.alt{background:#fffdf0;color:#16181d;border:2px solid #16181d;box-shadow:0 4px 0 #16181d;padding:14px 10px}
+#hand .main:active{transform:translateY(4px);box-shadow:0 0 0 #16181d}
+#hand .two{display:flex;gap:10px}#hand .two .main{flex:1;min-width:0}
+#hand .chips{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+#hand .chips span{font:800 11px var(--mono);letter-spacing:.08em;color:#3b3e47}
+#hand .chip{font:800 15px var(--mono);letter-spacing:.05em;color:#16181d;background:#fffdf0;border:2px solid #16181d;border-radius:999px;padding:9px 16px;box-shadow:0 3px 0 #16181d;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hand .chip:active{transform:translateY(3px);box-shadow:0 0 0 #16181d}
+#hand .small{display:block;margin:12px auto 0;font:800 12px var(--mono);letter-spacing:.08em;color:#16181d;border:1.6px solid #16181d;border-radius:6px;padding:8px 14px}
 `;
 const courtsBody = `<canvas id="c"></canvas><div id="fade"></div><div id="vig"></div><div id="grain"></div><div id="ui">
 <div class="grow"></div>
 <div id="head"><div id="h1"></div><div id="h2"></div><div id="who"></div><div id="facts"><span class="fact" id="count"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" rx="1.5" fill="var(--accent,#e2562f)"/><path d="M11 1v12M5.5 3.5v7M16.5 3.5v7M5.5 7h11" stroke="#fffdf0" stroke-width="1.1" fill="none"/></svg><b></b><small>COURTS</small></span><span class="fact" id="lights"><svg viewBox="0 0 22 22" aria-hidden="true"><g class="rays"><path d="M4 9 1 7.5M4 12H1M5 15l-2.5 2" stroke="#e9b535" stroke-width="1.6" stroke-linecap="round"/></g><path d="M12 8v13" stroke="currentColor" stroke-width="1.8"/><rect class="head" x="5" y="3" width="11" height="6" rx="1.5"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b></b></span><button class="fact" id="listen" aria-label="Sound on. Tap to mute."><svg viewBox="0 0 22 22" aria-hidden="true"><path d="M3 8.5h4l5-4v13l-5-4H3z" fill="currentColor"/><g class="waves" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M15 8.2a4 4 0 0 1 0 5.6"/><path d="M17.6 5.8a7.5 7.5 0 0 1 0 10.4"/></g><path class="x" d="M15.5 8.5l5 5M20.5 8.5l-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b id="lstxt">SOUND</b></button></div><div id="blurb"></div></div>
 <div id="enter" role="slider" aria-label="Slide the ball to go in"><div class="side t"></div><div class="side b"></div><div id="skid"></div><div id="lines"><i></i><i></i><i></i><i></i></div><div id="goal"><b>›</b><b>›</b><b>›</b></div><div id="ktxt"><span id="klbl"></span><span id="ksub"></span></div><div id="dust"></div><div id="ballw"><div id="ball"><svg viewBox="0 0 50 50"><path d="M9 9C21 20 21 30 9 41M41 9C29 20 29 30 41 41" fill="none" stroke="#fffdf0" stroke-width="2.6" stroke-linecap="round"/></svg></div></div></div>
+<button id="landbtn" hidden>LAND HERE</button>
 <div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div>
 </div>`;
 emit('courts-html.ts', 'COURTS_HTML', page({ css: courtsCss + courtsCssExtra, body: courtsBody, pre: `window.VENUES=${readFileSync(`${root}src/data/venues.json`)};`, js: bundle('web/courts.js') }));
@@ -375,8 +400,9 @@ const domainCss = homeCss + `
 /* The hint: a bold wave rolls through every 4.2 s, about 25 ms a letter; the doing words stay clay and heavy. */
 #ov #hint{opacity:1}
 #hint .wd{white-space:nowrap}
-#hint .wd i{font-style:normal;display:inline-block;animation:hwave 4.2s calc(var(--i) * 25ms) ease-in-out infinite}
-#hint .wd.v{color:var(--clay);font-weight:900}
+
+#hint .wd i{font-style:normal}
+#hint .wd.v{color:inherit;font-weight:inherit}
 @keyframes hwave{0%,9%,100%{font-weight:inherit;transform:none;color:inherit}3%{font-weight:900;transform:translateY(-2.5px) scale(1.12);color:var(--clay)}}
 @media (prefers-reduced-motion:reduce){#hint .wd i{animation:none}}
 /* Back: the old motley pill, shrunk onto a platform. Paint drifts under ink, smoke idles across, the cream chevron nods left.
@@ -501,11 +527,51 @@ body.open #de{opacity:1;animation:dein .5s .1s cubic-bezier(.16,1,.3,1) both}
 #addone:active{transform:translateY(3px);box-shadow:inset 0 0 0 2px var(--ink)}
 #enter{margin-bottom:6px}
 #enter:not(.show){display:none}
+/* The card, plain: name, one status line, the string, then buttons for everything you can do. No label columns. */
+#ov #h1{font-size:22px;line-height:1.1;pointer-events:auto}
+#ov #h2{font-size:12px;margin-top:3px}
+body.showing #ov #h2{margin-top:10px}
+#ov #due li.spec{font:700 12px var(--mono);letter-spacing:.02em;padding:4px 0 0;display:block}
+#ov #due li.spec:before{display:none}
+#ov #due li.wear{display:block;height:8px;padding:0;margin:8px 0 2px;border-radius:4px;background:rgba(22,24,29,.1);overflow:hidden;position:relative}
+#ov #due li.wear:before{display:none}
+#ov #due li.wear u{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:#3f8f5a;transition:width .5s cubic-bezier(.16,1,.3,1)}
+#ov #due li.wear.meh u{background:#c9852f}#ov #due li.wear.bad u{background:var(--clay)}
+#ov #hint{font:700 11px var(--mono);opacity:.6;margin:8px 0 0}
+#ov #hint:empty{display:none}
+#acts{display:flex;gap:8px;margin-top:10px;pointer-events:auto}
+#acts:empty{display:none}
+#acts{flex-direction:column}
+#acts .btns{display:flex;gap:8px}
+#acts .tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+#acts .tabs::-webkit-scrollbar{display:none}
+#acts button.chip{flex:none;height:34px;padding:0 12px;font-size:11px;box-shadow:inset 0 0 0 1.6px rgba(22,24,29,.35);background:transparent}
+#acts button.chip.on{background:var(--ink);color:var(--paper);box-shadow:none}
+#acts button.chip.add{width:40px;padding:0;font-size:16px}
+#acts .tabs.days{flex-wrap:wrap;overflow:visible}
+#acts button{all:unset;box-sizing:border-box;flex:1;min-width:0;height:42px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border-radius:6px;background:#fffdf8;color:var(--ink);font:800 11.5px var(--mono);letter-spacing:.06em;box-shadow:inset 0 0 0 2px var(--ink),0 3px 0 var(--ink);transition:transform .12s,box-shadow .12s}
+#acts button:active{transform:translateY(3px);box-shadow:inset 0 0 0 2px var(--ink),0 0 0 var(--ink)}
+#acts button.main{flex:1.5}
+#ov #h1 .nameit{display:inline-block;vertical-align:middle;margin-left:8px;padding:4px 7px;border-radius:5px;font:800 10.5px var(--mono);letter-spacing:.08em;color:var(--clay);box-shadow:inset 0 0 0 2px var(--clay)}
+#ov #h2.ok{color:#3f8f5a}#ov #h2.meh{color:#c9852f}
+#acts button.logged{background:#3f8f5a;color:#fffdf8;box-shadow:inset 0 0 0 2px #2c6a42,0 3px 0 #2c6a42}
+#acts button.hold{color:var(--clay);box-shadow:inset 0 0 0 2px var(--clay),0 3px 0 var(--clay)}
+#acts button.hold u{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--clay)}
+#acts button.hold span{position:relative}
+#acts button.hold.arming{color:#fffdf8}
+#acts button.hold.arming u{width:100%;transition:width .9s linear}
+/* Outside: one full-width button per kind of gear. */
+#ov:has(.gear) #acts{flex-direction:column;gap:8px}
+#acts button.gear{flex:none;height:44px;justify-content:flex-start;gap:10px;padding:0 12px;text-align:left}
+#acts button.gear b{font-weight:900;flex:none;width:96px}
+#acts button.gear span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700;letter-spacing:.02em}
+#acts button.gear em{font-style:normal;font-weight:900;flex:none}
+#acts button.gear.ok em{color:#3f8f5a}#acts button.gear.meh em{color:#c9852f}#acts button.gear.bad em{color:var(--clay)}#acts button.gear.none em{opacity:.6}
 `;
 const domainBody = `<canvas id="c"></canvas><div id="grain"></div>
 <div id="de">DOMAIN EXPANSION</div><div id="stamp"><i>MUTUAL LOBS</i><b>相愛</b></div>
 <div id="ui"><div class="grow"></div>
-<div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><ul id="due"></ul><div id="hint"></div></div>
+<div id="panel"><div id="ov"><div id="h1"></div><div id="h2"></div><ul id="due"></ul><div id="acts"></div><div id="hint"></div></div>
 <div id="fo"><div id="plate"><div id="kind"></div><div id="name"></div></div><div id="rec"><b id="wl"></b><span id="sub"></span></div><ul id="facts"></ul><div id="how"></div></div>
 <div id="dock"><div id="dshadow"></div><div id="dball"><i></i></div></div></div>
 </div>`;

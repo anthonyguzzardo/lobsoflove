@@ -14,6 +14,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 import { post } from './lib/bridge.js';
 import { COURT_ICONS } from './lib/court-icons.js';
+import { createHandoff } from './lib/handoff.js';
 import { createHexDock } from './lib/hexdock.js';
 import { SoftBody } from './jelly-core.js';
 import { createHero } from './lib/hero.js';
@@ -38,6 +39,12 @@ scene.add(new THREE.HemisphereLight(0xffffff, 0xe6dfd2, 1.55));
 const sun = new THREE.DirectionalLight(0xfff4e4, 2.1);
 sun.position.set(-5, 9, 4);
 scene.add(sun);
+
+// The legend from the gear page, drawn over this scene: he hands you a racket when you land, and asks MATCH or JUST HIT when
+// you step off (web/lib/handoff.js). The app opens him with window.offerRacket / window.askKind.
+const hand = createHandoff({ renderer, post });
+window.offerRacket = (d) => { if (d) hand.offer(d); else hand.close(); };
+window.askKind = (d) => { if (d) { if (hand.state.session !== d.session || !hand.active) hand.ask(d); } else if (hand.state.mode === 'ask' && !hand.state.leaving) hand.close(); };
 
 const FWD = new THREE.Vector3(-1, 0, -1).normalize();
 const RIGHT = new THREE.Vector3(1, 0, -1).normalize();
@@ -1341,6 +1348,13 @@ function paint() {
   else if (mine) slide.setKey(String(st.target + 1), 'PLAY', 'SLIDE TO KEEP SCORE');
   else slide.setKey(String(st.target + 1), 'LAND HERE', presence.you ? 'MOVES YOUR BEACON HERE' : 'SLIDE WHEN YOU ARE READY TO PLAY');
   // What the headcount plays now, and what changes next. The people themselves are in the court with their names over them.
+  // The one button for being here: LAND HERE (your beacon, and the legend hands you a racket) or HOP OFF once you have.
+  const lb = $('landbtn');
+  if (lb) {
+    lb.hidden = presence.mode !== 'meet';
+    lb.textContent = mine ? 'HOP OFF' : 'LAND HERE';
+    lb.classList.toggle('off', mine);
+  }
   const who = $('who');
   if (who) {
     const demo = presence.demo && (room?.people || []).length ? '<span class="demo">STAND-INS</span>' : '';
@@ -1348,11 +1362,22 @@ function paint() {
       ? `<div class="line">${esc(room.now)}${demo}</div>${room.next || mine ? `<div class="row"><span class="next">${esc(room.next)}</span>${mine ? '<button id="leave">HOP OFF</button>' : ''}</div>` : ''}`
       : '';
     const leave = $('leave');
-    if (leave) leave.addEventListener('click', () => { presence.you = null; post({ type: 'leave' }); syncCrowd(); paint(); });
+    if (leave) leave.addEventListener('click', hopOff);
   }
   dock?.mark(st.target);
   const sub = $('sub'); if (sub) sub.textContent = 'your six. the song is on the wall.';
 }
+
+function hopOff() { presence.you = null; post({ type: 'leave' }); syncCrowd(); paint(); }
+$('landbtn')?.addEventListener('click', () => {
+  if (st.hop || st.diving || hand.active || !venues[st.target]) return;
+  if (presence.you === venues[st.target].id) hopOff(); else land();
+});
+/** Arrived from the sky (/fly): hop to that court and land on it. */
+window.flyIn = (i) => {
+  go(i);
+  if (st.at === st.target && !st.hop) { if (presence.you !== venues[st.target].id) land(); } else st.landOnArrive = true;
+};
 
 // The dock: one floating platform per venue in its own color. A real ball hops to the one you pick, with your fighter.
 const DOCK_LABEL = { ucsd: 'UCSD', lindavista: 'L. VISTA', balboa: 'BALBOA', roosevelt: 'ROOSEVELT', northpark: 'N. PARK', barnes: 'BARNES' };
@@ -1388,7 +1413,7 @@ function undive() {
 }
 window.undive = undive;
 // Back is always one step: out of the court if you are in one, otherwise off this screen. The app's back button calls this.
-window.back = () => { if (st.diving) undive(); else post({ type: 'back' }); };
+window.back = () => { if (hand.active) hand.dismiss(); else if (st.diving) undive(); else post({ type: 'back' }); };
 // The record beside the lights opens this court's song in Apple Music.
 // Sound: the record beside the lights is the mute button (tapping the wall board does the same). It spins while the song plays.
 function setMuted(m) {
@@ -1424,7 +1449,8 @@ canvas.addEventListener('pointerup', (e) => {
     // The whole court you're on is the mute button: fence, windscreens, apron, every court in the bank. Only where you can go
     // in does the court surface still take you inside.
     if (onCourt) {
-      const canEnter = presence.mode !== 'meet' || presence.you === venues[st.target].id;
+      // Only when picking a court for a match does a tap dive in; landed here, MATCH or JUST HIT is asked when you step off.
+      const canEnter = presence.mode !== 'meet';
       if (hit.object.userData.courtFloor && canEnter) enter();
       else setMuted(!st.muted);
       return;
@@ -1433,7 +1459,7 @@ canvas.addEventListener('pointerup', (e) => {
       const i = hit.object.userData.island;
       // Tapping the island you are on jumps in, but only where you have landed (or when picking a court): landing is the slide.
       if (i !== st.target) go(i);
-      else if (presence.mode !== 'meet' || presence.you === venues[i].id) enter();
+      else if (presence.mode !== 'meet') enter();
     }
   } else if (Math.abs(dy) > 44 && Math.abs(dy) > Math.abs(dx)) go(st.target + (dy < 0 ? 1 : -1));
 });
@@ -1469,6 +1495,7 @@ function fighterAt() {
 
 function advance(dt) {
   st.clock += dt;
+  hand.step(dt);
   slide.step(dt);
   dock?.step(dt);
   if (!venues.length) return;
@@ -1491,6 +1518,7 @@ function advance(dt) {
       if (st.at === st.target) {
         post({ type: 'stage', id: venues[st.at].id, anthem: venues[st.at].anthem });
         if (st.enterOnLand) { st.enterOnLand = false; setTimeout(enter, 280); }
+        if (st.landOnArrive) { st.landOnArrive = false; if (presence.you !== venues[st.at].id) setTimeout(land, 200); }
       }
     }
   }
@@ -1568,6 +1596,7 @@ function pose() {
   }
   if (pennant.visible) pennant.userData.cloth.rotation.y = 0.35 * Math.sin(t * 3.1);
   slide.render(t);
+  hand.pose();
   dock?.render();
   dustGeo.attributes.position.needsUpdate = true;
 
@@ -1602,6 +1631,7 @@ function frame(now) {
   }
   pose();
   renderer.render(scene, camera);
+  hand.render();
 }
 requestAnimationFrame(frame);
 window.setCourts = build;
@@ -1614,6 +1644,7 @@ window.demoCourts = () => { [1, 2, 3, 4].forEach((i, k) => setTimeout(() => go(i
 post({ type: 'ready' });
 window.courtsState = () => st;
 // Test hook: with window.paused set, step the scene exactly `sec` seconds and draw it (headless stills).
-window.advanceBy = (sec) => { for (let k = 0; k < sec * 120; k += 1) advance(1 / 120); pose(); renderer.render(scene, camera); }; // test hook: headless stills read the hop and dive state
+window.advanceBy = (sec) => { for (let k = 0; k < sec * 120; k += 1) advance(1 / 120); pose(); renderer.render(scene, camera); hand.render(); };
+window.advance = window.advanceBy; // test hook: headless stills read the hop and dive state
 window.__go = (i) => go(i); // test hooks: headless stills jump straight to a place, or into its court
 window.__enter = () => enter();

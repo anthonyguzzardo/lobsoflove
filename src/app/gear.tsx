@@ -9,7 +9,7 @@ import { SceneView, type SceneMsg, useScene } from '@/components/scene-view';
 import { DOMAIN_HTML } from '@/generated/domain-html';
 import {
   type GearItem, type GearKind, LIFE, type Service, SERVICES, type StringSetup,
-  addItem, crackCan, dueList, lowStock, renameItem, restock, retireItem, service, setSetup, updateItem, useCloset, useRetired, wearOf,
+  addItem, crackCan, dueList, lowStock, nickItem, redateLast, renameItem, restock, retireItem, service, type Session, setSetup, updateItem, useCloset, useRetired, useSessions, wearOf, wipeGear,
 } from '@/lib/gear';
 import { askInk } from '@/lib/ink-ask';
 import { recognizeChar, type Stroke } from '@/lib/ink-recognize';
@@ -25,13 +25,15 @@ const DAY = 86_400_000;
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 /** The gear in use, as the page shows it: wear on each part, and stock for cans and overgrips. */
-function inUse(items: GearItem[], matches: Match[]) {
+function inUse(items: GearItem[], sessions: Session[]) {
   return items.map((it) => ({
     id: it.id,
     kind: it.kind,
     name: it.name,
+    nick: it.nick ?? null,
     brand: it.brand,
     model: it.model,
+    gen: it.gen ?? null,
     count: it.count ?? 1,
     colors: it.colors ?? [],
     setup: it.setup ?? null,
@@ -41,9 +43,12 @@ function inUse(items: GearItem[], matches: Match[]) {
     rows: SERVICES[it.kind]
       .filter((s: Service) => s !== 'can' || it.serviced.can != null)
       .map((s: Service) => {
-        const w = wearOf(it, s, matches);
+        const w = wearOf(it, s, sessions);
         const life = LIFE[s];
-        return { s, word: life.word, verb: life.verb, text: `${w.matches} of ${life.matches} matches, ${w.days} of ${life.days} days`, worn: w.worn };
+        return {
+          s, word: life.word, verb: life.verb, worn: w.worn, sessions: w.sessions, matches: w.matches, days: w.days,
+          text: `${w.sessions} of ${life.sessions} sessions, ${w.days} of ${life.days} days`,
+        };
       }),
     log: logOf(it),
   }));
@@ -115,6 +120,7 @@ export default function Gear() {
   const items = useMemo(() => closet.filter((it) => it.kind === 'racket' || it.kind === 'shoes'), [closet]);
   const retired = useRetired();
   const matches = useMatches();
+  const sessions = useSessions();
   const roster = useRoster();
   const scene = useScene();
   const { run } = scene;
@@ -126,11 +132,11 @@ export default function Gear() {
   const data = useMemo(() => {
     const me = you?.id ?? 'you';
     const past = retired.filter((it) => it.kind === 'racket' || it.kind === 'shoes').map((it) => historyOf(it, matches, me, roster));
-    const due = dueList(items, matches);
+    const due = dueList(items, sessions);
     const planted = past.filter((i) => i.kind === 'racket').reduce((a, i) => a + i.matches, 0);
     return JSON.stringify({
       you: you ? { cast: you.cast, color: you.color, name: you.name } : null,
-      gear: inUse(items, matches),
+      gear: inUse(items, sessions),
       items: past,
       due,
       title: 'YOUR GEAR.',
@@ -140,7 +146,7 @@ export default function Gear() {
         ? { sub: `${past.length} PLANTED. ${planted} MATCHES IN THE GROUND.`, hint: 'pull one up to see what it won. the arrow closes it.' }
         : { sub: 'NOTHING PLANTED YET.', hint: 'hold a racket\'s name to retire it. it gets planted here. the arrow closes it.' },
     });
-  }, [items, retired, matches, roster, you]);
+  }, [items, retired, matches, sessions, roster, you]);
   useEffect(() => { if (!demo) run(`window.setDomain(${data})`); }, [run, data, demo]);
 
   const byId = (id: string) => itemsRef.current.find((i) => i.id === id);
@@ -148,6 +154,11 @@ export default function Gear() {
   const startEdit = (id: string) => {
     const it = byId(id);
     if (!it) return;
+    // Rackets get a nickname of your own ("DREAMSICLE"); the brand and model stay underneath. Blank clears it.
+    if (it.kind === 'racket') {
+      askInk({ label: 'WHAT DO YOU CALL IT', max: 18, upper: true, examples: ['DREAMSICLE', 'CHARLIE'] }, (t) => { nickItem(id, t); void Haptics.selectionAsync(); });
+      return;
+    }
     askInk({ label: 'WHAT IS IT CALLED', max: 22, upper: true, examples: [PLACEHOLDER[it.kind]] }, (t) => { renameItem(id, t || DEFAULT_NAME[it.kind]); void Haptics.selectionAsync(); });
   };
 
@@ -192,6 +203,8 @@ export default function Gear() {
               const id = addItem(kind, typeof m.name === 'string' ? m.name : m.brand ?? DEFAULT_NAME[kind], null, {
                 brand: m.brand, model: m.model, count: m.count, colors: Array.isArray(m.colors) ? m.colors : undefined,
               });
+              // Its last restring, roughly: logged as a job so the wear clock starts from it.
+              if (kind === 'racket' && typeof m.strungDaysAgo === 'number') service(id, 'strings', Date.now() - m.strungDaysAgo * 86400000);
               void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               sfx('slam', 0.6);
               if (typeof m.name !== 'string') startEdit(id);
@@ -214,7 +227,16 @@ export default function Gear() {
               if (demo) break;
               service(m.id, m.s as Service);
               break;
+            case 'redate': void Haptics.selectionAsync(); if (!demo) redateLast(m.id, m.s as Service, Date.now() - (m.daysAgo as number) * 86400000); break;
             case 'edit': if (!demo) startEdit(m.id); break;
+            case 'wipe':
+              if (demo) break;
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              Alert.alert('Wipe all your gear?', 'Every racket, pair of shoes, restring and everything planted in your domain. This cannot be undone.', [
+                { text: 'Keep it', style: 'cancel' },
+                { text: 'Wipe it', style: 'destructive', onPress: () => { wipeGear(); sfx('swish', 0.8); } },
+              ]);
+              break;
             // A number written on the page with your finger (tension): read it and hand the guesses back.
             case 'read':
               recognizeChar(m.strokes as Stroke[], m.w as number, m.h as number).then(

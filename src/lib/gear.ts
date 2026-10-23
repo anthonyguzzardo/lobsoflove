@@ -1,8 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
-import type { Match } from '@/lib/matches';
-
 /** Something done to your gear: a restring, a regrip, new shoes. */
 export type GearEntry = { id: string; item: string; cost: number | null; at: number };
 
@@ -18,6 +16,8 @@ export type GearItem = {
   id: string;
   kind: GearKind;
   name: string;
+  /** What you call it ("DREAMSICLE"). The name stays the brand / model underneath. */
+  nick?: string;
   /** A copy of the photo in the app's documents folder. */
   photo: string | null;
   addedAt: number;
@@ -30,6 +30,8 @@ export type GearItem = {
   /** Circled when it was added. */
   brand?: string;
   model?: string;
+  /** Which generation of the model (its paint), e.g. '2023'. Absent: the current one. */
+  gen?: string | null;
   /** How many of the same frame you have (rackets): they get strung together. */
   count?: number;
   /** Shoes: main color, then the accent, as hex. */
@@ -49,15 +51,16 @@ const withJob = (it: GearItem, s: Service, at: number): GearItem => ({
 });
 
 /**
- * When a part is due: whichever comes first, matches played on it or days since it went on.
- * Rules of thumb: polyester strings go dead in about 15 matches or 3 months; an overgrip lasts about 5 matches or a month;
- * an open can of balls goes flat in about 3 matches or 2 weeks; court shoes wear through in about 50 matches or 6 months.
+ * When a part is due: whichever comes first, sessions you played on it or days since it went on. A session is a time you landed
+ * on a court (a match or just hitting): both wear strings.
+ * Rules of thumb: polyester strings go dead in about 15 sessions or 3 months; an overgrip lasts about 5 sessions or a month;
+ * an open can of balls goes flat in about 3 sessions or 2 weeks; court shoes wear through in about 50 sessions or 6 months.
  */
-export const LIFE: Record<Service, { matches: number; days: number; word: string; verb: string }> = {
-  strings: { matches: 15, days: 90, word: 'STRINGS', verb: 'RESTRING' },
-  overgrip: { matches: 5, days: 30, word: 'OVERGRIP', verb: 'NEW OVERGRIP' },
-  soles: { matches: 50, days: 180, word: 'SOLES', verb: 'NEW PAIR' },
-  can: { matches: 3, days: 14, word: 'OPEN CAN', verb: 'CRACK A NEW CAN' },
+export const LIFE: Record<Service, { sessions: number; days: number; word: string; verb: string }> = {
+  strings: { sessions: 15, days: 90, word: 'STRINGS', verb: 'RESTRING' },
+  overgrip: { sessions: 5, days: 30, word: 'OVERGRIP', verb: 'NEW OVERGRIP' },
+  soles: { sessions: 50, days: 180, word: 'SOLES', verb: 'NEW PAIR' },
+  can: { sessions: 3, days: 14, word: 'OPEN CAN', verb: 'CRACK A NEW CAN' },
 };
 // The overgrip is not tracked: a racket wears out by its strings.
 export const SERVICES: Record<GearKind, Service[]> = { racket: ['strings'], shoes: ['soles'], balls: ['can'], grips: [] };
@@ -67,14 +70,24 @@ export const MAX: Record<GearKind, number> = { racket: 3, shoes: 6, balls: 1, gr
 
 const DAY = 86_400_000;
 
-export type Wear = { service: Service; since: number; matches: number; days: number; /** 0 fresh, 1 due, above 1 overdue. */ worn: number };
+export type Wear = {
+  service: Service; since: number;
+  /** Your sessions on it since the part went on, and how many of those were matches. */
+  sessions: number; matches: number;
+  days: number;
+  /** 0 fresh, 1 due, above 1 overdue. */ worn: number;
+};
 
-export function wearOf(item: GearItem, service: Service, matches: Match[], now = Date.now()): Wear {
+/** The sessions that wear this item: a racket only the ones played with it; shoes, cans and grips every one of yours. */
+export const sessionsOn = (item: GearItem, sessions: Session[]) =>
+  item.kind === 'racket' ? sessions.filter((x) => x.racket === item.id) : sessions;
+
+export function wearOf(item: GearItem, service: Service, sessions: Session[], now = Date.now()): Wear {
   const since = item.serviced[service] ?? item.addedAt;
-  const played = matches.filter((m) => m.playedAt > since).length;
+  const on = sessionsOn(item, sessions).filter((x) => x.at > since);
   const days = Math.max(0, Math.floor((now - since) / DAY));
   const life = LIFE[service];
-  return { service, since, matches: played, days, worn: Math.max(played / life.matches, days / life.days) };
+  return { service, since, sessions: on.length, matches: on.filter((x) => x.kind === 'match').length, days, worn: Math.max(on.length / life.sessions, days / life.days) };
 }
 
 export function lowStock(item: GearItem): boolean {
@@ -83,11 +96,11 @@ export function lowStock(item: GearItem): boolean {
 }
 
 /** Plain-words list of what needs doing, most urgent first. */
-export function dueList(items: GearItem[], matches: Match[], now = Date.now()): string[] {
+export function dueList(items: GearItem[], sessions: Session[], now = Date.now()): string[] {
   const out: { worn: number; text: string }[] = [];
   for (const it of items) {
     for (const s of SERVICES[it.kind]) {
-      const w = wearOf(it, s, matches, now);
+      const w = wearOf(it, s, sessions, now);
       if (w.worn >= 1) out.push({ worn: w.worn, text: `${it.name}: ${LIFE[s].verb.toLowerCase()}` });
     }
     if (lowStock(it)) out.push({ worn: 0.99, text: `${it.kind === 'balls' ? 'balls' : 'overgrips'}: order more` });
@@ -97,8 +110,12 @@ export function dueList(items: GearItem[], matches: Match[], now = Date.now()): 
 
 const KEY = 'lol.gear.v1';
 const ITEMS_KEY = 'lol.closet.v1';
+const FRESH_KEY = 'lol.gear.fresh.1';
+const SESSIONS_KEY = 'lol.sessions.v1';
 let entries: GearEntry[] = [];
 let items: GearItem[] = [];
+/** Your sessions on court, oldest first (see Session below). */
+let sessions: Session[] = [];
 /** The closet shows what is in use; the domain shows what was retired. Kept as stable arrays for useSyncExternalStore. */
 let active: GearItem[] = [];
 let retired: GearItem[] = [];
@@ -121,11 +138,20 @@ async function load() {
   if (loaded) return;
   loaded = true;
   try {
-    const [raw, rawItems] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(ITEMS_KEY)]);
+    const [raw, rawItems, rawSessions] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(ITEMS_KEY), AsyncStorage.getItem(SESSIONS_KEY)]);
+    const parsedSessions = rawSessions ? (JSON.parse(rawSessions) as Session[]) : [];
+    if (Array.isArray(parsedSessions)) sessions = parsedSessions;
     const parsed = raw ? (JSON.parse(raw) as GearEntry[]) : [];
     if (Array.isArray(parsed)) entries = parsed;
     const parsedItems = rawItems ? (JSON.parse(rawItems) as GearItem[]) : null;
     items = Array.isArray(parsedItems) ? parsedItems : starter(Date.now());
+    // One clean start (2026-10-23): everything logged while the gear page was being built goes, once.
+    if (!(await AsyncStorage.getItem(FRESH_KEY))) {
+      entries = [];
+      items = starter(Date.now());
+      persist();
+      await AsyncStorage.setItem(FRESH_KEY, '1');
+    }
   } catch {
     // Unreadable storage: start with an empty log.
     items = starter(Date.now());
@@ -157,15 +183,28 @@ export function addItem(kind: GearKind, name: string, photo: string | null, extr
   set([...items, { id, kind, name, photo, addedAt: Date.now(), serviced: {}, ...extra }]);
   return id;
 }
+/** Every piece of gear, in use and retired, gone. Starts over with an empty closet. */
+export function wipeGear() { entries = []; set(starter(Date.now())); }
 export function setSetup(id: string, setup: StringSetup) { patch(id, (it) => ({ ...it, setup })); }
 /** Details picked later: brand, model (it becomes the name), colors. */
-export function updateItem(id: string, p: Partial<Pick<GearItem, 'brand' | 'model' | 'name' | 'colors'>>) { patch(id, (it) => ({ ...it, ...p })); }
+export function updateItem(id: string, p: Partial<Pick<GearItem, 'brand' | 'model' | 'gen' | 'name' | 'colors'>>) { patch(id, (it) => ({ ...it, ...p })); }
+export function nickItem(id: string, nick: string) { patch(id, (it) => ({ ...it, nick: nick || undefined })); }
 export function renameItem(id: string, name: string) { patch(id, (it) => ({ ...it, name })); }
 export function setPhoto(id: string, photo: string) { patch(id, (it) => ({ ...it, photo })); }
 export function removeItem(id: string) { set(items.filter((it) => it.id !== id)); }
 /** Done with it: it leaves the closet and is planted in the domain, wear history and all. */
 export function retireItem(id: string, at = Date.now()) { patch(id, (it) => ({ ...it, retiredAt: at })); }
 export function service(id: string, s: Service, at = Date.now()) { patch(id, (it) => withJob(it, s, at)); }
+/** The last restring (or new pair) really happened on another day: move it there. */
+export function redateLast(id: string, s: Service, at: number) {
+  patch(id, (it) => {
+    const jobs = [...(it.jobs ?? [])];
+    const k = jobs.map((j) => j.s).lastIndexOf(s);
+    if (k < 0) return withJob(it, s, at);
+    jobs[k] = { ...jobs[k], at };
+    return { ...it, jobs, serviced: { ...it.serviced, [s]: at } };
+  });
+}
 export function restock(kind: GearKind, n: number) {
   const it = first(kind);
   if (it) patch(it.id, (x) => ({ ...x, stock: Math.max(0, (x.stock ?? 0) + n) }));
@@ -205,4 +244,74 @@ export function useCloset(): GearItem[] {
 /** What was retired (the domain). */
 export function useRetired(): GearItem[] {
   return useSyncExternalStore(subscribe, () => retired, () => retired);
+}
+
+// ---------- Sessions ----------
+/**
+ * A time you were on a court: from landing (your beacon) to stepping off, or to the beacon running out after BEACON_HOURS.
+ * Kept on this phone only. `racket` is the one the legend handed you (null: none in the closet). `kind` is the answer to
+ * MATCH or JUST HIT once you leave; null until then, and a session counts toward wear either way.
+ */
+export type Session = {
+  id: string;
+  at: number;
+  /** Venue id (src/data/venues.json `id`). */
+  venue: string;
+  racket: string | null;
+  kind: 'match' | 'hit' | null;
+  /** When you stepped off; absent while you are still there. */
+  endedAt?: number;
+  /** The match saved in /match for this session. */
+  matchId?: string;
+  /** Who was on the court with you when you left (names, for the opponent pick). */
+  with?: string[];
+  /** The question was put away without an answer. */
+  skipped?: boolean;
+};
+
+const saveSessions = () => { emit(); AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions)).catch(() => {}); };
+const patchSession = (id: string, fn: (x: Session) => Session) => { sessions = sessions.map((x) => (x.id === id ? fn(x) : x)); saveSessions(); };
+
+/** The racket you played with last: the one the legend offers first. */
+export function lastRacket(): string | null {
+  for (let k = sessions.length - 1; k >= 0; k -= 1) {
+    const r = sessions[k].racket;
+    if (r && items.some((it) => it.id === r && it.retiredAt == null)) return r;
+  }
+  return items.find((it) => it.kind === 'racket' && it.retiredAt == null)?.id ?? null;
+}
+
+/** You landed on `venue`. Any session still open somewhere else is over from now. Returns the new session's id. */
+export function addSession(venue: string, at = Date.now()): string {
+  const id = `s${at}`;
+  sessions = [...sessions.map((x) => (x.endedAt == null ? { ...x, endedAt: at } : x)), { id, at, venue, racket: lastRacket(), kind: null }];
+  saveSessions();
+  return id;
+}
+export function setSessionRacket(id: string, racket: string | null) { patchSession(id, (x) => ({ ...x, racket })); }
+/** Stepped off the court (or the beacon ran out at `at`). */
+export function endSession(id: string, at = Date.now(), withNames: string[] = []) {
+  patchSession(id, (x) => (x.endedAt == null ? { ...x, endedAt: at, with: withNames } : x));
+}
+export function setSessionKind(id: string, kind: 'match' | 'hit', matchId?: string) {
+  patchSession(id, (x) => ({ ...x, kind, ...(matchId ? { matchId } : {}) }));
+}
+export function skipSession(id: string) { patchSession(id, (x) => ({ ...x, skipped: true })); }
+
+/** One session as it is right now (fresh, unlike a value captured in a render). */
+export const getSession = (id: string) => sessions.find((x) => x.id === id) ?? null;
+/** The session you are in now, if any. */
+export const openSession = (list: Session[]) => list.find((x) => x.endedAt == null) ?? null;
+/** The last session that is over and still waiting on MATCH or JUST HIT (only from the last day; older ones just count). */
+export function unanswered(list: Session[], now = Date.now()): Session | null {
+  for (let k = list.length - 1; k >= 0; k -= 1) {
+    const x = list[k];
+    if (x.endedAt == null || x.kind || x.skipped) continue;
+    return now - x.endedAt < DAY ? x : null;
+  }
+  return null;
+}
+
+export function useSessions(): Session[] {
+  return useSyncExternalStore(subscribe, () => sessions, () => sessions);
 }

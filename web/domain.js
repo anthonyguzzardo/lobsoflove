@@ -26,7 +26,8 @@ import { SoftBody } from './jelly-core.js';
 import { post } from './lib/bridge.js';
 import { BRUSH_WIDTH, drawBrush } from './lib/brush.js';
 import { createDock } from './lib/dock.js';
-import { COLORS, GAUGES, RACKETS, SHOES, STRINGS, paintOf, stringColor } from './lib/gear-catalog.js';
+import { COLORS, GAUGES, RACKETS, SHOES, STRINGS, WORDMARK, designOf, gensOf, paintOf, stringColor } from './lib/gear-catalog.js';
+import { POSE, buildLegend, headGeos, placeBone } from './lib/legend.js';
 import { blobArt, brandArt, coilArt, numArt, wordArt } from './lib/toss-art.js';
 
 const INK = 0x16181d;
@@ -341,81 +342,8 @@ scene.add(you.carrier);
 // He is an archetype, not anyone real. Tap him and he laughs at you.
 const legend = { carrier: new THREE.Group(), grow: { x: 0, v: 0 }, jolt: { x: 0, v: 0 }, laugh: 0, brow: { x: 0, v: 0 } };
 {
-  const L = new THREE.Group();
-  const skin = toon(0xf1d3b3); const shirt = toon(0xf7f4ec); const red = toon(CLAY); const hair = toon(0xd2a65a); const ink = toon(INK);
-  const put = (m, x, y, z, line = LINE.thin) => { inked(m, line); m.position.set(x, y, z); L.add(m); return m; };
-  /** A rounded limb from a to b. */
-  const limb = (a, b, r, m) => {
-    const len = a.distanceTo(b);
-    const c = put(new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 12), m), (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
-    c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
-    return c;
-  };
-  // The wisp he rises out of.
-  const wisp = put(new THREE.Mesh(new THREE.ConeGeometry(0.48, 1.15, 28), shirt), 0, -0.52, 0, LINE.mid);
-  wisp.rotation.set(Math.PI, 0, 0.12);
-  // Torso, with red and ink stripes over the shoulders.
-  const torso = put(new THREE.Mesh(new RoundedBoxGeometry(1.05, 1.02, 0.56, 4, 0.22), shirt), 0, 0.48, 0, LINE.mid);
-  for (const [y, m] of [[0.86, red], [0.8, ink]]) put(new THREE.Mesh(new THREE.BoxGeometry(1.07, 0.035, 0.58), m), 0, y, 0, LINE.thin);
-  // Popped collar.
-  for (const sx of [-1, 1]) {
-    const flap = put(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.17, 0.03), shirt), sx * 0.12, 1.03, 0.16);
-    flap.rotation.set(-0.35, sx * 0.3, -sx * 0.55);
-  }
-  put(new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.18, 14), skin), 0, 1.03, 0);
-  // Head, chin up.
-  const head = new THREE.Group();
-  head.position.set(0, 1.42, 0.02);
-  L.add(head);
-  const hput = (m, x, y, z, line = LINE.thin) => { if (line) inked(m, line); m.position.set(x, y, z); head.add(m); return m; };
-  hput(new THREE.Mesh(new THREE.SphereGeometry(0.36, 28, 20), skin), 0, 0, 0, LINE.mid).scale.set(0.94, 1.1, 0.95);
-  // Hair: a cap on top and long locks down the sides and back.
-  hput(new THREE.Mesh(new THREE.SphereGeometry(0.39, 24, 16, 0, TAU, 0, Math.PI * 0.5), hair), 0, 0.06, -0.03).scale.set(1, 1.05, 1);
-  for (const sx of [-1, 1]) hput(new THREE.Mesh(new RoundedBoxGeometry(0.15, 0.62, 0.36, 3, 0.07), hair), sx * 0.33, -0.12, -0.08).rotation.z = sx * 0.08;
-  hput(new THREE.Mesh(new RoundedBoxGeometry(0.66, 0.6, 0.14, 3, 0.07), hair), 0, -0.12, -0.3);
-  const band = hput(new THREE.Mesh(new THREE.TorusGeometry(0.375, 0.048, 10, 40), red), 0, 0.15, 0);
-  band.rotation.x = Math.PI / 2 - 0.12;
-  band.scale.set(0.96, 0.98, 1);
-  // Face: lids half down, one brow up, a smirk off to one side.
-  for (const sx of [-1, 1]) {
-    const eye = hput(new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 10), ink), sx * 0.12, 0.0, 0.345, null);
-    eye.scale.set(1.15, 0.5, 0.5);
-  }
-  const brows = [-1, 1].map((sx) => {
-    const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.12, 4, 8), toon(0x8a6a34));
-    b.rotation.z = Math.PI / 2 + (sx > 0 ? -0.35 : 0.08);
-    b.position.set(sx * 0.13, 0.1, 0.35);
-    head.add(b);
-    return b;
-  });
-  hput(new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), skin), 0, -0.07, 0.34);
-  const smirk = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.016, 6, 20, 1.7), ink);
-  smirk.position.set(0.04, -0.15, 0.33);
-  smirk.rotation.z = Math.PI + 0.55;
-  head.add(smirk);
-  const grin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 10), ink);
-  grin.scale.set(1.3, 0.8, 0.4);
-  grin.position.set(0.02, -0.17, 0.32);
-  grin.visible = false;
-  head.add(grin);
-  // Arms on joints, so he can move between poses: crossed (gloating), wristband to his lips, the hand sign, arms flung wide.
-  const bone = (m, r) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 14), m); inked(c, LINE.thin); L.add(c); return c; };
-  const ball = (m, r) => { const c = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), m); inked(c, LINE.thin); L.add(c); return c; };
-  const arms = [-1, 1].map((sx) => {
-    const a = { sx, shoulder: new THREE.Vector3(sx * 0.56, 0.86, 0), upper: bone(shirt, 0.12), fore: bone(skin, 0.1), elbow: ball(skin, 0.1), hand: ball(skin, 0.11) };
-    a.cuff = ball(shirt, 0.125);
-    a.band = new THREE.Mesh(new THREE.CylinderGeometry(0.118, 0.118, 0.11, 16), red);
-    inked(a.band, LINE.thin);
-    L.add(a.band);
-    a.finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.12, 4, 8), skin);
-    inked(a.finger, LINE.thin);
-    L.add(a.finger);
-    return a;
-  });
+  const { L, head, brows, smirk, grin, torso, arms, hit } = buildLegend({ toon, inked, LINE, pickMat });
   legend.arms = arms;
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.9, 0.9), pickMat);
-  hit.position.y = 0.55;
-  L.add(hit);
   legend.carrier.add(L);
   legend.parts = { L, head, brows, smirk, grin, torso, arms };
   legend.body = {
@@ -452,15 +380,6 @@ legend.carrier.position.set(0.75, 2.2, -2.6);
 // crossed to the wristband kiss (0 to 0.35), holds the kiss, then into the hand sign (0.7 to 1). The expansion flings his arms
 // wide in 0.22 s, holds them up laughing to 1.3 s, and lets them fall back to crossed by 2.1 s.
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const POSE = {
-  crossed: { L: [V(-0.5, 0.36, 0.28), V(0.3, 0.5, 0.42)], R: [V(0.5, 0.4, 0.32), V(-0.3, 0.57, 0.48)] },
-  kiss: { L: [V(-0.66, 0.44, 0.08), V(-0.45, 0.16, 0.24)], R: [V(0.46, 0.72, 0.5), V(0.1, 1.2, 0.5)] },
-  sign: { L: [V(-0.46, 0.58, 0.38), V(-0.05, 1.16, 0.56)], R: [V(0.46, 0.58, 0.38), V(0.05, 1.16, 0.56)] },
-  wide: { L: [V(-0.98, 1.05, 0.12), V(-1.32, 1.55, 0.25)], R: [V(0.98, 1.05, 0.12), V(1.32, 1.55, 0.25)] },
-  // Reaching behind his back, and holding it up at you with the other hand on his hip.
-  behind: { L: [V(-0.5, 0.36, 0.28), V(0.3, 0.5, 0.42)], R: [V(0.72, 0.52, -0.22), V(0.42, 0.5, -0.55)] },
-  present: { L: [V(-0.66, 0.44, 0.08), V(-0.45, 0.16, 0.24)], R: [V(0.86, 0.42, 0.34), V(0.92, 0.56, 0.66)] },
-};
 const smooth = (x) => { const k = clamp(x, 0, 1); return k * k * (3 - 2 * k); };
 /** How far into each pose he is right now. */
 function gesture() {
@@ -492,11 +411,6 @@ function gesture() {
   const k = smooth((c - 0.7) / 0.3);
   return { from: 'kiss', to: 'sign', k, back: 0, kiss: 1 - k, sign: k, wide: 0 };
 }
-const placeBone = (m, a, b) => {
-  m.position.copy(a).add(b).multiplyScalar(0.5);
-  m.quaternion.setFromUnitVectors(V(0, 1, 0), b.clone().sub(a).normalize());
-  m.scale.set(1, a.distanceTo(b), 1);
-};
 function poseArms(g) {
   for (const a of legend.arms) {
     const side = a.sx < 0 ? 'L' : 'R';
@@ -594,6 +508,7 @@ const st = {
   lean: { x: 0, v: 0 },
   row: null,
   cam: { pos: new THREE.Vector3(0, 3.0, 6.6), look: new THREE.Vector3(0, 1.2, -1) },
+  fit: 1, // how far the legend is shrunk to keep him and what he holds on screen
 };
 
 function makeRacket(it, slot) {
@@ -786,12 +701,109 @@ function drawBed(worn, fresh) {
   }
   showBedTex.needsUpdate = true;
 }
+// The held racket's head: an oval, or Yonex's squared-off isometric head, built as a tube round a superellipse. Starts
+// at the throat and runs round, so along the tube 0 / 1 is the throat and 0.5 the top: that is where the paint bands go.
+const paintCv = document.createElement('canvas');
+paintCv.width = 1024; paintCv.height = 64;
+const paintTex = new THREE.CanvasTexture(paintCv);
+paintTex.colorSpace = THREE.SRGBColorSpace;
+// Across the strip is round the tube. Shifted half a turn, so row 32 is the face toward you and rows below it the outer edge.
+paintTex.wrapT = THREE.RepeatWrapping;
+paintTex.offset.y = 0.5;
+paintTex.anisotropy = 4;
+/** Clock position on the head (12 tip, 3 right, as you look at the strings) to place along the strip, 0..1 from the throat. */
+const clockU = (c) => ((((6 - c) / 12) % 1) + 1) % 1;
+/**
+ * Paints the strip that wraps the held racket's hoop from a design (web/lib/designs/SCHEMA.md): the main color, side
+ * blocks and fades by clock position, the line along the string groove, a gloss streak, and the wordmark over the top.
+ */
+function paintFrame(d, brand) {
+  const g = paintCv.getContext('2d');
+  const W = paintCv.width; const H = paintCv.height;
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = d.base; g.fillRect(0, 0, W, H);
+  const mix = (a, b, t) => new THREE.Color(a).lerp(new THREE.Color(b), t).getStyle();
+  for (const z of d.zones || []) {
+    const span = ((((z.to - z.from) % 12) + 12) % 12) || 12;
+    const cols = Math.ceil((span / 12) * W);
+    for (let i = 0; i <= cols; i += 1) {
+      const t = i / cols;
+      g.fillStyle = z.fade ? mix(z.color, z.fade, t) : z.color;
+      g.fillRect(Math.floor(clockU(z.from + span * t) * W) - 1, 0, 3, H);
+    }
+  }
+  if (d.bridge) { g.fillStyle = d.bridge; const half = Math.ceil(W / 24); g.fillRect(0, 0, half, H); g.fillRect(W - half, 0, half, H); }
+  if (d.bumper) { g.fillStyle = d.bumper; g.fillRect(0, 42, W, 18); }
+  if (d.pin && !d.pinAt) { g.fillStyle = d.pin; g.fillRect(0, 40, W, 3); }
+  if (d.pin && d.pinAt) {
+    const [p0, p1] = d.pinAt;
+    const span = ((((p1 - p0) % 12) + 12) % 12) || 12;
+    g.fillStyle = d.pin;
+    for (let i = 0, n = Math.ceil((span / 12) * W); i <= n; i += 1) g.fillRect(Math.floor(clockU(p0 + (span * i) / n) * W) - 1, 40, 3, 3);
+  }
+  if (d.finish === 'gloss') { g.fillStyle = 'rgba(255,255,255,.32)'; g.fillRect(0, 24, W, 4); }
+  if (d.text && brand) {
+    const [c0, c1] = d.textAt || [10.5, 1.5];
+    const span = ((((c1 - c0) % 12) + 12) % 12) || 12;
+    const mid = clockU(c0 + span / 2) * W;
+    const width = (span / 12) * W * 0.9;
+    g.save();
+    g.translate(mid, 32);
+    g.scale(-1, -1); // the strip runs right to left over the top, and upside down
+    g.fillStyle = d.text;
+    g.font = '900 20px "Arial Black", "Helvetica Neue", Arial, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const label = WORDMARK[brand.toUpperCase()] || brand;
+    const w = g.measureText(label).width;
+    g.scale(Math.min(1, width / w), 1);
+    g.fillText(label, 0, 0);
+    g.restore();
+  }
+  paintTex.needsUpdate = true;
+}
+// The handle wrap: the grip color with the overlapping turns of tape drawn in.
+const wrapCv = document.createElement('canvas');
+wrapCv.width = 64; wrapCv.height = 128;
+const wrapTex = new THREE.CanvasTexture(wrapCv);
+wrapTex.colorSpace = THREE.SRGBColorSpace;
+wrapTex.wrapS = wrapTex.wrapT = THREE.RepeatWrapping;
+wrapTex.repeat.set(1, 3);
+{
+  const g = wrapCv.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 128);
+  g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 3;
+  for (let y = -64; y < 192; y += 22) { g.beginPath(); g.moveTo(0, y); g.lineTo(64, y + 26); g.stroke(); }
+}
 const showR = (() => {
   const { body, hit, bed } = buildRacket();
   bed.material = new THREE.MeshBasicMaterial({ map: showBedTex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
   // Its own paint, so the one he holds is drawn in its model's colors.
-  const paint = toon(0xf4f1ea);
-  body.traverse((o) => { if (o.material === frameMat) o.material = paint; });
+  const paint = toon(0xffffff, { map: paintTex });
+  const throat = toon(0xf4f1ea);
+  body.traverse((o) => { if (o.material === frameMat) o.material = throat; });
+  body.children[0].material = paint;
+  // The two arms get their own paint: body child 2 is the right arm as you look at the strings, 3 the left.
+  const armR = toon(0xf4f1ea); const armL = toon(0xf4f1ea);
+  body.children[2].material = armR;
+  body.children[3].material = armL;
+  // Real racket parts instead of the planted ones' sword fittings: a shaft, a thin collar where the grip starts, a wrapped
+  // grip and a butt cap, each in its own paint. Children: 0 hoop, 1 bed, 2-3 throat arms, 4 shaft, 5 guard, 6 handle, 7 cap.
+  const shaft = toon(0xf4f1ea); const grip = toon(0xffffff, { map: wrapTex }); const cap = toon(0x2a2c31);
+  body.children[4].material = shaft;
+  const collar = toon(0xf4f1ea);
+  body.children[5].material = collar;
+  body.children[5].scale.set(0.6, 1.4, 0.6);
+  body.children[6].material = grip;
+  body.children[7].material = cap;
+  // A stripe of a second color down the face of each throat arm, shown when the design has one.
+  const accent = toon(0xffffff); const accentL = toon(0xffffff);
+  const stripes = [2, 3].map((k) => {
+    const arm = body.children[k];
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.022, arm.geometry.parameters.height * 0.8, 0.012), k === 2 ? accent : accentL);
+    m.position.z = 0.026;
+    arm.add(m);
+    return m;
+  });
   body.rotation.z = Math.PI; // head up
   body.position.y = 1.6; // butt in his hand
   const g = new THREE.Group();
@@ -800,7 +812,7 @@ const showR = (() => {
   g.visible = false;
   bed.userData.bed = true;
   hit.userData.show = true;
-  return { g, body, bed, hit, paint, frame: body.children[0] };
+  return { g, body, bed, hit, paint, throat, armR, armL, collar, shaft, grip, cap, accent, accentL, stripes, frame: body.children[0], head: 'circle' };
 })();
 const showS = (() => {
   const g = new THREE.Group();
@@ -826,6 +838,7 @@ function pullOut(kind, idx) {
   if (st.show && st.show.phase === 'out') { st.show.then = { kind, idx }; return; }
   st.show = { kind, idx, t: 0, phase: 'in', then: null };
   st.scrub = null;
+  st.when = false;
   const it = currentOf(st.show);
   dress(it, kind);
   post({ type: 'reach' });
@@ -835,7 +848,29 @@ function pullOut(kind, idx) {
 /** Paints what he is about to hold: the frame in its model's colors and its string in the bed, or the shoes in their colorway. */
 function dress(it, kind) {
   if (kind === 'racket') {
-    showR.paint.color.set(paintOf(it && (it.model || it.name)));
+    const d = designOf(it && (it.model || it.name), it && it.brand, it && it.gen);
+    paintFrame(d, it && it.brand);
+    showR.throat.color.set(d.throat || d.base);
+    showR.armR.color.set(d.throatR || d.throat || d.base);
+    showR.armL.color.set(d.throatL || d.throat || d.base);
+    showR.shaft.color.set(d.shaft || d.throat || d.base);
+    showR.collar.color.set(d.collar || d.shaft || d.throat || d.base);
+    showR.grip.color.set(d.grip || '#2a2c31');
+    showR.cap.color.set(d.cap || '#2a2c31');
+    // Stripe down each arm: stripes[0] is the right arm, stripes[1] the left.
+    const accR = d.throatAccentR || d.throatAccent; const accL = d.throatAccentL || d.throatAccent;
+    if (accR) showR.accent.color.set(accR);
+    if (accL) showR.accentL.color.set(accL);
+    showR.stripes[0].visible = !!accR;
+    showR.stripes[1].visible = !!accL;
+    if (showR.head !== d.head) {
+      const geo = headGeos(d.head);
+      showR.frame.geometry = geo.frame;
+      showR.frame.children[0].geometry = geo.frame; // its ink outline
+      showR.frame.scale.set(1, 1, 1);
+      showR.bed.geometry = geo.bed;
+      showR.head = d.head;
+    }
     FRESH_STR = stringColor(it && it.setup && it.setup.string);
     drawBed(it ? wornOf(it, 'strings') : 0, false);
   } else paintShoes(showS.pair, it, it ? wornOf(it, 'soles') : 0);
@@ -1232,27 +1267,41 @@ const STEP = {
   color: { say: 'WHAT COLOR ARE THEY?', cols: 4, opts: () => COLORS.map(([n, h], k) => opt(h, () => blobArt(n, h, k))) },
   accent: { say: 'AND THE ACCENT?', cols: 4, opts: () => COLORS.map(([n, h], k) => opt(h, () => blobArt(n, h, k + 3))) },
   model: { say: 'WHICH ONE?', cols: 2, opts: (f) => ((f.kind === 'racket' ? RACKETS : SHOES)[f.add.brand || (f.item && f.item.brand)] || []).map((m) => opt(m, () => wordArt(m))) },
+  // Adding a racket logs its last restring too, roughly. Days ago; null = you do not know, so the clock starts today.
+  strung: { say: 'WHEN WAS IT LAST STRUNG?', cols: 2, opts: () => [['TODAY', 0], ['YESTERDAY', 1], ['THIS WEEK', 4], ['THIS MONTH', 15], ['LONGER', 60], ['NO IDEA', null]].map(([w, d]) => opt(d, () => wordArt(w))) },
+  // Which generation of that model: the paint changes every couple of years. Only asked when there is more than one.
+  gen: { say: 'WHICH YEAR IS IT?', cols: 2, opts: (f) => { const g = gensOf(f.item && (f.item.model || f.item.name), f.item && f.item.brand); return g.length > 1 ? g.map((y) => opt(y, () => wordArt(y))) : []; } },
   string: { say: 'WHAT STRING IS IN IT?', cols: 3, opts: () => STRINGS.map(([n, h]) => opt(n, () => coilArt(n, h))) },
   gauge: { say: 'WHAT GAUGE?', cols: 3, opts: () => GAUGES.map((g) => opt(g, () => numArt(g, ''))) },
-  mains: { say: 'MAINS TENSION, IN LB?', write: true, cols: 1, opts: (f) => [opt(setupOf(f.item).mains, () => numArt(String(setupOf(f.item).mains), ''))] },
-  crosses: { say: 'CROSSES TENSION, IN LB?', write: true, cols: 1, opts: (f) => [opt(setupOf(f.item).crosses, () => numArt(String(setupOf(f.item).crosses), ''))] },
+  // Tension: he throws a grid of real numbers around what is in it now, so it is one circle, not handwriting.
+  // Writing still works for anything off the grid.
+  mains: { say: 'MAINS TENSION, IN LB?', write: true, cols: 4, opts: (f) => tensions(setupOf(f.item).mains, 12).map((n) => opt(n, () => numArt(String(n), ''))) },
+  crosses: {
+    say: 'CROSSES TENSION, IN LB?', write: true, cols: 4,
+    opts: (f) => {
+      const m = setupOf(f.item).mains;
+      return [opt(m, () => numArt(String(m), 'SAME')), ...tensions(m, 9).filter((n) => n !== m).map((n) => opt(n, () => numArt(String(n), '')))];
+    },
+  },
 };
 const DEFAULT_SETUP = { string: null, gauge: '16', mains: 52, crosses: 52 };
+/** n tension choices in lb around v, kept between 30 and 80. */
+const tensions = (v, n) => { const a = clamp(Math.round(v) - Math.floor(n / 2) + 1, 30, 80 - n + 1); return Array.from({ length: n }, (_, k) => a + k); };
 const setupOf = (it) => ({ ...DEFAULT_SETUP, ...((it && it.setup) || {}) });
 const specOf = (it) => {
   const s = it && it.setup;
   if (!s) return '';
-  const t = s.mains === s.crosses ? `${s.mains}` : `${s.mains}/${s.crosses}`;
-  return [s.string, s.gauge ? `${s.gauge} GA` : '', `${t} LB`].filter(Boolean).join(' / ');
+  const t = s.mains === s.crosses ? `${s.mains} LB` : `MAINS ${s.mains} / CROSSES ${s.crosses} LB`;
+  return [s.string, s.gauge ? `${s.gauge} GA` : '', t].filter(Boolean).join(', ');
 };
 
 /** Start a run of throws. kind: racket | shoes; item: what he holds (details), or null (adding a new one). */
-function startFlow(kind, item) {
+function startFlow(kind, item, only) {
   if (flow) return;
-  let steps;
-  if (!item) steps = kind === 'racket' ? ['brand', 'count'] : ['brand', 'color'];
-  else if (kind === 'racket') steps = [...(item.brand ? [] : ['brand']), 'model', 'string', 'gauge', 'mains', 'crosses'];
-  else steps = [...(item.brand ? [] : ['brand']), 'model', 'color', 'accent'];
+  let steps = only;
+  if (!steps && !item) steps = kind === 'racket' ? ['brand', 'strung'] : ['brand', 'color'];
+  else if (!steps && kind === 'racket') steps = [...(item.brand ? [] : ['brand']), 'model', 'string', 'gauge', 'mains', 'crosses'];
+  else if (!steps) steps = [...(item.brand ? [] : ['brand']), 'model', 'color', 'accent'];
   flow = { kind, steps, i: -1, item, add: {}, pen: null };
   post({ type: 'pick', open: true });
   nextStep();
@@ -1275,7 +1324,7 @@ function endFlow(finished) {
   post({ type: 'pick', open: false });
   if (finished && !f.item) {
     const a = f.add;
-    if (f.kind === 'racket') post({ type: 'add', kind: 'racket', brand: a.brand, name: a.brand || 'RACKET', count: a.count || 1 });
+    if (f.kind === 'racket') post({ type: 'add', kind: 'racket', brand: a.brand, name: a.brand || 'RACKET', count: 1, strungDaysAgo: a.strung ?? null });
     else {
       const colors = a.color ? [a.color] : [];
       post({ type: 'add', kind: 'shoes', brand: a.brand, colors, name: [a.brand, colorName(a.color)].filter(Boolean).join(' ') || 'COURT SHOES' });
@@ -1290,7 +1339,8 @@ function apply(step, val) {
   const it = flow.item;
   if (!it) { flow.add[step] = val; return; }
   if (step === 'brand') { flow.add.brand = val; it.brand = val; post({ type: 'detail', id: it.id, patch: { brand: val } }); return; }
-  if (step === 'model') { it.model = val; it.name = val; post({ type: 'detail', id: it.id, patch: { model: val, name: val } }); return; }
+  if (step === 'model') { it.model = val; it.name = val; it.gen = undefined; post({ type: 'detail', id: it.id, patch: { model: val, name: val, gen: null } }); dress(it, 'racket'); return; }
+  if (step === 'gen') { it.gen = val; post({ type: 'detail', id: it.id, patch: { gen: val } }); dress(it, 'racket'); return; }
   if (step === 'color' || step === 'accent') {
     const c = [...(it.colors || [])];
     c[step === 'color' ? 0 : 1] = val;
@@ -1408,24 +1458,79 @@ window.readNum = (cands) => {
   choose(tk);
 };
 
-// The name on the card: tap to rename, hold to retire. On a blank, tap to add one.
-let pressTimer = 0;
-const arm = (on) => { $('h1').classList.toggle('arming', on); if (!on) panel(); };
-$('h1').addEventListener('pointerdown', () => {
-  const it = st.show && currentOf(st.show);
-  if (!it) return;
-  arm(true);
-  $('h2').textContent = 'KEEP HOLDING TO RETIRE IT';
-  pressTimer = setTimeout(() => { pressTimer = -1; arm(false); post({ type: 'remove', id: it.id }); }, 900);
-});
-$('h1').addEventListener('pointerup', () => {
-  if (!st.show) return;
+// The name on the card: tap to name it. On a blank, tap to add one. Retiring is the RETIRE button.
+$('h1').addEventListener('click', () => {
+  if (!st.show || flow) return;
   const it = currentOf(st.show);
   if (!it) { startFlow(st.show.kind, null); return; }
-  if (pressTimer !== -1) { clearTimeout(pressTimer); arm(false); post({ type: 'edit', id: it.id }); }
-  pressTimer = 0;
+  post({ type: 'edit', id: it.id });
 });
-for (const ev of ['pointercancel', 'pointerleave']) $('h1').addEventListener(ev, () => { if (pressTimer > 0) { clearTimeout(pressTimer); arm(false); } pressTimer = 0; });
+
+// Hold YOUR GEAR (nothing out, domain closed) for 2 s to ask the app to wipe every piece of gear. The app confirms first.
+let wipeTimer = 0;
+$('h1').addEventListener('pointerdown', () => {
+  if (st.show || st.open || flow) return;
+  wipeTimer = setTimeout(() => { wipeTimer = 0; post({ type: 'wipe' }); }, 2000);
+});
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('h1').addEventListener(ev, () => { clearTimeout(wipeTimer); wipeTimer = 0; });
+
+/** A day n days back, said exactly: TODAY, YESTERDAY, then "WED OCT 21". */
+function dayName(n) {
+  if (n === 0) return 'TODAY';
+  if (n === 1) return 'YESTERDAY';
+  const d = new Date(Date.now() - n * 86400000);
+  return `${['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][d.getDay()]} ${['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getMonth()]} ${d.getDate()}`;
+}
+// The card's buttons. Each does what the finger gesture does (scrub, circle, swipe), for when you do not know the gesture.
+// RETIRE has to be held 0.9 s: its clay bar fills, and letting go early stops it.
+let retireTimer = 0;
+$('acts').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b || b.disabled) return;
+  const a = b.dataset.a;
+  const sh = st.show;
+  if (a === 'tab') { pickSlot(st.dockSlots.findIndex((x) => x.kind === b.dataset.k) + 1); return; }
+  if (!sh) return;
+  const it = currentOf(sh);
+  if (a === 'add') { post({ type: 'circled' }); startFlow(sh.kind, null); return; }
+  if (a === 'pick') { const i = Number(b.dataset.i); if (i !== sh.idx) pullOut(sh.kind, i); return; }
+  if (!it) return;
+  if (a === 'edit') { post({ type: 'circled' }); startFlow(sh.kind, it, sh.kind === 'racket' ? [...(it.brand ? [] : ['brand']), 'model', 'gen', 'string', 'gauge', 'mains', 'crosses'] : null); return; }
+  // LOG RESTRING (or the logged button, to fix the day): he asks which day.
+  if (a === 'done') { st.when = true; panel(); return; }
+  if (a === 'nowhen') { st.when = false; panel(); return; }
+  if (a === 'day') {
+    st.when = false;
+    const ago = Number(b.dataset.d);
+    const strings = sh.kind === 'racket';
+    if (!(st.scrub && st.scrub.done)) {
+      if (!st.scrub) st.scrub = { cells: new Set(), progress: 0, dist: 0, last: null, done: false };
+      finishScrub(it, strings ? 'strings' : 'soles', (strings ? showR.bed : showS.pair).getWorldPosition(new THREE.Vector3()));
+    }
+    st.scrub.ago = ago;
+    post({ type: 'redate', id: it.id, s: strings ? 'strings' : 'soles', daysAgo: ago });
+    panel();
+    return;
+  }
+  if (a === 'retire' && !retireTimer) $('h2').textContent = 'HOLD RETIRE TO SEND IT TO YOUR DOMAIN';
+});
+$('acts').addEventListener('pointerdown', (e) => {
+  const b = e.target.closest('button[data-a="retire"]');
+  const it = st.show && currentOf(st.show);
+  if (!b || !it) return;
+  b.classList.add('arming');
+  $('h2').textContent = 'KEEP HOLDING TO RETIRE IT';
+  retireTimer = setTimeout(() => { retireTimer = 0; post({ type: 'remove', id: it.id }); }, 900);
+});
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
+  $('acts').addEventListener(ev, () => {
+    if (!retireTimer) return;
+    clearTimeout(retireTimer); retireTimer = 0;
+    const b = $('acts').querySelector('.arming');
+    if (b) b.classList.remove('arming');
+    panel();
+  });
+}
 
 // ---------- Panel ----------
 const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
@@ -1455,7 +1560,8 @@ function panel() {
     $('h1').textContent = def.say;
     $('h2').textContent = flow.steps.length > 1 ? `${flow.i + 1} OF ${flow.steps.length}` : '';
     $('due').innerHTML = '';
-    if (!flow.pen) setHint(def.write ? 'write the number with your finger. circle his to keep it. tap empty space to skip.' : 'circle one with your finger. tap empty space to skip.');
+    $('acts').innerHTML = '';
+    if (!flow.pen) setHint(def.write ? 'circle your number. not there? write it. tap empty space to skip.' : 'circle one with your finger. tap empty space to skip.');
     return;
   }
   if (sh) {
@@ -1465,40 +1571,71 @@ function panel() {
     const row = it && rowsOf(it).find((r) => r.s === s);
     const w = row ? row.worn : 0;
     const done = st.scrub && st.scrub.done;
-    const word = done ? 'FRESH' : w >= 1 ? (s === 'strings' ? 'DEAD' : 'WORN OUT') : w >= 0.6 ? 'TIRED' : 'FRESH';
-    $('h1').textContent = it ? `${it.name}${it.count > 1 ? ` x${it.count}` : ''}` : sh.kind === 'racket' ? '+ NEW RACKET' : '+ NEW SHOES';
-    $('h2').textContent = it ? `${s.toUpperCase()} ${word}${n > 1 ? `  ${sh.idx + 1} OF ${n}` : ''}` : 'TAP THE NAME TO ADD ONE';
-    $('h2').classList.toggle('ok', !!it && (done || w < 0.6));
-    // Two kinds of line: what is in it now, and what has been done to it (newest first).
     const racket = sh.kind === 'racket';
-    const lines = !it ? [] : [
-      racket ? ['IN IT', specOf(it) || 'not set. circle the racket to add it.'] : null,
-      ...(it.log || []).map((t, k) => [k ? '' : 'LOG', t]),
-    ].filter(Boolean);
-    $('due').innerHTML = lines.map(([b, t]) => `<li class="log"><b>${b}</b><span>${esc(t)}</span></li>`).join('');
-    setHint(!it ? 'tap it and he throws you the brands'
-      : done ? (racket ? 'restrung. logged.' : 'new pair. logged.')
-        : racket ? 'just restrung? scrub the strings. circle the racket to change the string. done with it? hold the name and it goes to your DOMAIN.'
-          : 'new pair? scrub them. circle the shoes for model and color. done with them? hold the name and they go to your DOMAIN.');
+    $('h1').innerHTML = it ? (racket && !it.nick ? `${esc(it.name)} <span class="nameit">NAME IT</span>` : esc(it.nick || it.name)) : sh.kind === 'racket' ? 'NEW RACKET' : 'NEW SHOES';
+    // One status line, then the string that is in it. Everything you can do is a button underneath.
+    // Say when, not just a word: "STRUNG TODAY · 1 SESSION, 0 MATCHES". Green fresh, amber tired, clay due.
+    // Sessions (matches and hits) on it since the strings went in, and how many of those were matches.
+    const nums = row ? (row.text.match(/\d+/g) || []).map(Number) : [];
+    const games = done ? 0 : row && row.sessions != null ? row.sessions : nums[0] ?? 0;
+    const played = done ? 0 : (row && row.matches) || 0;
+    const ago = (st.scrub && st.scrub.ago) || 0;
+    const days = done ? ago : row && row.days != null ? row.days : nums[2] ?? 0;
+    const when = days < 1 ? 'TODAY' : days === 1 ? 'YESTERDAY' : days < 14 ? `${days} DAYS AGO` : days < 60 ? `${Math.round(days / 7)} WEEKS AGO` : `${Math.round(days / 30)} MONTHS AGO`;
+    const since = racket ? `STRUNG ${when}` : `GOT THEM ${when}`;
+    const due = !done && w >= 1 ? (racket ? ' · RESTRING IT' : ' · REPLACE THEM') : '';
+    const on = `${games} SESSION${games === 1 ? '' : 'S'}${games ? `, ${played} MATCH${played === 1 ? '' : 'ES'}` : ''}`;
+    $('h2').textContent = it ? `${since} · ${on}${due}` : '';
+    $('h2').classList.toggle('ok', !!it && (done || w < 0.6));
+    $('h2').classList.toggle('meh', !!it && !done && w >= 0.6 && w < 1);
+    // How used up it is: sessions or days, whichever runs out first (15 sessions / 90 days for strings, 50 / 180 for shoes).
+    const used = done ? 0 : clamp(w, 0, 1);
+    const bar = it ? `<li class="wear ${done || w < 0.6 ? 'ok' : w < 1 ? 'meh' : 'bad'}"><u style="width:${Math.max(2, used * 100).toFixed(0)}%"></u></li>` : '';
+    const under = it && it.nick ? [it.brand, it.model, it.gen].filter(Boolean).join(' ') || it.name : '';
+    const spec = it && racket ? [under, specOf(it)].filter(Boolean).join(' · ') : '';
+    $('due').innerHTML = bar + (spec ? `<li class="spec">${esc(spec)}</li>` : '');
+    // Logging a restring: first he asks which day, as a row of days to tap. Nothing hidden in the button itself.
+    if (it && st.when) {
+      $('h2').textContent = racket ? 'WHEN WAS IT RESTRUNG? TAP THE DAY.' : 'WHEN DID YOU GET THEM? TAP THE DAY.';
+      $('h2').classList.remove('ok', 'meh');
+      $('due').innerHTML = '';
+      $('acts').innerHTML = `<div class="tabs days">${[0, 1, 2, 3, 4, 5, 6].map((k) => `<button data-a="day" data-d="${k}" class="chip">${dayName(k)}</button>`).join('')}</div>`
+        + '<div class="btns"><button data-a="nowhen">CANCEL</button></div>';
+      setHint('');
+      return;
+    }
+    // Your rackets (or shoes) side by side by name: tap one and he switches to it. "+" adds another.
+    const list = ofKind(sh.kind);
+    const chips = list.length + (n < now.max[sh.kind] ? 1 : 0) > 1
+      ? `<div class="tabs">${list.map((g, k) => `<button data-a="pick" data-i="${k}" class="chip${k === sh.idx ? ' on' : ''}">${esc(g.nick || g.name)}</button>`).join('')}${n < now.max[sh.kind] ? `<button data-a="pick" data-i="${n}" class="chip add${sh.idx === n ? ' on' : ''}">+</button>` : ''}</div>`
+      : '';
+    const btns = !it
+      ? `<button data-a="add" class="main">ADD ${racket ? 'A RACKET' : 'SHOES'}</button>`
+      : [
+        `<button data-a="done" class="main${done ? ' logged' : ''}">${done ? 'CHANGE DAY' : racket ? 'LOG RESTRING' : 'LOG NEW PAIR'}</button>`,
+        '<button data-a="edit">DETAILS</button>',
+        '<button data-a="retire" class="hold"><u></u><span>RETIRE</span></button>',
+      ].join('');
+    $('acts').innerHTML = `${chips}<div class="btns">${btns}</div>`;
+    setHint('');
     return;
   }
   $('h2').classList.remove('ok');
-  $('h1').textContent = st.open ? 'YOUR DOMAIN.' : d.title || 'YOUR GEAR.';
-  $('h2').textContent = st.open ? inside.sub || '' : d.sub || '';
-  // Outside: one line per dock button, saying exactly what you have and what shape it is in.
-  $('due').innerHTML = st.open ? '' : [['racket', 'RACKET', 'strings'], ['shoes', 'SHOES', 'soles']].map(([kind, label, s]) => {
+  $('h1').textContent = st.open ? 'YOUR DOMAIN.' : 'YOUR GEAR';
+  $('h2').textContent = st.open ? inside.sub || '' : '';
+  $('due').innerHTML = '';
+  // Outside: one button per kind of gear, saying what you have and what shape it is in. Tap one and he pulls it out.
+  $('acts').innerHTML = st.open ? '' : [['racket', 'RACKET', 'strings'], ['shoes', 'SHOES', 'soles']].map(([kind, label, s]) => {
     const list = ofKind(kind);
-    if (!list.length) return `<li class="none"><b>${label}</b><span>none yet. tap ${label} to add one.</span></li>`;
+    if (!list.length) return `<button data-a="tab" data-k="${kind}" class="gear none"><b>${label}</b><span>none yet</span><em>ADD</em></button>`;
     const it = list.reduce((a, b) => (wornOf(b, s) > wornOf(a, s) ? b : a));
     const w = wornOf(it, s);
-    const row = rowsOf(it).find((r) => r.s === s);
-    const n = row ? parseInt(row.text, 10) : 0;
-    const shape = s === 'strings' ? (w >= 1 ? 'strings dead' : w >= 0.6 ? 'strings tired' : 'strings fresh') : (w >= 1 ? 'worn out' : w >= 0.6 ? 'getting worn' : 'fine');
-    const since = Number.isFinite(n) ? `, ${n} match${n === 1 ? '' : 'es'} ${s === 'strings' ? 'since a restring' : 'on them'}` : '';
-    const more = list.length > 1 ? ` (+${list.length - 1} more)` : '';
-    return `<li class="${w >= 1 ? 'bad' : w >= 0.6 ? 'meh' : 'ok'}"><b>${label}</b><span>${esc(it.name)}${more}: ${shape}${since}</span></li>`;
+    const shape = s === 'strings' ? (w >= 1 ? 'RESTRING' : w >= 0.6 ? 'TIRED' : 'FRESH') : (w >= 1 ? 'WORN OUT' : w >= 0.6 ? 'WORN' : 'FINE');
+    const cls = w >= 1 ? 'bad' : w >= 0.6 ? 'meh' : 'ok';
+        const what = list.length > 1 ? `${list.length} ${kind === 'racket' ? 'RACKETS' : 'PAIRS'}` : label;
+    return `<button data-a="tab" data-k="${kind}" class="gear ${cls}"><b>${what}</b><span>${esc(it.nick || it.name)}</span><em>${shape}</em></button>`;
   }).join('');
-  setHint(st.open ? inside.hint || '' : d.hint || 'hold your fighter, or tap DOMAIN, to expand it');
+  setHint(st.open ? inside.hint || '' : 'tap one to see it. DOMAIN holds your old gear.');
 }
 function focus(id, quiet) {
   st.focus = id;
@@ -1895,7 +2032,7 @@ function step(dt) {
   // While he throws, he and your fighter shrink into the lower right corner, so what he throws floats over open page.
   const a = st.aside.x;
   legend.carrier.position.set(gb.x - 0.7 * st.lean.x * (1 - a) + 0.35 * a, -1.0 * a + gb.y - c.x * 0.35 + 0.06 * Math.sin((st.clock * TAU) / 4.6), gb.z + c.x * 0.4 + 0.9 * a);
-  legend.carrier.scale.multiplyScalar(1 - 0.55 * a);
+  legend.carrier.scale.multiplyScalar((1 - 0.55 * a) * st.fit);
   you.carrier.position.x += 0.55 * a;
   you.carrier.position.z += 0.9 * a;
   you.carrier.scale.multiplyScalar(1 - 0.5 * a);
@@ -1935,9 +2072,42 @@ function frameCam() {
   camera.clearViewOffset();
   const q = you.carrier.getWorldPosition(v3).project(camera);
   const feet = (-q.y * 0.5 + 0.5) * window.innerHeight;
+  measureCard();
   const want = Math.max(0, feet - (cardTop - 24));
   st.lift += (want - st.lift) * 0.08;
   if (st.lift > 0.5) camera.setViewOffset(window.innerWidth, window.innerHeight, 0, st.lift, window.innerWidth, window.innerHeight);
+  fitLegend();
+}
+// Nothing he holds may leave the screen. Each frame his outline (racket in hand included) is measured on screen; if its top
+// would go above the status bar he shrinks at once, just enough, and grows back slowly when there is room again.
+const safeProbe = document.createElement('div');
+safeProbe.style.cssText = 'position:fixed;top:0;left:0;height:env(safe-area-inset-top);width:0;pointer-events:none;visibility:hidden';
+document.body.appendChild(safeProbe);
+const fitBox = new THREE.Box3();
+const fitP = new THREE.Vector3();
+function topOf(root) {
+  let top = Infinity;
+  root.updateMatrixWorld(true);
+  root.traverseVisible((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    fitBox.copy(o.geometry.boundingBox);
+    for (let k = 0; k < 8; k += 1) {
+      fitP.set(k & 1 ? fitBox.max.x : fitBox.min.x, k & 2 ? fitBox.max.y : fitBox.min.y, k & 4 ? fitBox.max.z : fitBox.min.z).applyMatrix4(o.matrixWorld).project(camera);
+      top = Math.min(top, (-fitP.y * 0.5 + 0.5) * window.innerHeight);
+    }
+  });
+  return top;
+}
+function fitLegend() {
+  if (!legend.carrier.visible || legend.grow.x < 0.5) return;
+  const limit = safeProbe.getBoundingClientRect().height + 14;
+  const top = topOf(legend.carrier);
+  const base = (-legend.carrier.getWorldPosition(fitP).project(camera).y * 0.5 + 0.5) * window.innerHeight;
+  if (!Number.isFinite(top) || base - top < 20) return;
+  const want = clamp(st.fit * ((base - limit) / (base - top)), 0.4, 1);
+  if (want < st.fit) st.fit = want;
+  else st.fit += (want - st.fit) * 0.04;
 }
 st.lift = 0;
 let cardTop = window.innerHeight;
@@ -1995,7 +2165,7 @@ window.demoDomain = (planting = null) => window.setDomain({
   you: { cast: 'wall', color: '#d7f205', name: 'TONY' },
   title: 'YOUR GEAR.', sub: '1 THING NEEDS WORK.', inside: { sub: '6 PLANTED. 112 MATCHES IN THE GROUND.', hint: 'pull one up to see what it won. the arrow closes it.' }, due: ['PURE AERO: restring'], hint: 'tap RACKET or SHOES and he pulls it out. tap DOMAIN, or hold your fighter, to see your old gear.',
   gear: [
-    { id: 'n1', kind: 'racket', name: 'PURE AERO 2026', setup: { string: 'POLY TOUR REV', gauge: '17', mains: 58, crosses: 61 }, log: ['restrung AUG 30: POLY TOUR REV, 17 GA, 58/61 LB', 'restrung JUN 12: RPM BLAST, 17 GA, 55 LB', '4 restrings since JAN 3'], rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '17 of 15 matches, 64 of 90 days', worn: 1.13 }] },
+    { id: 'n1', kind: 'racket', name: 'PURE AERO 2026', nick: 'DREAMSICLE', brand: 'BABOLAT', model: 'PURE AERO 98', setup: { string: 'POLY TOUR REV', gauge: '17', mains: 58, crosses: 61 }, log: ['restrung AUG 30: POLY TOUR REV, 17 GA, 58/61 LB', 'restrung JUN 12: RPM BLAST, 17 GA, 55 LB', '4 restrings since JAN 3'], rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '17 of 15 matches, 64 of 90 days', worn: 1.13 }] },
     { id: 'n2', kind: 'racket', name: 'BLADE 98 V9', rows: [{ s: 'strings', word: 'STRINGS', verb: 'RESTRING', text: '4 of 15 matches, 20 of 90 days', worn: 0.27 }] },
     { id: 'n3', kind: 'shoes', name: 'GEL RESOLUTION', rows: [{ s: 'soles', word: 'SOLES', verb: 'NEW PAIR', text: '30 of 50 matches, 100 of 180 days', worn: 0.6 }] },
   ],

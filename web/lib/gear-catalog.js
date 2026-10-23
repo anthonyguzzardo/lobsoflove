@@ -1,10 +1,12 @@
+import DESIGN_FILES from './designs/index.js';
+
 // What you can circle when you add gear. Not every model ever made: the common ones, and OTHER to write your own.
 
 export const RACKETS = {
-  BABOLAT: ['PURE AERO 98', 'PURE AERO', 'PURE AERO RAFA', 'PURE DRIVE', 'PURE DRIVE 98', 'PURE STRIKE 97', 'PURE STRIKE 100'],
-  WILSON: ['BLADE 98', 'BLADE 100', 'PRO STAFF 97', 'CLASH 100', 'ULTRA 100', 'SHIFT 99'],
-  HEAD: ['SPEED MP', 'SPEED PRO', 'RADICAL MP', 'GRAVITY MP', 'EXTREME MP', 'PRESTIGE MP', 'BOOM MP'],
-  YONEX: ['EZONE 98', 'EZONE 100', 'VCORE 98', 'VCORE 100', 'PERCEPT 97'],
+  BABOLAT: ['PURE AERO 98', 'PURE AERO', 'PURE AERO RAFA', 'PURE DRIVE', 'PURE DRIVE 98', 'PURE STRIKE 97', 'PURE STRIKE 98', 'PURE STRIKE 100'],
+  WILSON: ['BLADE 98', 'BLADE 100', 'PRO STAFF 97', 'CLASH 100', 'ULTRA 100', 'SHIFT 99', 'RF 01'],
+  HEAD: ['SPEED MP', 'SPEED PRO', 'RADICAL MP', 'GRAVITY MP', 'EXTREME MP', 'PRESTIGE MP', 'IPRESTIGE MP', 'BOOM MP'],
+  YONEX: ['EZONE 98', 'EZONE 100', 'VCORE 98', 'VCORE 100', 'VCORE PRO 97', 'PERCEPT 97'],
   TECNIFIBRE: ['TF40', 'TFIGHT', 'TF-X1'],
   DUNLOP: ['CX 200', 'SX 300', 'FX 500'],
   PRINCE: ['PHANTOM 100', 'TOUR 100'],
@@ -43,3 +45,32 @@ const PAINT = [
   ['VCORE', '#c4202f'], ['PERCEPT', '#2f6b4f'], ['TF', '#25272d'], ['CX', '#25272d'], ['SX', '#f2c418'], ['FX', '#2a5bd6'],
 ];
 export const paintOf = (name) => (PAINT.find(([k]) => String(name || '').toUpperCase().includes(k)) || [null, '#f4f1ea'])[1];
+
+/**
+ * How the racket he holds is drawn, per model and generation (current first). The data lives in one file per brand under
+ * ./designs (see designs/SCHEMA.md). A name matches the longest key that appears in it as whole words, so PURE AERO RAFA
+ * never gets PURE AERO's paint and TOUR 100 never matches a word inside another name.
+ */
+const MODELS = DESIGN_FILES.flatMap(([brand, list]) => list.map((m) => ({ ...m, brand })));
+const KEYS = MODELS.flatMap((m) => [m.model, ...(m.keys || [])].map((k) => ({ k: k.toUpperCase(), m })))
+  .sort((a, b) => b.k.length - a.k.length);
+const words = (s) => ` ${String(s || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()} `;
+/** The model entry for a racket name (and brand, when known), or null. */
+export function modelOf(name, brand) {
+  const n = words(name);
+  const b = String(brand || '').toUpperCase();
+  const hits = KEYS.filter(({ k }) => n.includes(words(k)));
+  return (hits.find(({ m }) => !b || m.brand === b) || hits[0] || { m: null }).m;
+}
+/** How each brand writes its name on the frame. */
+export const WORDMARK = { BABOLAT: 'Babolat', WILSON: 'Wilson', HEAD: 'HEAD', YONEX: 'YONEX', TECNIFIBRE: 'tecnifibre', DUNLOP: 'DUNLOP', PRINCE: 'PRINCE' };
+/** The generations you can pick for a racket, current first: ['2026', '2023']. */
+export const gensOf = (name, brand) => (modelOf(name, brand)?.gens || []).map((g) => g.year);
+/** The design to draw. gen: a year from gensOf, or nothing for the current one. Unknown rackets get a plain frame in PAINT. */
+export function designOf(name, brand, gen) {
+  const m = modelOf(name, brand);
+  const g = m && (m.gens.find((x) => x.year === gen) || m.gens[0]);
+  if (g) return { year: g.year, ...g.design };
+  const flat = paintOf(name);
+  return { head: String(brand || '').toUpperCase() === 'YONEX' ? 'iso' : 'oval', base: flat, throat: flat, grip: '#2a2c31', cap: '#2a2c31', finish: 'matte' };
+}

@@ -55,3 +55,7 @@ assets/vids/
 *.webm
 *.avi
 *.mkv
+
+# racket/shoe reference photos (local only)
+docs/research/rackets/photos/
+docs/research/shoes/photos/
