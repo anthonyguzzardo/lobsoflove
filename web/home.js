@@ -35,6 +35,7 @@ const PLACES = [
   { key: 'write', label: 'WRITE', head: ['JUST WRITE IT.', 'NO FORMS.'], blurb: 'a score, a time, a restring: write it with your finger' },
   { key: 'gear', label: 'GEAR', head: ['YOUR GEAR.', 'WHAT IS WORN OUT.'], blurb: 'rackets, shoes, balls, overgrips' },
   { key: 'crew', label: 'CREW', head: ['YOUR CREW.', 'WHO YOU PLAY.'], blurb: 'the friends your season counts against. start one, text them the link.' },
+  { key: 'drill', label: 'DRILL', head: ['PRACTICE.', 'TWO THUMBS. ONE BALL.'], blurb: 'a ball machine and a robot. move, turn, swing.' },
 ];
 
 const canvas = $('c');
@@ -54,7 +55,7 @@ scene.add(sun, sun.target);
 const FWD = new THREE.Vector3(-1, 0, -1).normalize();
 const RIGHT = new THREE.Vector3(1, 0, -1).normalize();
 const STEP = 1.95;
-const spots = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => FWD.clone().multiplyScalar(i * STEP).add(RIGHT.clone().multiplyScalar(i === 0 ? 0 : (i % 2 ? 0.8 : -0.8))).setY(i === 0 ? 0 : 0.12 + 0.16 * ((i * 7) % 3)));
+const spots = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => FWD.clone().multiplyScalar(i * STEP).add(RIGHT.clone().multiplyScalar(i === 0 ? 0 : (i % 2 ? 0.8 : -0.8))).setY(i === 0 ? 0 : 0.12 + 0.16 * ((i * 7) % 3)));
 
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...extra });
 const rbox = (w, h, d, r, material) => {
@@ -255,6 +256,25 @@ const crewJellies = [];
     t.add(j);
     crewJellies.push({ j, body });
   });
+}
+
+{
+  const tile = tiles[8];
+  const t = propGroup(tile); // a little ball machine that pops a ball out on a loop
+  const m = new THREE.Group();
+  m.add(at(rbox(0.36, 0.3, 0.36, 0.05, mat(0x2b2f36)), 0, 0.15, 0));
+  m.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.14, 0.2, 18, 1, true), new THREE.MeshStandardMaterial({ color: 0xfffdf0, transparent: true, opacity: 0.45, side: THREE.DoubleSide })), 0, 0.4, 0));
+  for (let k = 0; k < 7; k += 1) m.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), mat(0xd7f205, { roughness: 0.6 })), Math.cos(k * 2.4) * (0.04 + (k % 2) * 0.06), 0.36 + (k % 3) * 0.03, Math.sin(k * 2.4) * (0.04 + (k % 2) * 0.06)));
+  const mouth = at(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.2, 12), mat(CLAY)), 0.12, 0.22, 0.12);
+  mouth.rotation.set(rad(60), rad(45), 0, 'YXZ');
+  m.add(mouth);
+  m.traverse((o) => { o.castShadow = true; });
+  t.add(m);
+  const fed = at(new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), mat(0xd7f205, { roughness: 0.6 })), 0, 0, 0);
+  fed.castShadow = true;
+  t.add(fed);
+  tile.userData.machine = m;
+  tile.userData.fed = fed;
 }
 
 // Studio dressing: a softbox, a desk lamp, loose slabs and loose balls.
@@ -496,6 +516,15 @@ function pose() {
   tiles[3].userData.cup.rotation.y = t * 0.8;
   tiles[4].userData.stand.rotation.y = rad(24) + 0.35 * Math.sin(t * 0.7);
   tiles[6].userData.racket.rotation.z = 0.28 * Math.sin(t * 2.6);
+  // The machine feeds one every 1.4 s: a little recoil, the ball arcs out toward the camera corner and drops off the tile.
+  {
+    const c = (t % 1.4) / 1.4;
+    const { machine, fed } = tiles[8].userData;
+    machine.position.set(-0.02 * Math.exp(-c * 10), 0, -0.02 * Math.exp(-c * 10));
+    fed.visible = c < 0.8;
+    const u = c / 0.8;
+    fed.position.set(0.14 + 0.6 * u, 0.24 + 0.5 * u - 0.9 * u * u, 0.14 + 0.6 * u);
+  }
   // The crew hop in turn, one every 0.7 s, like friends who cannot stand still for the photo.
   crewJellies.forEach(({ j }, k) => {
     const c = ((t - k * 0.7) % 2.1 + 2.1) % 2.1;

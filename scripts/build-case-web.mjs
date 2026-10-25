@@ -34,7 +34,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--mono)}
 #dock{position:relative;display:flex;justify-content:space-between;align-items:flex-end;height:86px;margin:2px 0 0;pointer-events:auto;padding:0 4px}
 #dock .slot{all:unset;position:relative;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
 #dock .pf{width:min(50px,calc(100% - 6px));height:14px;border-radius:3px;background:#f4f1ea;position:relative;box-shadow:0 6px 0 #d8d2c5,0 12px 14px rgba(40,34,26,.18);transition:background .2s,transform .32s cubic-bezier(.34,1.56,.64,1);animation:bob 3.6s ease-in-out infinite}
-#dock .slot:nth-child(2) .pf{animation-delay:-.9s}#dock .slot:nth-child(3) .pf{animation-delay:-1.8s}#dock .slot:nth-child(4) .pf{animation-delay:-2.7s}#dock .slot:nth-child(5) .pf{animation-delay:-.45s}#dock .slot:nth-child(6) .pf{animation-delay:-1.35s}#dock .slot:nth-child(7) .pf{animation-delay:-2.25s}
+#dock .slot:nth-child(2) .pf{animation-delay:-.9s}#dock .slot:nth-child(3) .pf{animation-delay:-1.8s}#dock .slot:nth-child(4) .pf{animation-delay:-2.7s}#dock .slot:nth-child(5) .pf{animation-delay:-.45s}#dock .slot:nth-child(6) .pf{animation-delay:-1.35s}#dock .slot:nth-child(7) .pf{animation-delay:-2.25s}#dock .slot:nth-child(8) .pf{animation-delay:-3.15s}
 @keyframes bob{0%,100%{translate:0 0}50%{translate:0 -3px}}
 #dock .slot.on .pf{background:var(--pc,var(--clay));box-shadow:0 6px 0 color-mix(in srgb,var(--pc,#e2562f) 62%,#000),0 12px 14px rgba(40,34,26,.22)}
 #dock .slot.land .pf{transform:translateY(4px)}
@@ -45,7 +45,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--mono)}
 #dock .mini{display:block;margin-bottom:-1px;opacity:.72;transform-origin:50% 100%;transition:transform .32s cubic-bezier(.34,1.56,.64,1),opacity .2s}
 #dock .slot.on .mini{opacity:1;transform:scale(1.18)}
 #dock .slot.land .mini{transform:scale(1.24,1.06)}
-#dock .lbl{font:800 8.5px var(--mono);letter-spacing:.03em;margin-top:13px;opacity:.42;transition:opacity .2s}
+#dock .lbl{font:800 7.8px var(--mono);letter-spacing:0;white-space:nowrap;margin-top:13px;opacity:.42;transition:opacity .2s}
 #dock .slot.on .lbl{opacity:1}
 #dball{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;pointer-events:none;will-change:transform}
 #dball i{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%,#f4ff7a 0,#d7f205 46%,#a9c400 100%);box-shadow:inset -3px -4px 5px rgba(60,80,0,.35)}
@@ -785,6 +785,86 @@ const scoreBody = `<canvas id="c"></canvas><div id="vig"></div><div id="grain"><
 ${homeBody.match(/<div id="enter"[\s\S]*?<\/svg><\/div><\/div><\/div>/)[0]}
 </div>`;
 emit('score-html.ts', 'SCORE_HTML', page({ css: scoreCss, body: scoreBody, js: bundle('web/score.js') }));
+
+// The drill: a ball machine on a real court. Paper, ink, clay; the call stamps in the middle. Wide screens split at the hinge.
+const drillCss = `
+:root{--ink:#16181d;--paper:#efece5;--clay:#e2562f;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+body{background:var(--paper);color:var(--ink);font-family:var(--mono)}
+#c,#ink{position:fixed;inset:0;width:100vw;height:100vh}#ink{pointer-events:none}
+#safe{position:fixed;top:0;height:env(safe-area-inset-top);visibility:hidden;pointer-events:none}
+#safeb{position:fixed;bottom:0;height:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none}
+#ui{position:fixed;left:0;top:0;bottom:0;width:100vw;box-sizing:border-box;pointer-events:none;padding:calc(env(safe-area-inset-top) + 6px) 12px calc(env(safe-area-inset-bottom) + 14px);display:flex;flex-direction:column}
+body.wide #ui{width:50vw}
+#card{pointer-events:auto;background:#fffdf8;border:2px solid var(--ink);border-radius:12px;padding:8px 12px 9px;box-shadow:0 4px 0 var(--ink);transition:transform .12s,box-shadow .12s}
+#card.press{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+#row{display:flex;align-items:center;gap:10px}
+#lbl{font:800 9px var(--mono);letter-spacing:.1em;color:var(--clay);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#name{font:800 17px var(--mono);letter-spacing:.03em;margin-top:5px}
+#tip{font:700 10.5px var(--mono);opacity:.6;margin-top:2px}
+#count{font:800 10.5px var(--mono);letter-spacing:.06em;margin-top:5px}
+/* Back: the small pill from /gear. Motley paint drifting under ink, a cream chevron that nods left. */
+#show{all:unset;margin-left:auto;flex:0 0 auto;font:800 10px var(--mono);letter-spacing:.1em;background:var(--clay);color:#fffdf0;border:2px solid var(--ink);border-radius:13px;padding:5px 10px;box-shadow:2px 3px 0 var(--ink);cursor:pointer}
+#show:active{translate:2px 3px;box-shadow:0 0 0 var(--ink)}
+#demo{position:fixed;left:12px;right:12px;text-align:center;font:800 11.5px var(--mono);line-height:1.5;letter-spacing:.02em;color:#fffdf0;background:rgba(22,24,29,.88);border-radius:10px;padding:8px 12px;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none}
+#demo.on{opacity:1;transform:none}
+#bk{all:unset;position:relative;flex:0 0 auto;width:54px;height:26px;border-radius:13px;background:#16181d;overflow:hidden;box-shadow:0 0 0 2px var(--ink),3px 4px 0 var(--ink);cursor:pointer;transition:translate .09s ease-out,box-shadow .09s ease-out}
+#bk.press{translate:2px 3px;box-shadow:0 0 0 2px var(--ink),1px 1px 0 var(--ink)}
+#bk .mot{position:absolute;inset:0;border-radius:13px;overflow:hidden}
+#bk .mot i{position:absolute;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle,var(--c) 0,var(--c) 45%,transparent 70%);animation:orb var(--d) linear infinite;animation-delay:var(--p)}
+#bk .mot i:nth-child(1){--c:#ff3b30;left:-6px;top:-10px;--d:6s;--p:0s}
+#bk .mot i:nth-child(2){--c:#2f6bff;left:10px;top:6px;--d:3s;--p:-1s}
+#bk .mot i:nth-child(3){--c:#ff9a1f;left:24px;top:-12px;--d:6s;--p:-3.3s}
+#bk .mot i:nth-child(4){--c:#b84dff;left:34px;top:6px;--d:3s;--p:-2.4s}
+#bk .mot i:nth-child(5){--c:#1fd17a;left:0;top:10px;--d:2s;--p:-.3s;width:22px;height:22px}
+#bk .mot i:nth-child(6){--c:#ff3d7f;left:18px;top:-4px;--d:6s;--p:-3.9s;width:20px;height:20px}
+@keyframes orb{0%{transform:translate(7px,0) scale(1)}25%{transform:translate(0,4px) scale(1.12)}50%{transform:translate(-7px,0) scale(1)}75%{transform:translate(0,-4px) scale(.9)}100%{transform:translate(7px,0) scale(1)}}
+#bk .chev{position:absolute;left:14px;top:2px;width:22px;height:22px;fill:none;stroke-linecap:round;stroke-linejoin:round;animation:nod 1.5s ease-in-out infinite}
+@keyframes nod{50%{transform:translateX(-3px)}}
+#read{align-self:center;margin-top:10px;font:800 11px var(--mono);letter-spacing:.06em;background:var(--ink);color:var(--paper);padding:6px 10px;border-radius:6px;opacity:0;transform:translateY(-4px);transition:opacity .12s,transform .12s;white-space:nowrap}
+#read.on{opacity:1;transform:none}
+.grow{flex:1}
+#call{position:fixed;left:50vw;top:42vh;transform:translate(-50%,0);text-align:center;opacity:0;transition:opacity .25s;pointer-events:none;width:min(88vw,520px)}
+body.wide #call{left:25vw;width:44vw}
+#call.on{opacity:1}
+#callw{display:inline-block;font:900 34px var(--mono);letter-spacing:.06em;background:var(--paper);border:2.5px solid var(--ink);border-radius:10px;padding:4px 14px;box-shadow:0 5px 0 var(--ink)}
+#call.hot #callw{background:var(--clay);color:#fffdf0}
+#call.bad #callw{background:var(--ink);color:var(--paper)}
+#calls{font:800 11px var(--mono);letter-spacing:.04em;margin-top:12px;white-space:pre-line;line-height:1.5;background:rgba(239,236,229,.9);border-radius:6px;padding:4px 8px;display:inline-block}
+#calls:empty{display:none}
+#hint{font:700 10px var(--mono);line-height:1.5;letter-spacing:.02em;margin-top:6px;padding-top:6px;border-top:1.5px dashed rgba(22,24,29,.25)}
+#hint b{color:var(--clay)}
+#hint.done{display:none}
+#side{display:none}
+body.wide #side{display:block;position:fixed;left:50vw;right:0;top:calc(env(safe-area-inset-top) + 24px + var(--sideh,40vh));padding:14px 20px;box-sizing:border-box}
+#side h3{margin:0 0 6px;font:800 10px var(--mono);letter-spacing:.14em;color:#ffb27a}
+#side p{margin:0 0 14px;font:800 13px var(--mono);line-height:1.45;letter-spacing:.02em;color:#f4f1e6}
+body.wide.demo #side{padding-top:96px}
+#side p:empty:before{content:"-";opacity:.4}
+#crease{display:none}
+body.wide #crease{display:block;position:fixed;left:calc(50vw - 1px);top:0;bottom:0;width:2px;background:var(--ink);opacity:.85}
+#sidelbl{display:none}
+body.wide #sidelbl{display:block;position:fixed;left:calc(50vw + 16px);top:calc(env(safe-area-inset-top) + 22px);font:800 10px var(--mono);letter-spacing:.14em;color:#fffdf0;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+#end{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(239,236,229,.72);opacity:0;pointer-events:none;transition:opacity .25s}
+body.wide #end{right:50vw}
+#end.on{opacity:1;pointer-events:auto}
+#endcard{background:#fffdf8;border:2.5px solid var(--ink);border-radius:14px;box-shadow:0 7px 0 var(--ink);padding:18px 22px;text-align:center;width:min(78vw,320px);transform:translateY(16px) scale(.96);transition:transform .38s cubic-bezier(.34,1.56,.64,1)}
+#end.on #endcard{transform:none}
+#endname{font:800 10px var(--mono);letter-spacing:.12em;color:var(--clay)}
+#score{font:900 64px var(--mono);line-height:1;margin-top:8px}#of{font:800 14px var(--mono);opacity:.55}
+#tally{font:800 11px var(--mono);margin-top:10px;letter-spacing:.04em}
+#best{font:800 11px var(--mono);margin-top:4px;color:var(--clay)}
+#endbtns{display:flex;gap:10px;margin-top:16px}
+#endbtns button{all:unset;flex:1;font:800 13px var(--mono);letter-spacing:.1em;padding:12px 0;border-radius:6px;border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);text-align:center;cursor:pointer}
+#endbtns button:active{transform:translateY(4px);box-shadow:none}
+#again{background:var(--paper)}#next{background:var(--ink);color:var(--paper)}
+`;
+const drillBody = `<canvas id="c"></canvas><canvas id="ink"></canvas><div id="safe"></div><div id="safeb"></div><div id="crease"></div>
+<div id="ui"><div id="card"><div id="row"><button id="bk" aria-label="Back"><span class="mot"><i></i><i></i><i></i><i></i><i></i><i></i></span><svg class="chev" viewBox="0 0 30 30"><path d="M19 5L8 15L19 25" stroke="#16181d" stroke-width="9"/><path d="M19 5L8 15L19 25" stroke="#fffdf0" stroke-width="4.5"/></svg></button><div id="lbl"></div><button id="show">SHOW ME</button></div><div id="name"></div><div id="tip"></div><div id="hint"><b>LEFT THUMB MOVES. RIGHT THUMB SWINGS:</b> pull back to turn (<b>low</b> = topspin, <b>high</b> = slice), flick up to hit. finish across you = crosscourt. soft and way up = <b>lob</b>.</div><div id="count"></div></div><div id="read"></div><div class="grow"></div></div>
+<div id="call"><b id="callw"></b><br><div id="calls"></div></div>
+<div id="demo"></div><div id="sidelbl">FROM THE SIDE</div>
+<div id="side"><h3>IT WAS</h3><p id="feedread"></p><h3>YOU HIT</h3><p id="youread"></p></div>
+<div id="end"><div id="endcard"><div id="endname"></div><div><span id="score"></span> <span id="of"></span></div><div id="tally"></div><div id="best"></div><div id="endbtns"><button id="again">AGAIN</button><button id="next">NEXT</button></div></div></div>`;
+emit('drill-html.ts', 'DRILL_HTML', page({ css: drillCss, body: drillBody, js: bundle('web/drill.js') }));
 
 // Opponent picker: the jewel case on the paper. Same ink, mono type and slide strip as home; the rival's color is the only other hue.
 const caseCss = homeCss + `
