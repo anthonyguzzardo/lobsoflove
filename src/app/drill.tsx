@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import { Link } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -29,7 +30,7 @@ const CUES: Record<string, Cue> = {
 };
 
 /**
- * The drill: a ball machine on a real court (web/drill.js). Every shot is one swipe: side, aim, pace, height and spin. On a wide
+ * The drill: a ball machine on a real court (web/drill.js). You run to the ball by yourself; four shot buttons hit (tap on time, drag to aim). PICK THE SHOT freezes each spot so you choose the percentage play. On a wide
  * screen (an unfolded foldable, an iPad) it splits at the middle: your court on the left, the read on the right.
  */
 export default function DrillScreen() {
@@ -69,10 +70,12 @@ export default function DrillScreen() {
     <View style={styles.root}>
       <StatusBar style="dark" />
       <SceneView scene={scene} html={DRILL_HTML} name="drill" cues={CUES} onMessage={onMessage} />
+      <Link href="/painted-court" style={styles.paintedLink}>Visit the painted courtyard</Link>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#efece5' },
+  paintedLink: { color: '#713e2d', backgroundColor: '#f5e7cc', textAlign: 'center', fontSize: 14, paddingTop: 14, paddingBottom: 28 },
 });

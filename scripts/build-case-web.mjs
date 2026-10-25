@@ -857,12 +857,38 @@ body.wide #end{right:50vw}
 #endbtns button{all:unset;flex:1;font:800 13px var(--mono);letter-spacing:.1em;padding:12px 0;border-radius:6px;border:2px solid var(--ink);box-shadow:0 4px 0 var(--ink);text-align:center;cursor:pointer}
 #endbtns button:active{transform:translateY(4px);box-shadow:none}
 #again{background:var(--paper)}#next{background:var(--ink);color:var(--paper)}
+/* The shot buttons (web/drill.js CONTROL = 'buttons'): four big keys along the bottom. Hold, drag sideways to aim (the arrow
+   leans), let go as the ball reaches you. */
+#shots{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);display:grid;grid-template-columns:repeat(4,1fr);gap:8px;touch-action:none;-webkit-user-select:none;user-select:none}
+body.wide #shots,body.wide #pick{right:calc(50vw + 12px)}
+#shots .say{grid-column:1/-1;justify-self:center;font:800 10px var(--mono);letter-spacing:.08em;margin-bottom:12px;background:#fffdf8;border:2px solid var(--ink);border-radius:999px;padding:3px 10px}
+body.pickmode #hint{display:none}
+#shots button{all:unset;position:relative;height:66px;border-radius:12px;border:2.5px solid var(--ink);box-shadow:0 5px 0 var(--ink);background:#fffdf8;color:var(--ink);font:900 13px var(--mono);letter-spacing:.06em;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:pointer;transition:transform .08s,box-shadow .08s}
+#shots button[data-t=topspin]{background:var(--clay);color:#fffdf0}
+#shots button[data-t=slice]{background:#2f6fd6;color:#fffdf0}
+#shots button[data-t=drop]{background:var(--ink);color:#fffdf0}
+#shots button.press,#shots button.demo{transform:translateY(5px);box-shadow:0 0 0 var(--ink)}
+#shots button:after{content:"";position:absolute;top:-22px;left:50%;border:8px solid transparent;border-bottom:11px solid var(--ink);transform:translateX(calc(-50% + var(--aim,0) * 46px)) rotate(calc(var(--aim,0) * 50deg));opacity:0;transition:opacity .1s}
+#shots button.aiming:after{opacity:1}
+body.pickmode #shots{display:none}
+/* PICK THE SHOT: the spot in one line, then the choices as big buttons. Grey until it freezes and asks. */
+#pick{display:none;position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);background:#fffdf8;border:2.5px solid var(--ink);border-radius:12px;box-shadow:0 5px 0 var(--ink);padding:10px}
+body.pickmode #pick{display:block}
+#pick .say{font:700 11.5px var(--mono);line-height:1.4;min-height:48px;margin-bottom:8px}
+#pick .say b{font-weight:900}#pick .say u{text-decoration:none;color:var(--clay);font-weight:900}
+#pick .opts{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:52px 52px;gap:8px}
+#pick button{all:unset;min-height:52px;box-sizing:border-box;border-radius:10px;border:2.5px solid var(--ink);box-shadow:0 4px 0 var(--ink);background:var(--clay);color:#fffdf0;font:900 13px var(--mono);letter-spacing:.04em;text-align:center;display:flex;align-items:center;justify-content:center;padding:4px 6px;cursor:pointer;transition:transform .08s,box-shadow .08s}
+#pick button:disabled{background:#e9e5dc;color:rgba(22,24,29,.45);border-color:rgba(22,24,29,.35);box-shadow:0 4px 0 rgba(22,24,29,.25)}
+#pick button.on{background:var(--ink);color:#fffdf0}
+#pick button:active:not(:disabled){transform:translateY(4px);box-shadow:0 0 0 var(--ink)}
 `;
 const drillBody = `<canvas id="c"></canvas><canvas id="ink"></canvas><div id="safe"></div><div id="safeb"></div><div id="crease"></div>
-<div id="ui"><div id="card"><div id="row"><button id="bk" aria-label="Back"><span class="mot"><i></i><i></i><i></i><i></i><i></i><i></i></span><svg class="chev" viewBox="0 0 30 30"><path d="M19 5L8 15L19 25" stroke="#16181d" stroke-width="9"/><path d="M19 5L8 15L19 25" stroke="#fffdf0" stroke-width="4.5"/></svg></button><div id="lbl"></div><button id="show">SHOW ME</button></div><div id="name"></div><div id="tip"></div><div id="hint"><b>LEFT THUMB MOVES. RIGHT THUMB SWINGS:</b> pull back to turn (<b>low</b> = topspin, <b>high</b> = slice), flick up to hit. finish across you = crosscourt. soft and way up = <b>lob</b>.</div><div id="count"></div></div><div id="read"></div><div class="grow"></div></div>
+<div id="ui"><div id="card"><div id="row"><button id="bk" aria-label="Back"><span class="mot"><i></i><i></i><i></i><i></i><i></i><i></i></span><svg class="chev" viewBox="0 0 30 30"><path d="M19 5L8 15L19 25" stroke="#16181d" stroke-width="9"/><path d="M19 5L8 15L19 25" stroke="#fffdf0" stroke-width="4.5"/></svg></button><div id="lbl"></div><button id="show">SHOW ME</button></div><div id="name"></div><div id="tip"></div><div id="hint"><b>YOU RUN TO IT BY YOURSELF.</b> tap a shot as the ball reaches you. drag the button <b>left or right</b> to aim.</div><div id="count"></div></div><div id="read"></div><div class="grow"></div></div>
 <div id="call"><b id="callw"></b><br><div id="calls"></div></div>
 <div id="demo"></div><div id="sidelbl">FROM THE SIDE</div>
 <div id="side"><h3>IT WAS</h3><p id="feedread"></p><h3>YOU HIT</h3><p id="youread"></p></div>
+<div id="shots"><div class="say">TAP AS IT REACHES YOU · DRAG TO AIM</div><button data-t="topspin">TOPSPIN</button><button data-t="slice">SLICE</button><button data-t="lob">LOB</button><button data-t="drop">DROP</button></div>
+<div id="pick"></div>
 <div id="end"><div id="endcard"><div id="endname"></div><div><span id="score"></span> <span id="of"></span></div><div id="tally"></div><div id="best"></div><div id="endbtns"><button id="again">AGAIN</button><button id="next">NEXT</button></div></div></div>`;
 emit('drill-html.ts', 'DRILL_HTML', page({ css: drillCss, body: drillBody, js: bundle('web/drill.js') }));
 

@@ -40,7 +40,7 @@ export function createHandoff({ renderer, post }) {
   const washMat = new THREE.ShaderMaterial({
     uniforms: { a: { value: 0 } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-    fragmentShader: 'uniform float a; varying vec2 vUv; void main(){ gl_FragColor = vec4(0.937, 0.925, 0.898, a * (0.55 + 0.4 * smoothstep(0.25, 0.85, vUv.y))); }',
+    fragmentShader: 'uniform float a; varying vec2 vUv; void main(){ gl_FragColor = vec4(0.937, 0.925, 0.898, a * (0.15 + 0.3 * smoothstep(0.1, 0.6, vUv.y))); }',
     transparent: true, depthTest: false, depthWrite: false,
   });
   const wash = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), washMat);
@@ -156,7 +156,9 @@ export function createHandoff({ renderer, post }) {
 
   function drawCard() {
     if (!st.mode) { card.innerHTML = ''; card.classList.remove('on'); return; }
-    card.classList.add('on');
+    // Answered: the card drops away at once instead of sitting there greyed out while he goes.
+    card.classList.toggle('on', !st.leaving);
+    if (st.leaving) return;
     const r = st.list[st.idx];
     if (st.mode === 'offer') {
       const chips = st.list.map((x, k) => (k === st.idx ? '' : `<button data-a="pick" data-i="${k}" class="chip">${esc(nameOf(x))}</button>`)).join('');
@@ -325,14 +327,17 @@ export function createHandoff({ renderer, post }) {
     carrier.position.set(fit.x, fit.y, 0);
     const [top, bottom, left, right] = rect();
     if (Number.isFinite(top) && bottom - top > 10) {
-      const wantS = clamp(fit.s * Math.min((band1 - band0) / (bottom - top), (W - 32) / (right - left)), 0.2, 1.6);
+      // He takes at most 60% of the band's height: a figure over the court, not a wall in front of it.
+      const wantS = clamp(fit.s * Math.min((0.6 * (band1 - band0)) / (bottom - top), (W - 32) / (right - left)), 0.2, 1);
       // While a racket is going behind his back or coming out, he keeps his size and place (only ever shrinking to fit), so a
       // swap does not make him swell and jump.
-      const settled = !st.show || st.show.phase === 'held';
+      const settled = !st.leaving && (!st.show || st.show.phase === 'held');
       const pxPerUnit = H / (2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
       if (wantS < fit.s) fit.s = wantS; else if (settled) fit.s += (wantS - fit.s) * 0.04;
       if (settled) {
-        fit.y -= (((band0 + band1) / 2 - (top + bottom) / 2) / pxPerUnit) * 0.25;
+        // His wisp ends just over the card, so he stands up out of it.
+        const target = band1 - 8 - (bottom - top) / 2;
+        fit.y -= ((target - (top + bottom) / 2) / pxPerUnit) * 0.25;
         fit.x -= (((left + right) / 2 - W / 2) / pxPerUnit) * 0.25;
       }
       if (top < band0) fit.y -= (band0 - top) / pxPerUnit; // never above the line, not even for a frame

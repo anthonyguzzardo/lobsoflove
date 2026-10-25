@@ -1,5 +1,14 @@
-// The drill: real-size hard court, real ball flight (web/lib/ballistics.js), two thumbsticks.
+// The drill: real-size hard court, real ball flight (web/lib/ballistics.js).
 //
+// CONTROL (2026-10-25, the user: the sticks were useless and too hard to press): you run to the ball by yourself, like phone and
+// console tennis games. You pick the shot with four big buttons, TOPSPIN / SLICE / LOB / DROP, and tap one as the ball reaches
+// you: EARLY / PERFECT / LATE decides how clean it is. Drag a button left or right while it is down to aim. The stick code below
+// is kept (CONTROL = 'sticks' brings it back) but is off.
+//
+// PICK THE SHOT: a real situation plays out (where you are, where he is, what is coming), freezes as the ball reaches you, and you
+// choose the shot. You score for the percentage play, it plays out, and the call says why.
+//
+// The old stick controls, for reference:
 // Left thumb moves you. Right thumb swings (web/lib/stroke.js reads it):
 // - Pull back: your shoulders turn and the racket goes back on that side. Right is a forehand, left a backhand. How high you pull
 //   is the racket face: low closes it (topspin), level is flat, high opens it (slice). The face shows on the racket and the stick.
@@ -43,6 +52,7 @@ const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
 // ---------- Modes ----------
 // Drills: side is which wing the feeds go to (+1 forehand, -1 backhand, 0 either); target is a far-court box [x0, x1, z0, z1].
 const MODES = [
+  { id: 'pick', kind: 'pick', level: 1, name: 'PICK THE SHOT', tip: 'it freezes as the ball gets to you. pick the shot with the best odds.', demo: { shot: 'THE PERCENTAGE PLAY', why: 'read where he is and where you are. the safe shot until you get the ball to finish.', pros: 'DJOKOVIC, NADAL' } },
   { id: 'xfh', kind: 'drill', name: 'CROSSCOURT FOREHAND', tip: 'feeds to your forehand. finish across you: deep and crosscourt.', side: 1, feeds: ['drive', 'drive', 'heavy', 'flat'], target: [-SINGLES, -1.0, -HALF, -8.4], demo: { shot: 'TOPSPIN FOREHAND, CROSSCOURT', why: 'the long diagonal over the low middle of the net: the safest deep ball there is.', pros: 'NADAL, ALCARAZ', wing: 1, back: { x: 0.6, y: 0.85 }, finish: { x: -0.75, y: -1.3 }, ms: 120 } },
   { id: 'dtlbh', kind: 'drill', name: 'BACKHAND DOWN THE LINE', tip: 'feeds to your backhand. finish out to the left: up the line.', side: -1, feeds: ['drive', 'slice', 'drive', 'heavy'], target: [-SINGLES, -1.6, -HALF, -8.0], demo: { shot: 'BACKHAND DOWN THE LINE', why: 'the change of direction: shorter court, higher net at the sides, so pick a ball you are set on.', pros: 'DJOKOVIC, WAWRINKA', wing: -1, back: { x: -0.6, y: 0.8 }, finish: { x: -0.25, y: -1.3 }, ms: 120 } },
   { id: 'read', kind: 'drill', name: 'READ IT', tip: 'anything, either side. move, turn the right way, go deep.', side: 0, feeds: ['drive', 'slice', 'heavy', 'lob', 'short', 'flat'], target: [-SINGLES, SINGLES, -HALF, -8.6], demo: { shot: 'THE RALLY BALL', why: 'read it early, get set, then topspin it deep through the middle. it buys you time.', pros: 'SINNER, DJOKOVIC', wing: 0, back: { x: 0.6, y: 0.85 }, finish: { x: -0.3, y: -1.3 }, ms: 120 } },
@@ -59,13 +69,77 @@ const BOTS = [
   { speed: 6.6, err: 0.05, aim: [1.5, 3.8], feeds: ['drive', 'heavy', 'heavy', 'slice', 'short', 'flat', 'drop'] },
 ];
 const BALLS = 10;
+// PICK THE SHOT: real spots. x > 0 is your right (forehand), z > 0 your half; the baseline is z = 11.9, singles sidelines x = +-4.1.
+// `inc` is the ball he sends (a feed type and where it lands on your side). Each option: the shot (where it is aimed, launch angle,
+// spin), how often it goes in from here (p), and its grade (2 the percentage play, 1 fine, 0 low percentage), and why.
+const SITS = [
+  { name: 'PULLED WIDE', read: 'you are pulled way out on your forehand. he is in the middle.', you: { x: 5.4, z: 12.2 }, opp: { x: -0.4, z: -10.6 }, inc: { type: 'drive', x: 4.0, z: 9.2 },
+    options: [
+      { label: 'HIGH CROSSCOURT', x: -2.8, z: -9.8, elev: 16, spin: 300, p: 0.85, grade: 2, why: 'over the low middle of the net into the longest court, and the height buys you time to get back.' },
+      { label: 'DOWN THE LINE', x: 3.0, z: -9.6, elev: 6, spin: 60, p: 0.4, grade: 0, why: 'stretched wide, the line is over the high side of the net into the short court.' },
+      { label: 'DROP SHOT', x: -1.0, z: -2.8, elev: 20, spin: -340, p: 0.3, grade: 0, why: 'a drop from behind the baseline gives him all the time in the world.' },
+      { label: 'LOB', x: 0, z: -10.4, elev: 45, spin: 140, p: 0.75, grade: 1, why: 'safe, but he is on the baseline, not the net. high crosscourt does the same with more margin.' },
+    ] },
+  { name: 'HE IS DEEP', read: 'short ball to you. he is four meters behind his baseline.', you: { x: 1.0, z: 7.2 }, opp: { x: 1.4, z: -15.2 }, inc: { type: 'short', x: 1.2, z: 5.6 },
+    options: [
+      { label: 'DROP SHOT', x: -2.0, z: -2.6, elev: 20, spin: -340, p: 0.75, grade: 2, why: 'he is way back. the shortest ball wins: he cannot get there.' },
+      { label: 'DEEP CROSSCOURT', x: -2.6, z: -9.6, elev: 12, spin: 300, p: 0.88, grade: 1, why: 'safe, but it goes right back to where he is waiting.' },
+      { label: 'BIG FLAT', x: 2.8, z: -10.0, elev: 4, spin: 50, p: 0.55, grade: 0, why: 'power to a man that deep gives him time. a drop takes it away.' },
+    ] },
+  { name: 'HE IS ON THE NET', read: 'he came in and is tight on the net. you are on your baseline.', you: { x: 0.5, z: 12.0 }, opp: { x: -0.8, z: -2.4 }, inc: { type: 'slice', x: 0.8, z: 9.6 },
+    options: [
+      { label: 'LOB', x: 1.5, z: -10.2, elev: 45, spin: 140, p: 0.75, grade: 2, why: 'he is tight on the net: up over his racket, and he has to turn and run.' },
+      { label: 'PASS DOWN THE LINE', x: 3.4, z: -10.0, elev: 6, spin: 220, p: 0.5, grade: 1, why: 'a good pass, but from the baseline the window past him is small.' },
+      { label: 'DRIVE AT HIM', x: -0.8, z: -8.0, elev: 7, spin: 250, p: 0.75, grade: 0, why: 'straight at a man on the net is the volley he wants.' },
+      { label: 'DROP SHOT', x: 0, z: -2.0, elev: 20, spin: -340, p: 0.4, grade: 0, why: 'he is already standing there.' },
+    ] },
+  { name: 'NEUTRAL RALLY', read: 'baseline to baseline. nothing special about this ball.', you: { x: 0.3, z: 12.3 }, opp: { x: 0, z: -12.5 }, inc: { type: 'drive', x: 0.8, z: 9.6 },
+    options: [
+      { label: 'DEEP CROSSCOURT', x: -2.6, z: -9.8, elev: 12, spin: 300, p: 0.9, grade: 2, why: 'nothing on: go deep over the low middle of the net and let him miss first.' },
+      { label: 'DOWN THE LINE', x: 3.2, z: -9.6, elev: 8, spin: 200, p: 0.6, grade: 1, why: 'can work, but changing direction off a neutral ball is the riskier play.' },
+      { label: 'DROP SHOT', x: -1.0, z: -2.6, elev: 20, spin: -340, p: 0.3, grade: 0, why: 'from the baseline a drop travels 24 m. he sees it coming.' },
+      { label: 'LOB', x: 0, z: -10.4, elev: 45, spin: 140, p: 0.8, grade: 0, why: 'he is on the baseline: a lob just hands him a high ball.' },
+    ] },
+  { name: 'HE IS PULLED WIDE', read: 'he is out wide on your left. the ball to you is short.', you: { x: 1.0, z: 9.0 }, opp: { x: -5.4, z: -11.4 }, inc: { type: 'short', x: 1.2, z: 6.8 },
+    options: [
+      { label: 'TO THE OPEN COURT', x: 3.0, z: -9.0, elev: 9, spin: 280, p: 0.82, grade: 2, why: 'the whole right side is empty. hit it there.' },
+      { label: 'BACK TO HIM', x: -3.0, z: -9.6, elev: 12, spin: 300, p: 0.9, grade: 0, why: 'safe, but it goes straight to where he is running.' },
+      { label: 'LOB', x: 0, z: -10.4, elev: 45, spin: 140, p: 0.7, grade: 0, why: 'you are inside the court and he is scrambling. take time away, do not give it.' },
+    ] },
+  { name: 'THE SITTER', read: 'a high, short, slow ball. he is on the right of his baseline.', you: { x: -0.5, z: 6.4 }, opp: { x: 2.5, z: -11.6 }, inc: { type: 'lob', x: -0.4, z: 4.6 },
+    options: [
+      { label: 'PUT IT AWAY', x: -3.2, z: -8.6, elev: 3, spin: 60, p: 0.85, grade: 2, why: 'high, short and slow: step in and hit flat into the open side. this is the ball you were working for.' },
+      { label: 'ROLL IT DEEP', x: 1.0, z: -9.8, elev: 12, spin: 300, p: 0.95, grade: 1, why: 'safe, but you let him back into the point.' },
+      { label: 'DROP SHOT', x: -2.0, z: -2.6, elev: 20, spin: -340, p: 0.55, grade: 1, why: 'can work, but a sitter is for finishing, not touch.' },
+    ] },
+  { name: 'YOU ARE IN TROUBLE', read: 'you are deep and stretched on your backhand. he moved inside the court.', you: { x: -4.6, z: 14.0 }, opp: { x: 0, z: -7.6 }, inc: { type: 'heavy', x: -3.6, z: 10.6 },
+    options: [
+      { label: 'HIGH AND DEEP', x: 0, z: -10.4, elev: 30, spin: 220, p: 0.8, grade: 2, why: 'out of position: a high deep ball through the middle buys time to get back. reset the point.' },
+      { label: 'GO FOR THE LINE', x: -3.6, z: -10.0, elev: 4, spin: 50, p: 0.25, grade: 0, why: 'three meters behind the baseline and stretched, the line is a lottery ticket.' },
+      { label: 'DROP SHOT', x: -1.0, z: -2.6, elev: 20, spin: -340, p: 0.2, grade: 0, why: 'a drop from the back fence never makes it.' },
+    ] },
+  { name: 'LOW SLICE', read: 'a low slice to your backhand. he is back on his baseline.', you: { x: -1.6, z: 10.8 }, opp: { x: 0.5, z: -12.0 }, inc: { type: 'slice', x: -1.5, z: 8.6 },
+    options: [
+      { label: 'SLICE BACK DEEP', x: 0, z: -10.0, elev: 6, spin: -250, p: 0.85, grade: 2, why: 'the ball stays low: you cannot rip it up over the net. slice it back deep and wait for a better one.' },
+      { label: 'RIP IT CROSSCOURT', x: 2.5, z: -9.5, elev: 12, spin: 350, p: 0.55, grade: 1, why: 'possible, but a low ball needs a lot of lift. the net comes into play.' },
+      { label: 'FLAT DOWN THE LINE', x: -3.3, z: -9.6, elev: 4, spin: 50, p: 0.3, grade: 0, why: 'a low ball hit flat over the high side of the net: the net wins.' },
+    ] },
+];
+// The four shot buttons: what each one hits (aim is added by dragging; drills aim at their target box by default).
+const SHOTS = {
+  topspin: { label: 'TOPSPIN', elev: 12, spin: 300, z: -9.6 },
+  slice: { label: 'SLICE', elev: 6, spin: -250, z: -9.2 },
+  lob: { label: 'LOB', elev: 45, spin: 150, z: -10.2 },
+  drop: { label: 'DROP', elev: 20, spin: -340, z: -2.8 },
+};
+const CONTROL = 'buttons';
 const GAME = 7;
 // Each feed: launch angle, spin (rad/s), and where it lands on the other side (depth from the net).
 const FEEDS = {
-  drive: { name: 'TOPSPIN', elev: 7, spin: 260, depth: [8.6, 10.8] },
-  heavy: { name: 'HEAVY TOPSPIN', elev: 12, spin: 400, depth: [9.0, 11.0] },
-  flat: { name: 'FLAT', elev: 4, spin: 50, depth: [8.4, 10.6] },
-  slice: { name: 'SLICE', elev: 3, spin: -230, depth: [8.0, 10.2] },
+  drive: { name: 'TOPSPIN', elev: 10, spin: 260, depth: [8.6, 10.8] },
+  heavy: { name: 'HEAVY TOPSPIN', elev: 15, spin: 400, depth: [9.0, 11.0] },
+  flat: { name: 'FLAT', elev: 7, spin: 50, depth: [8.4, 10.6] },
+  slice: { name: 'SLICE', elev: 6, spin: -230, depth: [8.0, 10.2] },
   lob: { name: 'MOONBALL', elev: 50, spin: 140, depth: [9.6, 11.2] },
   short: { name: 'SHORT BALL', elev: 6, spin: 160, depth: [4.8, 6.2] },
   drop: { name: 'DROP SHOT', elev: 16, spin: -340, depth: [2.4, 4.4] },
@@ -394,7 +468,7 @@ function layout() {
   safe.bottom = $('safeb').offsetHeight;
   L.top = $('card').getBoundingClientRect().bottom + 14;
   // The thumbs live at the bottom: keep the court (and you on it) above them.
-  L.bottom = safe.bottom + 2 * RAD + 30;
+  L.bottom = CONTROL === 'sticks' ? safe.bottom + 2 * RAD + 30 : window.innerHeight - $(cur().kind === 'pick' ? 'pick' : 'shots').getBoundingClientRect().top + 10; // whichever bar is showing
   renderer.setSize(L.w, L.h, false);
   ink.width = L.w * renderer.getPixelRatio();
   ink.height = L.h * renderer.getPixelRatio();
@@ -432,7 +506,7 @@ function startDemo() {
   $('show').textContent = 'STOP';
   const d = cur().demo;
   ui.tip.textContent = `THE SHOT: ${d.shot}. ${d.why} USED BY ${d.pros}.`;
-  caption('WATCH THE THUMBS. TOUCH A STICK TO TAKE OVER.');
+  caption(cur().kind === 'pick' ? 'WATCH: IT FREEZES, THE BEST SHOT IS PICKED, AND THE CALL SAYS WHY.' : CONTROL === 'buttons' ? 'WATCH: HE RUNS TO IT. THE SHOT IS TAPPED JUST AS THE BALL ARRIVES. TAP ANY SHOT TO TAKE OVER.' : 'WATCH THE THUMBS. TOUCH A STICK TO TAKE OVER.');
 }
 function stopDemo() {
   if (!D.on) return;
@@ -529,20 +603,23 @@ function demoStep() {
 
 function showMode() {
   const m = cur();
-  ui.label.textContent = `${m.kind === 'rally' ? 'RALLY' : 'DRILL'} ${mode + 1} OF ${MODES.length} · TAP TO CHANGE`;
+  ui.label.textContent = `${m.kind === 'rally' ? 'RALLY' : m.kind === 'pick' ? 'THINK' : 'DRILL'} ${mode + 1} OF ${MODES.length} · TAP TO CHANGE`;
   ui.name.textContent = m.name;
   ui.tip.textContent = m.tip;
   target.visible = m.kind === 'drill';
+  document.body.classList.toggle('pickmode', m.kind === 'pick');
+  if (m.kind === 'pick') drawPick();
   if (m.kind === 'drill') setTarget(m.target);
   netman.g.visible = !!m.netman;
   machine.visible = m.kind === 'drill';
-  bot.g.visible = m.kind === 'rally';
+  bot.g.visible = m.kind === 'rally' || m.kind === 'pick';
   showCount();
 }
 function showCount() {
   const m = cur();
   const best = bests[m.id];
-  if (m.kind === 'rally') ui.count.textContent = `YOU ${score[0]} · BOT ${score[1]}${best ? ` · WINS ${best}` : ''}`;
+  if (m.kind === 'pick') ui.count.textContent = `SPOT ${Math.min(balls + 1, SITS.length)} OF ${SITS.length} · ${points} PTS${best != null ? ` · BEST ${best}` : ''}`;
+  else if (m.kind === 'rally') ui.count.textContent = `YOU ${score[0]} · BOT ${score[1]}${best ? ` · WINS ${best}` : ''}`;
   else ui.count.textContent = `BALL ${Math.min(balls + 1, BALLS)} OF ${BALLS} · ${points} PTS${best != null ? ` · BEST ${best}` : ''}`;
 }
 function stamp(word, sub = '', tone = '') {
@@ -569,7 +646,10 @@ function startMode(k) {
   Object.assign(P, { x: 0, z: cur().start || HOME, vx: 0, vz: 0 });
   Object.assign(B, { x: 0, z: -HOME, vx: 0, vz: 0, tx: 0, tz: -HOME, plan: null });
   ui.end.classList.remove('on');
+  Object.assign(PK, { order: [], i: 0, sit: null, frozen: false, chosen: null });
+  A.plan = null; A.pend = null; A.missAt = null;
   showMode();
+  layout();
 }
 $('show').addEventListener('click', () => { post({ type: 'pick' }); if (D.on) stopDemo(); else startDemo(); });
 $('card').addEventListener('click', (e) => { if (e.target.closest('#bk') || e.target.closest('#show')) return; post({ type: 'pick' }); startMode(mode + 1); });
@@ -621,6 +701,7 @@ function describeBall(b, from) {
 // ---------- Machine and robot feeding ----------
 function setBall(b, owner) {
   ball = { ...b, owner, age: 0, done: false, nm: false };
+  A.plan = null; A.tried = false; A.pend = null; A.missAt = null;
   if (D.on && owner !== 'you') D.pending = true;
   trailPts.length = 0;
   ghostMat.color.setHex(spinColor(b.s));
@@ -689,7 +770,8 @@ function planBot() {
   const sx = c.x + wing * 0.8;
   const sz = c.z - 0.3;
   const need = Math.hypot(sx - B.x, sz - B.z) / BOTS[cur().level].speed + 0.25;
-  B.plan = { t: c.t, x: c.x, y: c.y, z: c.z, reach: need <= c.t + 0.05, stretch: clamp(need / Math.max(0.3, c.t), 0, 1) };
+  const real = c.t / ballTime(); // the robot runs in real time, the ball in slowed time
+  B.plan = { t: c.t, x: c.x, y: c.y, z: c.z, reach: need <= real + 0.05, stretch: clamp(need / Math.max(0.3, real), 0, 1) };
   B.tx = clamp(sx, -RUN_X, RUN_X);
   B.tz = clamp(sz, -RUN_Z, -1);
 }
@@ -706,6 +788,7 @@ function stickPos(s) {
   return { x: (s.x - s.ox) / RAD, y: (s.y - s.oy) / RAD };
 }
 function onDown(e) {
+  if (CONTROL !== 'sticks') return;
   if (ui.end.classList.contains('on')) return;
   if (e.target.closest && e.target.closest('#card')) return;
   // Touching a stick takes over from show-me.
@@ -846,6 +929,230 @@ const youText = () => {
   return `${shot.kind === 'SMASH' ? 'OVERHEAD' : s.wing > 0 ? 'FOREHAND' : 'BACKHAND'}, ${shot.kind}, ${kmh(hit.speed)} KM/H, ${hit.timing}${q < 0.4 ? ', OFF CENTRE' : ''}`;
 };
 
+// ---------- You run to it; the buttons hit ----------
+// A: the plan for the ball coming to you (where to meet it, at what age of the ball), a tapped shot waiting for the ball, and when
+// the ball reached you untouched (a late tap still counts for 0.22 s).
+const A = { plan: null, tried: false, pend: null, missAt: null };
+const remaining = () => (A.plan && ball ? (A.plan.at - ball.age) / ballTime() : Infinity);
+function planAuto() {
+  A.tried = true;
+  const c = (cur().volley && findVolley(ball)) || findContact(ball, 1, cur().id === 'drop');
+  A.plan = c ? { c, at: ball.age + c.t, wing: c.x >= P.x ? 1 : -1 } : null;
+}
+const BACKS = { topspin: { x: 0.6, y: 0.85 }, slice: { x: 0.6, y: -0.5 }, lob: { x: 0.55, y: 0.8 }, drop: { x: 0.75, y: -0.45 } };
+const flashRead = (text) => { ui.read.textContent = text; ui.read.classList.add('on'); clearTimeout(flashRead.t); flashRead.t = setTimeout(() => ui.read.classList.remove('on'), 900); };
+/** A shot button let go. `aim` is -1 (left) to 1 (right). */
+function fire(type, aim) {
+  if (cur().kind === 'pick' || ui.end.classList.contains('on')) return;
+  if (!ball || ball.done || ball.owner === 'you' || !A.plan) { flashRead('WAIT FOR THE BALL'); return; }
+  if (A.missAt != null) {
+    const late = time - A.missAt;
+    if (late <= 0.22) hitAuto(type, aim, -late);
+    return;
+  }
+  if (remaining() > 1.1) { flashRead('WAIT: TAP AS IT REACHES YOU'); return; }
+  A.pend = { type, aim, at: time };
+  SW.phase = 'back';
+  SW.wing = A.plan.wing;
+  SW.back = { x: BACKS[type].x * A.plan.wing, y: BACKS[type].y };
+}
+/** Hit it now. `e` is how early the tap was in seconds (negative: late). */
+function hitAuto(type, aim, e) {
+  const b = ball;
+  const wing = A.plan ? A.plan.wing : 1;
+  const ae = Math.abs(e);
+  const word = ae < 0.1 ? 'PERFECT' : e > 0 ? 'EARLY' : 'LATE';
+  const k = clamp((ae - 0.1) / 0.4, 0, 1);
+  const framed = ae > 0.5;
+  const S = SHOTS[type];
+  const t = cur().target;
+  const base = cur().kind === 'drill' && t ? (t[0] + t[1]) / 2 : 0;
+  let tx = clamp(base + aim * (SINGLES - 0.8), -SINGLES + 0.5, SINGLES - 0.5);
+  let tz = type === 'drop' ? S.z : cur().kind === 'drill' && t ? Math.max(t[2] + 0.8, Math.min(S.z, (t[2] + t[3]) / 2)) : S.z;
+  // Early pulls it across you, late pushes it out the other way; both lose depth control.
+  tx += -wing * Math.sign(e) * k * 3.5;
+  tz += (Math.random() < 0.5 ? -1 : 1) * k * 2.6;
+  let elev = S.elev;
+  let spin = S.spin;
+  const isVolley = b.bounces === 0 && b.z > 0;
+  const isSmash = b.y > 2.1 && type !== 'lob' && type !== 'drop';
+  if (isSmash) { tz = -8.8 + k * 3; elev = -6; spin = 40; } else if (isVolley && type !== 'lob' && type !== 'drop') { elev = 5 + clamp((1.0 - b.y) * 8, 0, 6); tz = Math.min(tz, -7.5); }
+  let netted = false;
+  if (framed) {
+    const miss = pick(['long', 'wide', 'net']);
+    if (miss === 'long') tz = -rand(12.5, 13.6);
+    else if (miss === 'wide') tx = Math.sign(tx || 1) * rand(4.6, 5.4);
+    else netted = true;
+  }
+  const nb = solveLaunch({ x: b.x, y: Math.max(b.y, 0.35), z: b.z }, { x: tx, z: tz }, elev, spin);
+  if (netted) nb.vy -= 2.5;
+  setBall(nb, 'you');
+  const speed = Math.hypot(nb.vx, nb.vy, nb.vz);
+  const kind = isSmash ? 'SMASH' : isVolley ? 'VOLLEY' : type === 'drop' ? 'DROP SHOT' : S.label;
+  shot = { stroke: { wing, spinKind: type, lob: type === 'lob', drop: type === 'drop' }, hit: { speed, timing: framed ? 'FRAMED' : word === 'PERFECT' ? 'ON TIME' : word }, q: 1 - k, kind };
+  P.swingT = 0;
+  P.wing = wing;
+  SW.phase = 'idle';
+  A.plan = null;
+  A.pend = null;
+  A.missAt = null;
+  hits += 1;
+  rally += 1;
+  flashRead(framed ? `${word}: FRAMED IT` : word);
+  if (isRally()) planBot();
+  post({ type: 'hit', q: word === 'PERFECT' ? 1 : framed ? 0.2 : 0.6 });
+}
+/** Each step: plan the ball coming in, run there, and hit when a tapped shot meets it. */
+function autoStep(dt) {
+  if (ball && ball.owner !== 'you' && !ball.done && !A.tried) planAuto();
+  if (A.plan && ball && !PK.frozen) {
+    if (A.pend && ball.age >= A.plan.at) hitAuto(A.pend.type, A.pend.aim, time - A.pend.at);
+    else if (cur().kind === 'pick' && PK.chosen != null && ball.age >= A.plan.at) pickHit();
+    else if (!A.pend && A.missAt == null && ball.age >= A.plan.at) A.missAt = time;
+    else if (A.missAt != null && time - A.missAt > 0.22) { A.plan = null; A.missAt = null; SW.phase = 'idle'; }
+    // SHOW ME: the right shot, tapped right on time.
+    if (D.on && A.plan && !A.pend && cur().kind !== 'pick' && remaining() < 0.06) {
+      const d = (cur().demo.shot || '').toUpperCase();
+      const type = d.includes('LOB') ? 'lob' : d.includes('DROP') ? 'drop' : d.includes('VOLLEY') || d.includes('SLICE') ? 'slice' : 'topspin';
+      $('shots').querySelector(`[data-t="${type}"]`)?.classList.add('demo');
+      setTimeout(() => $('shots').querySelector('.demo')?.classList.remove('demo'), 400);
+      fire(type, 0);
+    }
+  }
+  // Run: to the spot an arm and a racket from where you meet it, or back to the middle. Up to 6.2 m/s.
+  let sx = 0; let sz = cur().start || HOME;
+  if (A.plan) { sx = A.plan.c.x - A.plan.wing * 0.85; sz = A.plan.c.z + 0.3; }
+  else if (cur().kind === 'pick' && PK.sit && !(ball && ball.owner === 'you')) { sx = P.x; sz = P.z; }
+  const dx = sx - P.x; const dz = sz - P.z;
+  const dist = Math.hypot(dx, dz);
+  const sp = PK.frozen ? 0 : Math.min(6.2, dist * 5);
+  const tvx = dist > 0.03 ? (dx / dist) * sp : 0;
+  const tvz = dist > 0.03 ? (dz / dist) * sp : 0;
+  P.vx += (tvx - P.vx) * Math.min(1, dt * 10);
+  P.vz += (tvz - P.vz) * Math.min(1, dt * 10);
+  if (PK.frozen) { P.vx = 0; P.vz = 0; }
+  P.x = clamp(P.x + P.vx * dt, -RUN_X, RUN_X);
+  P.z = clamp(P.z + P.vz * dt, 0.6, RUN_Z);
+  // Turn sideways as it comes in, on the side you will hit it.
+  if (A.plan && !A.pend && remaining() < 0.5 && SW.phase === 'idle') { SW.wing = A.plan.wing; }
+}
+
+// The shot buttons: press, drag sideways to aim (the arrow shows it), let go to hit.
+{
+  const bar = $('shots');
+  let held = null;
+  bar.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    e.preventDefault();
+    if (D.on) stopDemo();
+    held = { b, x: e.clientX, id: e.pointerId, aim: 0 };
+    b.classList.add('press');
+    try { b.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+    post({ type: 'pick' });
+  });
+  bar.addEventListener('pointermove', (e) => {
+    if (!held || e.pointerId !== held.id) return;
+    held.aim = clamp((e.clientX - held.x) / 70, -1, 1);
+    held.b.style.setProperty('--aim', held.aim.toFixed(2));
+    held.b.classList.toggle('aiming', Math.abs(held.aim) > 0.15);
+  });
+  const up = (e) => {
+    if (!held || e.pointerId !== held.id) return;
+    const { b, aim } = held;
+    held = null;
+    b.classList.remove('press', 'aiming');
+    b.style.setProperty('--aim', '0');
+    if (e.type === 'pointerup') fire(b.dataset.t, aim);
+  };
+  bar.addEventListener('pointerup', up);
+  bar.addEventListener('pointercancel', up);
+}
+
+// ---------- PICK THE SHOT ----------
+const PK = { order: [], i: 0, sit: null, frozen: false, chosen: null, frozenAt: 0 };
+function pickSetup() {
+  if (!PK.order.length || PK.i >= PK.order.length) { PK.order = SITS.map((_, k) => k).sort(() => Math.random() - 0.5); PK.i = 0; }
+  const sit = SITS[PK.order[PK.i]];
+  PK.i += 1;
+  PK.sit = sit;
+  PK.frozen = false;
+  PK.chosen = null;
+  Object.assign(P, { x: sit.you.x, z: sit.you.z, vx: 0, vz: 0 });
+  Object.assign(B, { x: sit.opp.x, z: sit.opp.z, vx: 0, vz: 0, tx: sit.opp.x, tz: sit.opp.z, plan: null });
+  const f = FEEDS[sit.inc.type];
+  const b = solveLaunch({ x: sit.opp.x - 0.6, y: 1.0, z: sit.opp.z }, { x: sit.inc.x, z: sit.inc.z }, f.elev, f.spin);
+  b.type = sit.inc.type;
+  setBall(b, 'bot');
+  B.swingT = 0;
+  incoming = describeBall(b, 'IT WAS');
+  drawPick();
+  post({ type: 'feed' });
+}
+function drawPick() {
+  const sit = PK.sit;
+  const box = $('pick');
+  if (!sit) { box.innerHTML = '<div class="say">GET READY.</div><div class="opts"><button disabled>-</button><button disabled>-</button></div>'; return; }
+  const live = PK.frozen && PK.chosen == null;
+  setTimeout(layout, 0); // the card's height can change with the spot: keep the court and you above it
+  box.innerHTML = `<div class="say"><b>${sit.name}.</b> ${sit.read}${live ? ' <u>PICK ONE.</u>' : ''}</div><div class="opts">${sit.options.map((o, k) => `<button data-k="${k}"${live ? '' : ' disabled'}${PK.chosen === k ? ' class="on"' : ''}>${o.label}</button>`).join('')}</div>`;
+}
+$('pick').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b || b.disabled) return;
+  choose(Number(b.dataset.k));
+});
+function choose(k) {
+  if (!PK.frozen || PK.chosen != null) return;
+  PK.chosen = k;
+  PK.frozen = false;
+  post({ type: 'pick' });
+  drawPick();
+}
+/** The chosen shot, at contact: it goes in as often as it would from here. */
+function pickHit() {
+  const o = PK.sit.options[PK.chosen];
+  const b = ball;
+  let tx = o.x + rand(-0.5, 0.5);
+  let tz = o.z + rand(-0.6, 0.6);
+  let netted = false;
+  PK.made = Math.random() < o.p;
+  if (!PK.made) {
+    const miss = o.elev >= 40 ? 'long' : o.spin < -300 ? 'net' : pick(['long', 'wide', 'net']);
+    if (miss === 'long') tz = -rand(12.5, 13.4);
+    else if (miss === 'wide') tx = Math.sign(tx || 1) * rand(4.6, 5.3);
+    else netted = true;
+  }
+  const nb = solveLaunch({ x: b.x, y: Math.max(b.y, 0.35), z: b.z }, { x: tx, z: tz }, o.elev, o.spin);
+  if (netted) nb.vy -= 2.5;
+  const wing = A.plan ? A.plan.wing : 1;
+  setBall(nb, 'you');
+  shot = { stroke: { wing, spinKind: 'flat', lob: o.elev >= 40, drop: o.spin < -300 && o.z > -4 }, hit: { speed: Math.hypot(nb.vx, nb.vy, nb.vz), timing: 'ON TIME' }, q: 1, kind: o.label };
+  P.swingT = 0;
+  P.wing = wing;
+  A.plan = null;
+  planBot();
+  post({ type: 'hit', q: 1 });
+}
+/** How the pick played out: you score for the choice, the ball just shows what happened. */
+function pickResult(outcome) {
+  const sit = PK.sit;
+  const o = sit.options[PK.chosen];
+  const best = sit.options.find((x) => x.grade === 2);
+  if (D.on) { demoResult(o.grade === 2 ? 'BEST SHOT' : 'OK', 'hot', `${outcome}. ${o.why}`); PK.sit = null; drawPick(); return; }
+  points += o.grade;
+  if (o.grade === 2) tally.target += 1; else if (o.grade === 1) tally.in += 1; else tally.miss += 1;
+  balls += 1;
+  readout();
+  const word = o.grade === 2 ? 'BEST SHOT' : o.grade === 1 ? 'OK SHOT' : 'LOW ODDS';
+  const sub = `${outcome}. ${o.why}${o.grade === 2 ? '' : `\nBEST: ${best.label}. ${best.why}`}`;
+  stamp(word, sub, o.grade === 2 ? 'hot' : o.grade === 0 ? 'bad' : '');
+  post({ type: o.grade === 2 ? 'target' : o.grade === 0 ? 'miss' : 'pick' });
+  endBall(o.grade === 2 ? 3.2 : 4.6);
+  PK.sit = null;
+  if (balls >= SITS.length) finishAt = time + 2.6;
+}
+
 // ---------- Results ----------
 function drillResult(word, pts, tone, sub) {
   if (D.on) { demoResult(word, tone, sub); return; }
@@ -906,8 +1213,8 @@ function finish() {
     const isBest = prev == null || points > prev;
     if (isBest) bests[m.id] = points;
     $('score').textContent = `${points}`;
-    $('of').textContent = `/ ${BALLS * 2}`;
-    $('tally').textContent = `${tally.target} TARGET · ${tally.in} IN · ${tally.miss} MISSED`;
+    $('of').textContent = `/ ${(m.kind === 'pick' ? SITS.length : BALLS) * 2}`;
+    $('tally').textContent = m.kind === 'pick' ? `${tally.target} BEST · ${tally.in} OK · ${tally.miss} LOW ODDS` : `${tally.target} TARGET · ${tally.in} IN · ${tally.miss} MISSED`;
     $('best').textContent = isBest ? (prev == null ? 'FIRST SCORE' : `NEW BEST. WAS ${prev}`) : `BEST ${prev}`;
     post({ type: 'drill', id: m.id, points, best: isBest });
   }
@@ -922,7 +1229,7 @@ function step(dt) {
     phase = 'play';
     rally = 0;
     shot = null;
-    if (isRally()) botServe(); else machineFeed();
+    if (isRally()) botServe(); else if (cur().kind === 'pick') pickSetup(); else machineFeed();
   }
   if (phase === 'dead' && time >= nextAt && finishAt === Infinity) {
     phase = 'wait';
@@ -934,6 +1241,8 @@ function step(dt) {
   if (SW.phase === 'fwd' && SW.last && performance.now() / 1000 - SW.last.now > 0.06) letGo(SW.last.n, SW.last.now);
   if (ball) stepLive(dt);
 
+  if (CONTROL === 'buttons') autoStep(dt);
+  else {
   if (D.on) demoStep();
   // You: the left stick sets the run, up to 6.2 m/s; you reach it at 10 /s. Stay on your half.
   const ls = sticks.L ? stickPos(sticks.L) : { x: 0, y: 0 };
@@ -945,6 +1254,8 @@ function step(dt) {
   P.vz += (tvz - P.vz) * Math.min(1, dt * 10);
   P.x = clamp(P.x + P.vx * dt, -RUN_X, RUN_X);
   P.z = clamp(P.z + P.vz * dt, 0.6, RUN_Z);
+  }
+  if (PK.frozen) return;
   // Body turn: shoulders round to the wing while the racket is back, square again after.
   const turnTo = SW.phase !== 'idle' ? -SW.wing * 1.15 : P.swingT >= 0 && P.swingT < 0.3 ? -P.wing * 0.3 : 0;
   const tw = 2 * Math.PI * 9;
@@ -981,17 +1292,34 @@ function step(dt) {
 }
 
 /** The live ball: fly it, and call what happens. */
+// The ball flies slower than real time: real pace gives about a second to read, run and swing, and a thumb on a stick cannot
+// do that. You and the robot still move at full speed, so you get there. SHOW ME already runs everything slowed, so not there.
+const BALL_TIME = 0.62;
+const ballTime = () => (D.on ? 1 : BALL_TIME);
 function stepLive(dt) {
+  // PICK THE SHOT: everything holds just before it reaches you, until you choose.
+  if (cur().kind === 'pick' && ball.owner === 'bot' && PK.chosen == null && A.plan && remaining() < 0.55) {
+    if (!PK.frozen) { PK.frozen = true; PK.frozenAt = time; drawPick(); post({ type: 'freeze' }); }
+    if (D.on && time - PK.frozenAt > 1.6) choose(PK.sit.options.findIndex((o) => o.grade === 2));
+    return;
+  }
   const pz = ball.z;
-  const ev = stepBall(ball, dt);
-  ball.age += dt;
+  const ev = stepBall(ball, dt * ballTime());
+  ball.age += dt * ballTime();
   if ((ghostTick += 1) % 4 === 0) { trailPts.push(ball.x, ball.y, ball.z); if (trailPts.length > GHOSTS * 3) trailPts.splice(0, 3); }
   if (ev === 'bounce') { mark(ball.x, ball.z); post({ type: 'bounce', v: clamp(Math.abs(ball.vy) / 8, 0.1, 1) }); }
   if (ev === 'net') post({ type: 'net' });
   const gone = Math.abs(ball.z) > 17 || Math.abs(ball.x) > 14;
   if (!ball.done) {
     const rallyMode = isRally();
-    if (ball.owner === 'you') {
+    if (ball.owner === 'you' && cur().kind === 'pick') {
+      if (ev === 'net') pickResult('IT WENT IN THE NET');
+      else if (ev === 'bounce' && ball.bounces === 1) {
+        const c = ball.z > 0 ? 'SHORT' : call(ball.x, ball.z);
+        if (c !== 'IN') pickResult(`IT WENT ${c}`);
+        else if (B.plan && B.plan.reach) pickResult('IN. HE GETS IT BACK');
+      } else if (ball.bounces >= 2 || gone) pickResult('IN. WINNER');
+    } else if (ball.owner === 'you') {
       if (cur().netman && !ball.nm && pz > NM_Z && ball.z <= NM_Z) {
         ball.nm = true;
         if (Math.abs(ball.x - netman.g.position.x) < NM_REACH_X && ball.y < NM_REACH_Y) {
@@ -1149,7 +1477,7 @@ function render() {
     renderer.render(scene, side);
   }
   renderer.setScissorTest(false);
-  drawSticks();
+  if (CONTROL === 'sticks') drawSticks();
 }
 
 let last = performance.now();
@@ -1186,6 +1514,9 @@ window.teleport = (x, z) => { Object.assign(P, { x, z, vx: 0, vz: 0 }); };
 window.contact = () => (ball && ball.owner !== 'you' ? findContact(ball, 1) : null);
 window.state = () => ({ ball: ball && { x: ball.x, y: ball.y, z: ball.z, b: ball.bounces, o: ball.owner, type: ball.type }, shot: shot && shot.kind, landZ: ball && ball.owner === 'you' ? firstLanding(ball).z : null, plan: D.plan && { stage: D.plan.stage, c: D.plan.c }, phase, mode, kind: cur().kind, balls, points, score: [...score], owner: ball && ball.owner, done: ball && ball.done, P: { x: P.x, z: P.z }, B: { x: B.x, z: B.z }, time, wide: L.wide, ballZ: ball && ball.z });
 window.startMode = startMode;
+window.fire = (t, aim = 0) => fire(t, aim); // test hooks for the buttons and PICK THE SHOT
+window.auto = () => ({ plan: !!A.plan, rem: remaining(), pend: !!A.pend, frozen: PK.frozen, chosen: PK.chosen, sit: PK.sit && PK.sit.name });
+window.choose = (k) => choose(k);
 window.startDemo = startDemo;
 window.demoOn = () => D.on;
 window.fitReport = () => { camera.updateProjectionMatrix(); let y0 = 9, y1 = -9, x0 = 9, x1 = -9; for (const p of fitPts) { v3.copy(p).project(camera); x0 = Math.min(x0, v3.x); x1 = Math.max(x1, v3.x); y0 = Math.min(y0, v3.y); y1 = Math.max(y1, v3.y); } return { x0, x1, y0, y1, topN: 1 - (2 * L.top) / L.h, botN: -1 + (2 * L.bottom) / L.h, cam: camera.position.toArray(), top: L.top, bottom: L.bottom }; };
